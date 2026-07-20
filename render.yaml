@@ -1,0 +1,33 @@
+services:
+  # Backend Node.js Express API Service
+  - type: web
+    name: gr-crm-backend
+    env: node
+    region: singapore # or oregon, frankfurt, etc.
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_SPREADSHEET_ID
+        value: "1pIpnEeGd4CbWIu49Oit6qf0GsBYqt8BaQwMccOK2HL4"
+      - key: GOOGLE_SHEETS_SYNC_ACTIVE
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+
+  # Frontend React Static Site
+  - type: web
+    name: gr-crm-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
