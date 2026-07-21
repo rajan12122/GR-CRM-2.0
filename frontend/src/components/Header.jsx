@@ -28,62 +28,11 @@ import { useApp, API_BASE_URL } from '../context/AppContext';
 const Header = ({ onSearchClick, onMenuClick, onReload }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, metadata, activityLogs, triggerAppReload } = useApp();
+  const { user, metadata, activityLogs } = useApp();
   const isMobile = useMediaQuery('(max-width:900px)');
 
   const [notiAnchor, setNotiAnchor] = useState(null);
   const notiOpen = Boolean(notiAnchor);
-
-  const [syncingSheet, setSyncingSheet] = useState(false);
-  const [pushingSheet, setPushingSheet] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
-
-  const handleSyncFromSheet = async () => {
-    try {
-      setSyncingSheet(true);
-      const res = await axios.post(`${API_BASE_URL}/sync/import-from-sheet`);
-      setSyncingSheet(false);
-      if (res.data.success) {
-        setSyncResult({
-          success: true,
-          title: 'Google Sheet Import Complete (Sheet ➔ CRM)',
-          message: res.data.message,
-          summary: res.data.summary
-        });
-        if (triggerAppReload) triggerAppReload();
-        if (onReload) onReload();
-      }
-    } catch (err) {
-      setSyncingSheet(false);
-      setSyncResult({
-        success: false,
-        title: 'Import Error',
-        message: err.response?.data?.message || err.message || 'Failed to sync from Google Sheet.'
-      });
-    }
-  };
-
-  const handlePushToSheet = async () => {
-    try {
-      setPushingSheet(true);
-      const res = await axios.post(`${API_BASE_URL}/sync/export-to-sheet`);
-      setPushingSheet(false);
-      if (res.data.success) {
-        setSyncResult({
-          success: true,
-          title: 'Google Sheet Push Complete (CRM ➔ Sheet)',
-          message: res.data.message
-        });
-      }
-    } catch (err) {
-      setPushingSheet(false);
-      setSyncResult({
-        success: false,
-        title: 'Push Error',
-        message: err.response?.data?.message || err.message || 'Failed to push data to Google Sheet.'
-      });
-    }
-  };
 
   const handleNotiClick = (e) => {
     setNotiAnchor(e.currentTarget);
@@ -273,52 +222,6 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
 
         {/* Icons / Profile */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleSyncFromSheet}
-            disabled={syncingSheet}
-            startIcon={syncingSheet ? <CircularProgress size={14} color="inherit" /> : <Icons.FileSpreadsheet size={16} />}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 700,
-              fontSize: '12px',
-              borderRadius: '8px',
-              borderColor: '#10B981',
-              color: '#047857',
-              backgroundColor: '#ECFDF5',
-              '&:hover': {
-                borderColor: '#059669',
-                backgroundColor: '#D1FAE5'
-              }
-            }}
-          >
-            {syncingSheet ? 'Syncing...' : 'Sync From Sheet'}
-          </Button>
-
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handlePushToSheet}
-            disabled={pushingSheet}
-            startIcon={pushingSheet ? <CircularProgress size={14} color="inherit" /> : <Icons.UploadCloud size={16} />}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 700,
-              fontSize: '12px',
-              borderRadius: '8px',
-              borderColor: '#2563EB',
-              color: '#1D4ED8',
-              backgroundColor: '#EFF6FF',
-              '&:hover': {
-                borderColor: '#1D4ED8',
-                backgroundColor: '#DBEAFE'
-              }
-            }}
-          >
-            {pushingSheet ? 'Pushing...' : 'Push To Sheet'}
-          </Button>
-
           <IconButton 
             sx={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }} 
             onClick={handlePageReload}
@@ -396,35 +299,6 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
           </Box>
         </Box>
       </Toolbar>
-
-      {/* Sync Result Popup Dialog */}
-      <Dialog open={Boolean(syncResult)} onClose={() => setSyncResult(null)} maxWidth="xs" fullWidth PaperProps={{ style: { borderRadius: 16, padding: '8px' } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins', color: syncResult?.success ? '#047857' : '#DC2626' }}>
-          {syncResult?.title}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ color: '#334155', mb: 2 }}>
-            {syncResult?.message}
-          </Typography>
-          {syncResult?.summary?.details && (
-            <Box sx={{ p: 1.5, backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-              <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', display: 'block', mb: 1 }}>
-                Module Import Breakdown:
-              </Typography>
-              {Object.entries(syncResult.summary.details).map(([mod, info]) => (
-                <Typography key={mod} variant="caption" sx={{ display: 'block', color: '#64748B' }}>
-                  • <strong>{mod}</strong>: +{info.added} new row(s) added ({info.skipped} skipped)
-                </Typography>
-              ))}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSyncResult(null)} variant="contained" sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
-            OK
-          </Button>
-        </DialogActions>
-      </Dialog>
     </AppBar>
   );
 };

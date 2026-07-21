@@ -26,7 +26,12 @@ import {
   IconButton,
   List,
   ListItem,
-  Chip
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import * as Icons from 'lucide-react';
 import axios from 'axios';
@@ -40,7 +45,8 @@ const Settings = () => {
     triggerFullSheetsSync,
     moduleData,
     fetchModuleData,
-    updateRecord
+    updateRecord,
+    triggerAppReload
   } = useApp();
 
   useEffect(() => {
@@ -69,6 +75,60 @@ const Settings = () => {
   const [selectedChanges, setSelectedChanges] = useState([]);
   const [reconcileLoading, setReconcileLoading] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState('');
+
+  const [syncingSheet, setSyncingSheet] = useState(false);
+  const [pushingSheet, setPushingSheet] = useState(false);
+  const [syncResultModal, setSyncResultModal] = useState(null);
+
+  const handleSyncFromSheet = async () => {
+    try {
+      setSyncingSheet(true);
+      const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.post(`${API_BASE_URL}/sync/import-from-sheet`, {}, { headers });
+      setSyncingSheet(false);
+      if (res.data.success) {
+        setSyncResultModal({
+          success: true,
+          title: 'Google Sheet Import Complete (Sheet ➔ CRM)',
+          message: res.data.message,
+          summary: res.data.summary
+        });
+        if (triggerAppReload) triggerAppReload();
+      }
+    } catch (err) {
+      setSyncingSheet(false);
+      setSyncResultModal({
+        success: false,
+        title: 'Import Error',
+        message: err.response?.data?.message || err.message || 'Failed to sync from Google Sheet.'
+      });
+    }
+  };
+
+  const handlePushToSheet = async () => {
+    try {
+      setPushingSheet(true);
+      const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.post(`${API_BASE_URL}/sync/export-to-sheet`, {}, { headers });
+      setPushingSheet(false);
+      if (res.data.success) {
+        setSyncResultModal({
+          success: true,
+          title: 'Google Sheet Push Complete (CRM ➔ Sheet)',
+          message: res.data.message
+        });
+      }
+    } catch (err) {
+      setPushingSheet(false);
+      setSyncResultModal({
+        success: false,
+        title: 'Push Error',
+        message: err.response?.data?.message || err.message || 'Failed to push data to Google Sheet.'
+      });
+    }
+  };
 
   const fetchSyncDashboard = async () => {
     try {
@@ -815,14 +875,69 @@ const Settings = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Title */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h2" sx={{ fontWeight: 800, fontSize: '26px', color: '#0F172A', fontFamily: 'Poppins' }}>
-          Admin Settings & Metadata Editor
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#64748B' }}>
-          Fully customize tables, columns, dropdown chips, roles, permissions, and Google Sheets integration without writing code.
-        </Typography>
+      {/* Title & Manual Sync Controls */}
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h2" sx={{ fontWeight: 800, fontSize: '26px', color: '#0F172A', fontFamily: 'Poppins' }}>
+            Admin Settings & Metadata Editor
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#64748B' }}>
+            Fully customize tables, columns, dropdown chips, roles, permissions, and Google Sheets integration without writing code.
+          </Typography>
+        </Box>
+
+        {/* Manual Google Sheets Sync Action Buttons */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleSyncFromSheet}
+            disabled={syncingSheet}
+            startIcon={syncingSheet ? <CircularProgress size={14} color="inherit" /> : <Icons.FileSpreadsheet size={16} />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '13px',
+              px: 2,
+              py: 1,
+              borderRadius: '8px',
+              borderColor: '#10B981',
+              color: '#047857',
+              backgroundColor: '#ECFDF5',
+              '&:hover': {
+                borderColor: '#059669',
+                backgroundColor: '#D1FAE5'
+              }
+            }}
+          >
+            {syncingSheet ? 'Syncing...' : 'Sync From Sheet'}
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handlePushToSheet}
+            disabled={pushingSheet}
+            startIcon={pushingSheet ? <CircularProgress size={14} color="inherit" /> : <Icons.UploadCloud size={16} />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '13px',
+              px: 2,
+              py: 1,
+              borderRadius: '8px',
+              borderColor: '#2563EB',
+              color: '#1D4ED8',
+              backgroundColor: '#EFF6FF',
+              '&:hover': {
+                borderColor: '#1D4ED8',
+                backgroundColor: '#DBEAFE'
+              }
+            }}
+          >
+            {pushingSheet ? 'Pushing...' : 'Push To Sheet'}
+          </Button>
+        </Box>
       </Box>
 
       {/* Settings Menu Tabs */}
@@ -2256,6 +2371,35 @@ const Settings = () => {
 
         </Grid>
       </Grid>
+
+      {/* Sync Result Popup Dialog */}
+      <Dialog open={Boolean(syncResultModal)} onClose={() => setSyncResultModal(null)} maxWidth="xs" fullWidth PaperProps={{ style: { borderRadius: 16, padding: '8px' } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins', color: syncResultModal?.success ? '#047857' : '#DC2626' }}>
+          {syncResultModal?.title}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: '#334155', mb: 2 }}>
+            {syncResultModal?.message}
+          </Typography>
+          {syncResultModal?.summary?.details && (
+            <Box sx={{ p: 1.5, backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', display: 'block', mb: 1 }}>
+                Module Import Breakdown:
+              </Typography>
+              {Object.entries(syncResultModal.summary.details).map(([mod, info]) => (
+                <Typography key={mod} variant="caption" sx={{ display: 'block', color: '#64748B' }}>
+                  • <strong>{mod}</strong>: +{info.added} new row(s) added ({info.skipped} skipped)
+                </Typography>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSyncResultModal(null)} variant="contained" sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
