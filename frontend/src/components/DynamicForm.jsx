@@ -630,9 +630,14 @@ const DynamicForm = ({
     }
   };
 
-  // Helper to extract reference items
+  // Helper to extract reference items (sorted in ascending order)
   const getReferenceOptions = (refModule) => {
-    return moduleData[refModule] || [];
+    const raw = moduleData[refModule] || [];
+    return [...raw].sort((a, b) => {
+      const nameA = String(a.firm_name || a.person_name || a.name || a.propertyName || a.title || a.id || '');
+      const nameB = String(b.firm_name || b.person_name || b.name || b.propertyName || b.title || b.id || '');
+      return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+    });
   };
 
   return (

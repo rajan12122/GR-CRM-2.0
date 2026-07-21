@@ -684,16 +684,20 @@ const ModuleManager = () => {
     }
   }, [moduleName, fields]);
 
-  // Extract distinct values dynamically for filtering
+  // Extract distinct values dynamically for filtering (sorted in ascending order)
   const filterOptions = useMemo(() => {
     const options = {};
     if (!fields) return options;
     fields.forEach(f => {
       if (f.name === 'id' || f.name === 'last_updated') return;
       
-      // If select type with chipGroup options, populate statically
-      if (f.type === 'select' && f.chipGroup && metadata?.chipGroups?.[f.chipGroup]) {
-        options[f.name] = metadata.chipGroups[f.chipGroup].map(item => ({
+      // If select type with chipGroup options, populate statically in ascending order
+      const chipList = metadata?.chipGroups?.[f.chipGroup] || metadata?.chips?.[f.chipGroup];
+      if (f.type === 'select' && f.chipGroup && chipList) {
+        const sortedChips = [...chipList].sort((a, b) => 
+          String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, { numeric: true, sensitivity: 'base' })
+        );
+        options[f.name] = sortedChips.map(item => ({
           value: item.value,
           label: item.label
         }));
@@ -707,6 +711,10 @@ const ModuleManager = () => {
       ));
       
       if (distinctValues.length > 0) {
+        // Sort values in ascending order (A-Z, 0-9)
+        distinctValues.sort((a, b) => 
+          String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+        );
         options[f.name] = distinctValues.map(val => ({
           value: String(val),
           label: String(val)
@@ -1298,7 +1306,9 @@ const ModuleManager = () => {
                     }}
                   >
                     <MenuItem value="ALL"><em>All options</em></MenuItem>
-                    {opts.map(opt => (
+                    {[...opts].sort((a, b) => 
+                      String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, { numeric: true, sensitivity: 'base' })
+                    ).map(opt => (
                       <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
                     ))}
                   </Select>
@@ -1336,6 +1346,8 @@ const ModuleManager = () => {
           >
             {fields
               .filter(f => f.name !== 'id' && f.name !== 'last_updated' && !activeFilterFields.includes(f.name))
+              .slice()
+              .sort((a, b) => String(a.label || a.name).localeCompare(String(b.label || b.name), undefined, { numeric: true, sensitivity: 'base' }))
               .map(f => (
                 <MenuItem key={f.name} value={f.name}>{f.label}</MenuItem>
               ))
