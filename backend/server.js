@@ -4029,10 +4029,12 @@ app.post('/api/sync/dashboard/reconcile-preview/:module', authenticateToken, che
       return res.json({ success: true, message: 'Sheet is empty or has only headers.', changes: [] });
     }
 
-    const headers = rows[0];
-    const crmIdIndex = headers.indexOf('crm_id');
+    const rawHeaders = rows[0] || [];
+    const headers = rawHeaders.map(h => String(h).trim());
+    const lowerHeaders = headers.map(h => h.toLowerCase());
+    const crmIdIndex = lowerHeaders.indexOf('crm_id') !== -1 ? lowerHeaders.indexOf('crm_id') : lowerHeaders.indexOf('id');
     if (crmIdIndex === -1) {
-      return res.status(400).json({ success: false, message: 'Google Sheet is missing the required crm_id column in A1.' });
+      return res.status(400).json({ success: false, message: 'Google Sheet is missing the required crm_id/id column in A1.' });
     }
 
     const changes = [];
@@ -4042,14 +4044,14 @@ app.post('/api/sync/dashboard/reconcile-preview/:module', authenticateToken, che
       const row = rows[i];
       if (!row || row.length === 0) continue;
 
-      const crmId = row[crmIdIndex];
+      const crmId = row[crmIdIndex] ? String(row[crmIdIndex]).trim() : '';
       const sheetRecord = {};
       headers.forEach((h, idx) => {
         let val = row[idx] !== undefined ? row[idx] : '';
         if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
           try { val = JSON.parse(val); } catch(e) {}
         }
-        if (val !== '' && !isNaN(val) && val.trim && val.trim() !== '') {
+        if (typeof val === 'string' && val.trim() !== '' && !isNaN(val)) {
           val = Number(val);
         }
         sheetRecord[h] = val;
@@ -4077,11 +4079,11 @@ app.post('/api/sync/dashboard/reconcile-preview/:module', authenticateToken, che
       if (matchedDbRecord) {
         // Evaluate conflicts
         Object.keys(sheetRecord).forEach(k => {
-          if (k === 'crm_id') return;
+          if (k === 'crm_id' || k === 'id') return;
           const sheetVal = sheetRecord[k];
           const dbVal = matchedDbRecord[k];
-          const stringSheet = typeof sheetVal === 'object' ? JSON.stringify(sheetVal) : String(sheetVal || '');
-          const stringDb = typeof dbVal === 'object' ? JSON.stringify(dbVal) : String(dbVal || '');
+          const stringSheet = typeof sheetVal === 'object' ? JSON.stringify(sheetVal) : String(sheetVal !== undefined && sheetVal !== null ? sheetVal : '');
+          const stringDb = typeof dbVal === 'object' ? JSON.stringify(dbVal) : String(dbVal !== undefined && dbVal !== null ? dbVal : '');
           if (stringSheet.trim() !== stringDb.trim()) {
             conflictFields.push({
               field: k,
@@ -4122,7 +4124,8 @@ app.post('/api/sync/dashboard/reconcile-preview/:module', authenticateToken, che
     });
 
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Reconcile Preview Error:', err);
+    res.status(500).json({ success: false, message: 'Reconcile Error: ' + err.message });
   }
 });
 
