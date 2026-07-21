@@ -1698,6 +1698,45 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     }
   }
 
+  if (module === 'properties') {
+    if (payload.dealer_owner_booked === 'Direct' || payload.dealer_owner_booked === 'Owner' || !payload.dealer_owner_booked) {
+      payload.dealer_owner_booked = 'Direct';
+      const ownerName = payload.contact_person_name || 'Direct Property Owner';
+      const ownerPhone = payload.contact_number ? String(payload.contact_number).trim() : '';
+
+      if ((ownerName || ownerPhone) && !payload.current_owner_id) {
+        db.customers = db.customers || [];
+        let cust = null;
+        if (ownerPhone) {
+          cust = db.customers.find(c => c.phone && String(c.phone).trim() === ownerPhone);
+        }
+        if (!cust && ownerName) {
+          cust = db.customers.find(c => c.name && c.name.toLowerCase() === ownerName.toLowerCase());
+        }
+        if (!cust) {
+          const custId = generateNextId(db, 'customers', 'CUST');
+          cust = {
+            id: custId,
+            name: ownerName,
+            phone: ownerPhone,
+            stage: 'Active Seller',
+            assignedEmployeeId: payload.assignedEmployeeId || (req.user ? req.user.id : 'EMP-001'),
+            city: payload.locality || '',
+            requirements: `Direct Property Owner for Property ${payload.id || ''}`,
+            source: payload.source || 'Direct Property Seller',
+            dateAdded: new Date().toISOString().split('T')[0]
+          };
+          db.customers.push(cust);
+          try { syncToSheets('customers'); } catch(e) {}
+        }
+        if (cust) {
+          payload.current_owner_id = cust.id;
+          payload.booked_by_customer_id = cust.id;
+        }
+      }
+    }
+  }
+
   if (module === 'leads') {
     payload.assignmentStatus = 'accepted';
     payload.assignmentTime = null;

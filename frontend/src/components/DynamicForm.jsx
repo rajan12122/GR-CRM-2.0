@@ -276,6 +276,8 @@ const DynamicForm = ({
             defaultForm[f.name] = user.id;
           } else if (f.name === 'assignedEmployeeId' && user?.id) {
             defaultForm[f.name] = user.id;
+          } else if (f.name === 'dealer_owner_booked') {
+            defaultForm[f.name] = 'Direct';
           } else {
             defaultForm[f.name] = '';
           }
@@ -460,6 +462,38 @@ const DynamicForm = ({
     return payload;
   };
 
+  const resolveDirectSellerCustomer = async (payload) => {
+    if (moduleKey === 'properties' && (payload.dealer_owner_booked === 'Direct' || payload.dealer_owner_booked === 'Owner' || !payload.dealer_owner_booked)) {
+      payload.dealer_owner_booked = 'Direct';
+      const name = payload.contact_person_name;
+      const phone = payload.contact_number;
+      if ((name || phone) && !payload.current_owner_id) {
+        const cleanPhone = phone ? String(phone).trim() : '';
+        const existing = (moduleData.customers || []).find(c => (cleanPhone && c.phone && String(c.phone).trim() === cleanPhone) || (name && c.name && c.name.toLowerCase() === name.toLowerCase()));
+        if (existing) {
+          payload.current_owner_id = existing.id;
+          payload.booked_by_customer_id = existing.id;
+        } else {
+          const custRes = await createRecord('customers', {
+            name: name || 'Direct Property Seller',
+            phone: phone || '',
+            city: payload.locality || '',
+            stage: 'Active Seller',
+            source: payload.source || 'Direct Property Seller',
+            assignedEmployeeId: payload.assignedEmployeeId || user?.id || 'EMP-001',
+            dateAdded: new Date().toISOString().split('T')[0]
+          });
+          if (custRes.success && custRes.data) {
+            payload.current_owner_id = custRes.data.id;
+            payload.booked_by_customer_id = custRes.data.id;
+            fetchModuleData('customers');
+          }
+        }
+      }
+    }
+    return payload;
+  };
+
   const compileSize = (payload, isNested = false) => {
     const currentRCI = isNested ? nestedPropertyData.r_c_i : payload.r_c_i;
     if (currentRCI === 'Land') {
@@ -511,6 +545,8 @@ const DynamicForm = ({
       nestedPayload = compileSize(nestedPayload, true);
       const propPayload = {
         ...nestedPayload,
+        source: formData.source || nestedPropertyData.source || 'Direct',
+        dealer_owner_booked: nestedPropertyData.dealer_owner_booked || 'Direct',
         dealerId: finalDealerId,
         current_owner_id: payload.customerId || '',
         contact_person_name: nestedPropertyData.contact_person_name || payload.name || payload.person_name || '',
@@ -548,6 +584,7 @@ const DynamicForm = ({
         });
         payload = compileSize(payload, false);
         payload = await resolveDealerId(payload);
+        payload = await resolveDirectSellerCustomer(payload);
         payload = await resolvePitchedProperty(payload);
         payload = await resolveSellerProperty(payload);
         onSubmit(payload);
@@ -569,6 +606,7 @@ const DynamicForm = ({
         });
         payload = compileSize(payload, false);
         payload = await resolveDealerId(payload);
+        payload = await resolveDirectSellerCustomer(payload);
         payload = await resolvePitchedProperty(payload);
         payload = await resolveSellerProperty(payload);
         
@@ -1531,6 +1569,7 @@ const DynamicForm = ({
                     {(metadata?.modules?.properties?.fields || []).filter(f => {
                       if (f.name === 'id') return false;
                       if (f.name === 'current_owner_id') return false;
+                      if (f.name === 'source' || f.name === 'leadSource' || f.name === 'lead_source') return false;
                       if (f.name === 'dealerId' || f.name === 'dealer_deal_type') {
                         return nestedPropertyData.dealer_owner_booked === 'Dealer';
                       }
