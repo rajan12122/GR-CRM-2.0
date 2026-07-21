@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { syncToSheets, syncFromSheets, getSheetsConfig, processSyncQueue } = require('./services/sheetsService');
+const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, getSheetsConfig, processSyncQueue } = require('./services/sheetsService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -317,6 +317,19 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
     res.json({ success: true, message: 'Metadata schema saved successfully.' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to write metadata: ' + error.message });
+// Manual One-Way Incremental Import Route (Sheet -> CRM)
+app.post('/api/sync/import-from-sheet', authenticateToken, async (req, res) => {
+  try {
+    const { module: targetModule } = req.body || {};
+    const summary = await syncFromSheetsIncremental(targetModule || null);
+    res.json({
+      success: true,
+      message: `Sync complete! Imported ${summary.added} new row(s) from Google Sheet (${summary.skipped} existing row(s) skipped).`,
+      summary
+    });
+  } catch (err) {
+    console.error('Incremental Import Error:', err.message);
+    res.status(500).json({ success: false, message: 'Sheet Import Failed: ' + err.message });
   }
 });
 

@@ -322,6 +322,122 @@ async function syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbR
 }
 
 /**
+ * One-Way Incremental Import from Google Sheet -> CRM DB
+ * Reads rows from Google Sheets, appends ONLY NEW rows into CRM database.
+ * Does NOT duplicate existing records, and does NOT delete any CRM rows if removed from Google Sheets.
+ */
+async function syncFromSheetsIncremental(targetModule = null) {
+  const config = getSheetsConfig();
+  const sheets = getSheetsClient(config);
+  if (!sheets || !config.spreadsheetId) {
+    throw new Error('Google Sheets integration is not configured or disabled in environment settings.');
+  }
+
+  const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+
+  const spreadsheetId = config.spreadsheetId;
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const allSheets = meta.data.sheets || [];
+
+  const modulesToSync = targetModule ? [targetModule] : Object.keys(metadata.modules || {});
+  const importSummary = { added: 0, skipped: 0, details: {} };
+
+  const prefixMap = {
+    employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
+    projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
+    tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
+    daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
+    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
+  };
+
+  for (const mod of modulesToSync) {
+    const sheetName = `data_${mod}`;
+    const sheetObj = allSheets.find(s => s.properties && s.properties.title === sheetName);
+    if (!sheetObj) continue;
+
+    const getRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!A1:Z10000`
+    });
+
+    const rows = getRes.data.values || [];
+    if (rows.length < 2) continue; // No data rows (only header or empty)
+
+    const rawHeaders = rows[0] || [];
+    const headers = rawHeaders.map(h => String(h).trim());
+    const lowerHeaders = headers.map(h => h.toLowerCase());
+
+    const crmIdIdx = lowerHeaders.indexOf('crm_id') !== -1 ? lowerHeaders.indexOf('crm_id') : lowerHeaders.indexOf('id');
+    const phoneIdx = lowerHeaders.indexOf('phone') !== -1 ? lowerHeaders.indexOf('phone') : lowerHeaders.indexOf('contact_number');
+
+    db[mod] = db[mod] || [];
+    const existingList = db[mod];
+    const prefix = prefixMap[mod] || mod.substring(0, 4).toUpperCase();
+
+    let modAdded = 0;
+    let modSkipped = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) continue;
+
+      const rowCrmId = crmIdIdx !== -1 && row[crmIdIdx] ? String(row[crmIdIdx]).trim() : '';
+      const rowPhone = phoneIdx !== -1 && row[phoneIdx] ? String(row[phoneIdx]).trim() : '';
+
+      // Check if record already exists in CRM (by ID or Phone)
+      let exists = false;
+      if (rowCrmId) {
+        exists = existingList.some(rec => String(rec.id) === rowCrmId);
+      }
+      if (!exists && rowPhone) {
+        exists = existingList.some(rec => rec.phone && String(rec.phone).trim() === rowPhone);
+      }
+
+      if (exists) {
+        modSkipped++;
+        continue;
+      }
+
+      // Map row values into new CRM record object
+      const newRec = {};
+      headers.forEach((h, colIdx) => {
+        if (h.toLowerCase() === 'crm_id') return;
+        const fieldName = h;
+        const val = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+        newRec[fieldName] = val;
+      });
+
+      // Assign permanent unique ID if missing or colliding
+      if (!newRec.id || existingList.some(rec => String(rec.id) === String(newRec.id))) {
+        let maxNum = 0;
+        existingList.forEach(rec => {
+          if (rec && rec.id && String(rec.id).startsWith(`${prefix}-`)) {
+            const parts = String(rec.id).split('-');
+            const num = parseInt(parts[1], 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          }
+        });
+        newRec.id = `${prefix}-${String(maxNum + 1).padStart(3, '0')}`;
+      }
+
+      existingList.push(newRec);
+      modAdded++;
+    }
+
+    importSummary.added += modAdded;
+    importSummary.skipped += modSkipped;
+    importSummary.details[mod] = { added: modAdded, skipped: modSkipped };
+  }
+
+  if (importSummary.added > 0) {
+    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+  }
+
+  return importSummary;
+}
+
+/**
  * Compatibility function (Sync From Sheets) with explicit verification
  */
 async function syncFromSheets() {
@@ -337,6 +453,7 @@ setInterval(() => {
 module.exports = {
   syncToSheets,
   syncFromSheets,
+  syncFromSheetsIncremental,
   getSheetsConfig,
   processSyncQueue
 };
