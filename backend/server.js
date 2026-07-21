@@ -59,10 +59,7 @@ function updateGlobalReferences(db, oldId, newId) {
   });
 }
 
-function resequenceAllModules() {
-  const db = readDb();
-  let modified = false;
-
+function generateNextId(db, moduleName, prefix) {
   const prefixMap = {
     employees: 'EMP',
     customers: 'CUST',
@@ -84,59 +81,30 @@ function resequenceAllModules() {
     dealer_calls: 'CALL',
     dealer_meetings: 'MEET'
   };
-
-  Object.keys(prefixMap).forEach(module => {
-    if (!db[module] || !Array.isArray(db[module])) return;
-
-    const prefix = prefixMap[module];
-    const idUpdates = [];
-
-    db[module].forEach((rec, idx) => {
-      const newId = `${prefix}-${String(idx + 1).padStart(3, '0')}`;
-      if (String(rec.id) !== newId) {
-        idUpdates.push({ oldId: rec.id, newId });
+  const effPrefix = prefix || prefixMap[moduleName] || String(moduleName).substring(0, 4).toUpperCase();
+  const list = db[moduleName] || [];
+  let maxNum = 0;
+  list.forEach(rec => {
+    if (rec && rec.id && String(rec.id).startsWith(`${effPrefix}-`)) {
+      const parts = String(rec.id).split('-');
+      const num = parseInt(parts[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
       }
-    });
-
-    if (idUpdates.length > 0) {
-      modified = true;
-      idUpdates.forEach(({ oldId, newId }) => {
-        const rec = db[module].find(r => r.id === oldId);
-        if (rec) {
-          rec.id = newId;
-        }
-        updateGlobalReferences(db, oldId, newId);
-      });
     }
   });
+  return `${effPrefix}-${String(maxNum + 1).padStart(3, '0')}`;
+}
 
-  if (modified) {
-    writeDb(db);
-    console.log('Database IDs re-sequenced and reference mappings updated on boot.');
-    // Trigger sync back to Google Sheets for modified modules
-    Object.keys(prefixMap).forEach(module => {
-      if (db[module] && Array.isArray(db[module])) {
-        try {
-          syncToSheets(module);
-        } catch (e) {
-          console.error(`Error syncing resequenced ${module} on boot:`, e);
-        }
-      }
-    });
-  }
+function resequenceAllModules() {
+  // IDs once assigned must NEVER be modified or re-sequenced to preserve reference & relationship integrity permanently.
+  console.log('ID re-sequencer is disabled to protect assigned IDs and relationships.');
 }
 
 // Sync from Google Sheets on start if credentials exist
 syncFromSheets().then(res => {
   if (res) console.log('Initial Google Sheets sync completed on boot.');
   else console.log('Running on local JSON database cache.');
-
-  // Run automatic sequential ID healing migration
-  try {
-    resequenceAllModules();
-  } catch (err) {
-    console.error('ID Resequencing Boot Error:', err);
-  }
 });
 
 // Helper functions to read/write DB and Metadata with in-memory caching
@@ -365,7 +333,7 @@ function handleAutomatedPitchLogging(rec, db, req) {
   
   const exists = db.property_pitch_history.some(p => String(p.customerId) === String(custId) && String(p.propertyId) === String(rec.pitchedPropertyId));
   if (!exists) {
-    const pitchId = `PITCH-${String(db.property_pitch_history.length + 1).padStart(3, '0')}`;
+    const pitchId = generateNextId(db, 'property_pitch_history', 'PITCH');
     const empName = req.user ? req.user.name : (rec.created_by || 'Sales Executive');
     const newPitch = {
       id: pitchId,
@@ -423,7 +391,7 @@ function handleQueryStageChange(q, db, req) {
     db.properties = db.properties || [];
     const propExists = db.properties.some(p => p.linkedQueryId === q.id);
     if (!propExists) {
-      const propId = `PROP-${String(db.properties.length + 1).padStart(3, '0')}`;
+      const propId = generateNextId(db, 'properties', 'PROP');
       const cust = (db.customers || []).find(c => String(c.id) === String(q.customerId));
       const ownerName = cust ? cust.name : 'Unknown Owner';
       const ownerPhone = cust ? cust.phone : '';
@@ -527,7 +495,7 @@ function convertLeadToCustomer(leadId, db, remarks = '') {
   let existingCust = (db.customers || []).find(c => c.phone && String(c.phone).trim() === cleanPhone);
 
   if (!existingCust) {
-    const custId = `CUST-${String((db.customers || []).length + 1).padStart(3, '0')}`;
+    const custId = generateNextId(db, 'customers', 'CUST');
     existingCust = {
       id: custId,
       name: lead.name,
@@ -879,7 +847,7 @@ function handleLeadStatusChange(lead, db, req) {
     const leadDemand = lead.demand || lead.budget || '';
 
     if (!existingCust) {
-      const custId = `CUST-${String((db.customers || []).length + 1).padStart(3, '0')}`;
+      const custId = generateNextId(db, 'customers', 'CUST');
       existingCust = {
         id: custId,
         leadId: lead.id,
@@ -923,7 +891,7 @@ function handleLeadStatusChange(lead, db, req) {
       existingProp.r_c_i = lead.r_c_i || existingProp.r_c_i || 'Residential';
       try { syncToSheets('properties'); } catch(e) {}
     } else {
-      const propId = `PROP-${String(db.properties.length + 1).padStart(3, '0')}`;
+      const propId = generateNextId(db, 'properties', 'PROP');
       existingProp = {
         id: propId,
         linkedLeadId: lead.id,
@@ -1158,7 +1126,7 @@ function handleFollowUpPipelineAction(f, db, req) {
         try { syncToSheets('site_visits'); } catch(e) {}
       }
     } else {
-      const visitId = `VISIT-${String((db.site_visits || []).length + 1).padStart(3, '0')}`;
+      const visitId = generateNextId(db, 'site_visits', 'VISIT');
       const newVisit = {
         id: visitId,
         customerId: customerId,
@@ -1199,7 +1167,7 @@ function handleFollowUpPipelineAction(f, db, req) {
     }
 
     // 2. Insert new Deal closed
-    const dealId = `DEAL-${String((db.deals || []).length + 1).padStart(3, '0')}`;
+    const dealId = generateNextId(db, 'deals', 'DEAL');
     const newDeal = {
       id: dealId,
       customerId: finalCustomerId,
@@ -1603,19 +1571,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     };
     const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
     
-    // Find max number among existing IDs starting with this prefix
-    const existingIds = (db[module] || []).map(r => r.id).filter(id => id && String(id).startsWith(prefix));
-    let maxNum = 0;
-    existingIds.forEach(id => {
-      const parts = id.split('-');
-      const num = parseInt(parts[1]);
-      if (!isNaN(num) && num > maxNum) {
-        maxNum = num;
-      }
-    });
-    
-    const nextNum = maxNum > 0 ? maxNum + 1 : (db[module] || []).length + 1;
-    payload.id = `${prefix}-${String(nextNum).padStart(3, '0')}`;
+    payload.id = generateNextId(db, module, prefix);
   }
 
   // Populate basic date tracker if applicable
@@ -1662,7 +1618,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     const cleanPhone = String(payload.phone).trim();
     const existingCust = (db.customers || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
     if (existingCust) {
-      const queryId = `QRY-${String((db.queries || []).length + 1).padStart(3, '0')}`;
+      const queryId = generateNextId(db, 'queries', 'QRY');
       const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
       
       const newQuery = {
@@ -1689,7 +1645,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (newQuery.queryType !== 'Sell Property') {
         // Automatically schedule a follow up task for the auto-created query
         db.follow_ups = db.follow_ups || [];
-        const followUpId = `FOLLOW-${String((db.follow_ups || []).length + 1).padStart(3, '0')}`;
+        const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
         const newFollowUp = {
           id: followUpId,
           customerId: existingCust.id,
@@ -1762,7 +1718,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     if (module === 'queries' && payload.queryType !== 'Sell Property') {
       // Automatically schedule a follow up task for the new query
       db.follow_ups = db.follow_ups || [];
-      const followUpId = `FOLLOW-${String((db.follow_ups || []).length + 1).padStart(3, '0')}`;
+      const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
       const newFollowUp = {
         id: followUpId,
         customerId: payload.customerId,
@@ -2135,47 +2091,7 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
     try { syncToSheets('follow_ups'); } catch(e) {}
     try { syncToSheets('properties'); } catch(e) {}
   }
-  // Auto-shift sequential IDs to close the gap and update references globally
-  const prefixMap = {
-    employees: 'EMP',
-    customers: 'CUST',
-    leads: 'LEAD',
-    properties: 'PROP',
-    projects: 'PROJ',
-    site_visits: 'VISIT',
-    follow_ups: 'FOLLOW',
-    remarks: 'REM',
-    tasks: 'TASK',
-    sales: 'SALE',
-    documents: 'DOC',
-    attendance: 'ATT',
-    daily_prices: 'PRICE',
-    salaries: 'SAL',
-    queries: 'QRY',
-    deals: 'DEAL',
-    property_pitch_history: 'PITCH',
-    dealer_calls: 'CALL',
-    dealer_meetings: 'MEET'
-  };
-
-  const prefix = prefixMap[module];
-  if (prefix) {
-    const idUpdates = [];
-    db[module].forEach((rec, idx) => {
-      const newId = `${prefix}-${String(idx + 1).padStart(3, '0')}`;
-      if (String(rec.id) !== newId) {
-        idUpdates.push({ oldId: rec.id, newId });
-      }
-    });
-
-    idUpdates.forEach(({ oldId, newId }) => {
-      const rec = db[module].find(r => r.id === oldId);
-      if (rec) {
-        rec.id = newId;
-      }
-      updateGlobalReferences(db, oldId, newId);
-    });
-  }
+  // Do NOT shift or resequence sequential IDs on delete to preserve relationship integrity
 
   // Track Activity Log
   const log = {
@@ -2299,47 +2215,7 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
     try { syncToSheets('properties'); } catch(e) {}
   }
 
-  // Auto-shift sequential IDs to close the gap and update references globally
-  const prefixMap = {
-    employees: 'EMP',
-    customers: 'CUST',
-    leads: 'LEAD',
-    properties: 'PROP',
-    projects: 'PROJ',
-    site_visits: 'VISIT',
-    follow_ups: 'FOLLOW',
-    remarks: 'REM',
-    tasks: 'TASK',
-    sales: 'SALE',
-    documents: 'DOC',
-    attendance: 'ATT',
-    daily_prices: 'PRICE',
-    salaries: 'SAL',
-    queries: 'QRY',
-    deals: 'DEAL',
-    property_pitch_history: 'PITCH',
-    dealer_calls: 'CALL',
-    dealer_meetings: 'MEET'
-  };
-
-  const prefix = prefixMap[module];
-  if (prefix) {
-    const idUpdates = [];
-    db[module].forEach((rec, idx) => {
-      const newId = `${prefix}-${String(idx + 1).padStart(3, '0')}`;
-      if (String(rec.id) !== newId) {
-        idUpdates.push({ oldId: rec.id, newId });
-      }
-    });
-
-    idUpdates.forEach(({ oldId, newId }) => {
-      const rec = db[module].find(r => r.id === oldId);
-      if (rec) {
-        rec.id = newId;
-      }
-      updateGlobalReferences(db, oldId, newId);
-    });
-  }
+  // Do NOT shift or resequence sequential IDs on delete to preserve relationship integrity
 
   // Track Activity Log
   const log = {
@@ -3338,7 +3214,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
   
   if (existingCust || existingLead) {
     const matchedId = existingCust ? existingCust.id : existingLead.id;
-    const queryId = `QRY-${String((db.queries || []).length + 1).padStart(3, '0')}`;
+    const queryId = generateNextId(db, 'queries', 'QRY');
     const newQuery = {
       id: queryId,
       customerId: matchedId,
@@ -3362,7 +3238,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
 
     // Automatically schedule a follow up task for the new query
     db.follow_ups = db.follow_ups || [];
-    const followUpId = `FOLLOW-${String((db.follow_ups || []).length + 1).padStart(3, '0')}`;
+    const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
     const newFollowUp = {
       id: followUpId,
       customerId: matchedId,
@@ -3384,18 +3260,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
   }
 
   // Else, create a new Lead
-  const existingIds = (db.leads || []).map(r => r.id).filter(id => id && String(id).startsWith('LEAD'));
-  let maxNum = 0;
-  existingIds.forEach(id => {
-    const parts = id.split('-');
-    const num = parseInt(parts[1]);
-    if (!isNaN(num) && num > maxNum) {
-      maxNum = num;
-    }
-  });
-  
-  const nextNum = maxNum > 0 ? maxNum + 1 : (db.leads || []).length + 1;
-  const leadId = `LEAD-${String(nextNum).padStart(3, '0')}`;
+  const leadId = generateNextId(db, 'leads', 'LEAD');
   
   const newLead = {
     id: leadId,
@@ -3417,7 +3282,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
   try { syncToSheets('leads'); } catch(e) {}
 
   // Automatically create a Query for the new lead
-  const queryId = `QRY-${String((db.queries || []).length + 1).padStart(3, '0')}`;
+  const queryId = generateNextId(db, 'queries', 'QRY');
   const newQuery = {
     id: queryId,
     customerId: leadId,
@@ -3441,7 +3306,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
 
   // Automatically schedule follow-up
   db.follow_ups = db.follow_ups || [];
-  const followUpId = `FOLLOW-${String((db.follow_ups || []).length + 1).padStart(3, '0')}`;
+  const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
   const newFollowUp = {
     id: followUpId,
     customerId: leadId,
@@ -3544,7 +3409,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), (req, res) 
     
     if (existingCust || existingLead) {
       const matchedId = existingCust ? existingCust.id : existingLead.id;
-      const queryId = `QRY-${String((db.queries || []).length + 1).padStart(3, '0')}`;
+      const queryId = generateNextId(db, 'queries', 'QRY');
       const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
       
       const newQuery = {
@@ -3570,7 +3435,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), (req, res) 
 
       // Automatically schedule a follow up task for the new query
       db.follow_ups = db.follow_ups || [];
-      const followUpId = `FOLLOW-${String((db.follow_ups || []).length + 1).padStart(3, '0')}`;
+      const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
       const newFollowUp = {
         id: followUpId,
         customerId: matchedId,
@@ -3686,7 +3551,7 @@ function createFollowUpForLead(lead, db) {
       try { syncToSheets('follow_ups'); } catch(e) {}
     }
   } else {
-    const followUpId = `FOLLOW-${String(db.follow_ups.length + 1).padStart(3, '0')}`;
+    const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
     const newFollowUp = {
       id: followUpId,
       customerId: finalCustId,
