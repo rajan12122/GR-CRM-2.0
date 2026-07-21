@@ -317,6 +317,9 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
     res.json({ success: true, message: 'Metadata schema saved successfully.' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to write metadata: ' + error.message });
+  }
+});
+
 // Manual One-Way Incremental Import Route (Sheet -> CRM)
 app.post('/api/sync/import-from-sheet', authenticateToken, async (req, res) => {
   try {
