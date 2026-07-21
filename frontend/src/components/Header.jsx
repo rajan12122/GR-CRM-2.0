@@ -35,6 +35,7 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
   const notiOpen = Boolean(notiAnchor);
 
   const [syncingSheet, setSyncingSheet] = useState(false);
+  const [pushingSheet, setPushingSheet] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
 
   const handleSyncFromSheet = async () => {
@@ -45,7 +46,7 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
       if (res.data.success) {
         setSyncResult({
           success: true,
-          title: 'Google Sheet Import Complete',
+          title: 'Google Sheet Import Complete (Sheet ➔ CRM)',
           message: res.data.message,
           summary: res.data.summary
         });
@@ -58,6 +59,28 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
         success: false,
         title: 'Import Error',
         message: err.response?.data?.message || err.message || 'Failed to sync from Google Sheet.'
+      });
+    }
+  };
+
+  const handlePushToSheet = async () => {
+    try {
+      setPushingSheet(true);
+      const res = await axios.post(`${API_BASE_URL}/sync/export-to-sheet`);
+      setPushingSheet(false);
+      if (res.data.success) {
+        setSyncResult({
+          success: true,
+          title: 'Google Sheet Push Complete (CRM ➔ Sheet)',
+          message: res.data.message
+        });
+      }
+    } catch (err) {
+      setPushingSheet(false);
+      setSyncResult({
+        success: false,
+        title: 'Push Error',
+        message: err.response?.data?.message || err.message || 'Failed to push data to Google Sheet.'
       });
     }
   };
@@ -271,6 +294,29 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
             }}
           >
             {syncingSheet ? 'Syncing...' : 'Sync From Sheet'}
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handlePushToSheet}
+            disabled={pushingSheet}
+            startIcon={pushingSheet ? <CircularProgress size={14} color="inherit" /> : <Icons.UploadCloud size={16} />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '12px',
+              borderRadius: '8px',
+              borderColor: '#2563EB',
+              color: '#1D4ED8',
+              backgroundColor: '#EFF6FF',
+              '&:hover': {
+                borderColor: '#1D4ED8',
+                backgroundColor: '#DBEAFE'
+              }
+            }}
+          >
+            {pushingSheet ? 'Pushing...' : 'Push To Sheet'}
           </Button>
 
           <IconButton 

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, getSheetsConfig, processSyncQueue } = require('./services/sheetsService');
+const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, syncToSheetsManual, getSheetsConfig, processSyncQueue } = require('./services/sheetsService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -333,6 +333,22 @@ app.post('/api/sync/import-from-sheet', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Incremental Import Error:', err.message);
     res.status(500).json({ success: false, message: 'Sheet Import Failed: ' + err.message });
+  }
+});
+
+// Manual Export / Push Route (CRM -> Google Sheet)
+app.post('/api/sync/export-to-sheet', authenticateToken, async (req, res) => {
+  try {
+    const { module: targetModule } = req.body || {};
+    const result = await syncToSheetsManual(targetModule || null);
+    res.json({
+      success: true,
+      message: `Push to Sheet complete! Enqueued and exported ${result.count} module(s) to Google Sheets.`,
+      result
+    });
+  } catch (err) {
+    console.error('Manual Push Error:', err.message);
+    res.status(500).json({ success: false, message: 'Push to Sheet Failed: ' + err.message });
   }
 });
 

@@ -438,6 +438,25 @@ async function syncFromSheetsIncremental(targetModule = null) {
 }
 
 /**
+ * Force manual export of all modules (or target module) from CRM -> Google Sheets
+ */
+async function syncToSheetsManual(targetModule = null) {
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  const modulesToSync = targetModule ? [targetModule] : Object.keys(metadata.modules || {});
+  
+  const enqueuedJobs = [];
+  for (const mod of modulesToSync) {
+    const jobId = await syncToSheets(mod);
+    if (jobId) enqueuedJobs.push({ module: mod, jobId });
+  }
+
+  // Trigger immediate processing of the sync queue
+  await processSyncQueue();
+
+  return { success: true, count: enqueuedJobs.length, jobs: enqueuedJobs };
+}
+
+/**
  * Compatibility function (Sync From Sheets) with explicit verification
  */
 async function syncFromSheets() {
@@ -454,6 +473,7 @@ module.exports = {
   syncToSheets,
   syncFromSheets,
   syncFromSheetsIncremental,
+  syncToSheetsManual,
   getSheetsConfig,
   processSyncQueue
 };
