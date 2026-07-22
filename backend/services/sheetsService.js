@@ -41,16 +41,38 @@ function getSheetsConfig() {
   };
 }
 
+// Helper to format private key properly
+function formatPrivateKey(rawKey) {
+  if (!rawKey) return null;
+  let key = String(rawKey).trim();
+  
+  // Replace escaped newlines with actual newlines
+  key = key.replace(/\\n/g, '\n');
+  
+  const prefix = '-----BEGIN PRIVATE KEY-----';
+  const suffix = '-----END PRIVATE KEY-----';
+  
+  if (!key.includes(prefix)) {
+    key = `${prefix}\n${key}`;
+  }
+  if (!key.includes(suffix)) {
+    key = `${key}\n${suffix}\n`;
+  }
+  
+  return key;
+}
+
 // Get Authenticated Google Sheets client
 function getSheetsClient(config) {
   if (!config.syncActive || !config.spreadsheetId || !config.clientEmail || !config.privateKey) {
     return null;
   }
   try {
+    const formattedKey = formatPrivateKey(config.privateKey);
     const auth = new google.auth.JWT(
       config.clientEmail,
       null,
-      config.privateKey.replace(/\\n/g, '\n'),
+      formattedKey,
       ['https://www.googleapis.com/auth/spreadsheets']
     );
     return google.sheets({ version: 'v4', auth });
@@ -496,5 +518,6 @@ module.exports = {
   syncFromSheetsIncremental,
   syncToSheetsManual,
   getSheetsConfig,
+  getSheetsClient,
   processSyncQueue
 };

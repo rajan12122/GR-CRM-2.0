@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, syncToSheetsManual, getSheetsConfig, processSyncQueue } = require('./services/sheetsService');
+const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, syncToSheetsManual, getSheetsConfig, getSheetsClient, processSyncQueue } = require('./services/sheetsService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -4026,13 +4026,10 @@ app.post('/api/sync/dashboard/reconcile-preview/:module', authenticateToken, che
   }
 
   try {
-    const auth = new google.auth.JWT(
-      email,
-      null,
-      privateKey.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/spreadsheets']
-    );
-    const sheets = google.sheets({ version: 'v4', auth });
+    const sheets = getSheetsClient(config);
+    if (!sheets) {
+      return res.status(400).json({ success: false, message: 'Google Sheets sync client failed to initialize.' });
+    }
     const sheetName = `data_${module}`;
 
     // Read sheet values

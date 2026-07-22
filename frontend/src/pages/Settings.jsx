@@ -94,7 +94,6 @@ const Settings = () => {
           message: res.data.message,
           summary: res.data.summary
         });
-        if (triggerAppReload) triggerAppReload();
       }
     } catch (err) {
       setSyncingSheet(false);
@@ -2372,8 +2371,7 @@ const Settings = () => {
         </Grid>
       </Grid>
 
-      {/* Sync Result Popup Dialog */}
-      <Dialog open={Boolean(syncResultModal)} onClose={() => setSyncResultModal(null)} maxWidth="xs" fullWidth PaperProps={{ style: { borderRadius: 16, padding: '8px' } }}>
+      <Dialog open={Boolean(syncResultModal)} onClose={() => { const wasSuccess = syncResultModal?.success; setSyncResultModal(null); if (wasSuccess && triggerAppReload) triggerAppReload(); }} maxWidth="xs" fullWidth PaperProps={{ style: { borderRadius: 16, padding: '8px' } }}>
         <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins', color: syncResultModal?.success ? '#047857' : '#DC2626' }}>
           {syncResultModal?.title}
         </DialogTitle>
@@ -2395,7 +2393,7 @@ const Settings = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSyncResultModal(null)} variant="contained" sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
+          <Button onClick={() => { const wasSuccess = syncResultModal?.success; setSyncResultModal(null); if (wasSuccess && triggerAppReload) triggerAppReload(); }} variant="contained" sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
             OK
           </Button>
         </DialogActions>
