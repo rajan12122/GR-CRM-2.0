@@ -160,6 +160,9 @@ function authenticateToken(req, res, next) {
 // Role-based Access Control Middleware
 function checkPermission(moduleName, action) {
   return (req, res, next) => {
+    if (moduleName === 'documents' || moduleName === 'activity_logs') {
+      return next();
+    }
     const metadata = readMetadata();
     const role = req.user.role;
     
@@ -1477,12 +1480,10 @@ function generateDynamicTimeline(moduleName, id, db) {
   return timeline;
 }
 
-// --- DYNAMIC DATA CRUD ROUTER ---
-
 app.get('/api/data/:module', authenticateToken, (req, res, next) => {
   const { module } = req.params;
   
-  if (module === 'activity_logs') {
+  if (module === 'activity_logs' || module === 'documents') {
     return next();
   }
 
@@ -1493,7 +1494,7 @@ app.get('/api/data/:module', authenticateToken, (req, res, next) => {
   next();
 }, (req, res, next) => {
   const { module } = req.params;
-  if (module === 'activity_logs') {
+  if (module === 'activity_logs' || module === 'documents') {
     return next();
   }
   checkPermission(module, 'view')(req, res, next);
@@ -1608,7 +1609,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
 
   // Populate basic date tracker if applicable
   const metadata = readMetadata();
-  const fields = metadata.modules[module].fields;
+  const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
   fields.forEach(f => {
     if (f.name === 'dateAdded' && !payload[f.name]) {
       payload[f.name] = new Date().toISOString().split('T')[0];
@@ -1901,7 +1902,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
   // Auto-update last_updated date on edits
   const metadata = readMetadata();
-  const fields = metadata.modules[module].fields;
+  const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
   fields.forEach(f => {
     if (f.name === 'last_updated') {
       payload[f.name] = new Date().toLocaleString('en-IN');

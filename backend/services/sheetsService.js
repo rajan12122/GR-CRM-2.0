@@ -10,11 +10,32 @@ const metadataPath = path.join(__dirname, '../config/metadata.json');
 const queueLocks = {};
 let isProcessingQueue = false;
 
-// Helper to load sheets config from environment variables
+// Helper to load sheets config from metadata.json or environment variables
 function getSheetsConfig() {
+  let spreadsheetId = null;
+  let syncActive = false;
+  
+  try {
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    if (metadata && metadata.sheetsConfig) {
+      spreadsheetId = metadata.sheetsConfig.spreadsheetId;
+      syncActive = metadata.sheetsConfig.syncActive === true || metadata.sheetsConfig.syncActive === 'true';
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // Fallback to environment variables if not found in metadata
+  if (!spreadsheetId) {
+    spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  }
+  if (process.env.GOOGLE_SHEETS_SYNC_ACTIVE !== undefined) {
+    syncActive = process.env.GOOGLE_SHEETS_SYNC_ACTIVE === 'true';
+  }
+
   return {
-    syncActive: process.env.GOOGLE_SHEETS_SYNC_ACTIVE === 'true',
-    spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID,
+    syncActive: syncActive,
+    spreadsheetId: spreadsheetId ? String(spreadsheetId).trim() : null,
     clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
   };
