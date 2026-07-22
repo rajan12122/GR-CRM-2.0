@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, syncToSheetsManual, getSheetsConfig, getSheetsClient, processSyncQueue } = require('./services/sheetsService');
+const { syncToSheets, syncFromSheets, syncFromSheetsIncremental, syncToSheetsManual, getSheetsConfig, getSheetsClient, getSpreadsheetSheets, getSheetHeaders, executeImportWithMapping, processSyncQueue } = require('./services/sheetsService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -352,6 +352,63 @@ app.post('/api/sync/export-to-sheet', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Manual Push Error:', err.message);
     res.status(500).json({ success: false, message: 'Push to Sheet Failed: ' + err.message });
+  }
+});
+
+// GET all spreadsheet sheet tabs
+app.get('/api/sync/sheets', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
+  try {
+    const config = getSheetsConfig();
+    const sheets = await getSpreadsheetSheets(config);
+    res.json({ success: true, sheets });
+  } catch (err) {
+    console.error('Failed to list sheets:', err.message);
+    res.status(500).json({ success: false, message: 'Failed to list spreadsheet tabs: ' + err.message });
+  }
+});
+
+// GET headers from a specific sheet tab
+app.get('/api/sync/sheets/:tabName/headers', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
+  try {
+    const { tabName } = req.params;
+    const config = getSheetsConfig();
+    const headers = await getSheetHeaders(config, tabName);
+    res.json({ success: true, headers });
+  } catch (err) {
+    console.error('Failed to fetch headers:', err.message);
+    res.status(500).json({ success: false, message: 'Failed to fetch sheet headers: ' + err.message });
+  }
+});
+
+// POST test mapping validation dry-run
+app.post('/api/sync/mappings/test', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
+  try {
+    const mapping = req.body;
+    if (!mapping || !mapping.module || !mapping.sheetName || !mapping.headerMap) {
+      return res.status(400).json({ success: false, message: 'Invalid mapping configuration payload.' });
+    }
+    const config = getSheetsConfig();
+    const result = await executeImportWithMapping(config, mapping, true); // dryRun = true
+    res.json(result);
+  } catch (err) {
+    console.error('Mapping test failure:', err.message);
+    res.status(500).json({ success: false, message: 'Mapping test simulation failed: ' + err.message });
+  }
+});
+
+// POST run actual import using mapping configuration
+app.post('/api/sync/import-with-mapping', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
+  try {
+    const mapping = req.body;
+    if (!mapping || !mapping.module || !mapping.sheetName || !mapping.headerMap) {
+      return res.status(400).json({ success: false, message: 'Invalid mapping configuration payload.' });
+    }
+    const config = getSheetsConfig();
+    const result = await executeImportWithMapping(config, mapping, false); // dryRun = false
+    res.json(result);
+  } catch (err) {
+    console.error('Import mapping failure:', err.message);
+    res.status(500).json({ success: false, message: 'Import with mapping failed: ' + err.message });
   }
 });
 

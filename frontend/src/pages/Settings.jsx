@@ -80,6 +80,311 @@ const Settings = () => {
   const [pushingSheet, setPushingSheet] = useState(false);
   const [syncResultModal, setSyncResultModal] = useState(null);
 
+  // --- Google Sheets Header Mapping States ---
+  const [sheetTabs, setSheetTabs] = useState([]);
+  const [loadingTabs, setLoadingTabs] = useState(false);
+  const [activeMappingId, setActiveMappingId] = useState('new');
+  const [mappingName, setMappingName] = useState('New Sheet Import Template');
+  const [mappingModule, setMappingModule] = useState('customers');
+  const [mappingSheetName, setMappingSheetName] = useState('');
+  const [detectedHeaders, setDetectedHeaders] = useState([]);
+  const [loadingHeaders, setLoadingHeaders] = useState(false);
+  const [headerMap, setHeaderMap] = useState({});
+  const [writeBackEnabled, setWriteBackEnabled] = useState(true);
+  const [searchHeaderQuery, setSearchHeaderQuery] = useState('');
+  const [searchCrmQuery, setSearchCrmQuery] = useState('');
+  const [testingMapping, setTestingMapping] = useState(false);
+  const [testResults, setTestResults] = useState(null);
+  const [openImportPreviewDialog, setOpenImportPreviewDialog] = useState(false);
+  const [importingMapping, setImportingMapping] = useState(false);
+
+  // Fetch tabs in Google Spreadsheet
+  const loadSheetTabs = async () => {
+    try {
+      setLoadingTabs(true);
+      const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
+      const res = await axios.get(`${API_BASE_URL}/sync/sheets`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success) {
+        setSheetTabs(res.data.sheets || []);
+      }
+      setLoadingTabs(false);
+    } catch (err) {
+      console.error('Failed to load sheet tabs:', err);
+      showStatus('error', err.response?.data?.message || 'Failed to fetch spreadsheet tabs.');
+      setLoadingTabs(false);
+    }
+  };
+
+  // Fetch headers for selected sheet tab
+  const loadSheetHeaders = async (tabName) => {
+    if (!tabName) {
+      setDetectedHeaders([]);
+      return;
+    }
+    try {
+      setLoadingHeaders(true);
+      const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
+      const res = await axios.get(`${API_BASE_URL}/sync/sheets/${encodeURIComponent(tabName)}/headers`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success) {
+        setDetectedHeaders(res.data.headers || []);
+      }
+      setLoadingHeaders(false);
+    } catch (err) {
+      console.error('Failed to load headers:', err);
+      showStatus('error', err.response?.data?.message || 'Failed to fetch sheet headers.');
+      setLoadingHeaders(false);
+    }
+  };
+
+  // Automatically load sheet tabs when mapping tab is selected
+  useEffect(() => {
+    if (activeTab === 'mapping') {
+      loadSheetTabs();
+    }
+  }, [activeTab]);
+
+  // Load headers when sheet tab changes
+  useEffect(() => {
+    if (mappingSheetName) {
+      loadSheetHeaders(mappingSheetName);
+    }
+  }, [mappingSheetName]);
+
+  // Load existing mapping configuration when template selection changes
+  useEffect(() => {
+    const mappings = metadata?.sheetMappings || [];
+    if (activeMappingId === 'new') {
+      setMappingName('New Sheet Import Template');
+      setMappingModule('customers');
+      setMappingSheetName('');
+      setDetectedHeaders([]);
+      setHeaderMap({});
+      setWriteBackEnabled(true);
+    } else {
+      const match = mappings.find(m => m.id === activeMappingId);
+      if (match) {
+        setMappingName(match.name || '');
+        setMappingModule(match.module || 'customers');
+        setMappingSheetName(match.sheetName || '');
+        setHeaderMap(match.headerMap || {});
+        setWriteBackEnabled(match.writeBackEnabled !== false);
+      }
+    }
+  }, [activeMappingId, metadata]);
+
+  const handleSaveMapping = async () => {
+    if (!mappingName.trim()) {
+      showStatus('error', 'Please enter a name for the mapping template.');
+      return;
+    }
+    if (!mappingSheetName) {
+      showStatus('error', 'Please select a Google Sheet tab.');
+      return;
+    }
+
+    const updated = { ...metadata };
+    updated.sheetMappings = updated.sheetMappings || [];
+
+    const mapData = {
+      id: activeMappingId === 'new' ? `MAP-${Date.now()}` : activeMappingId,
+      name: mappingName.trim(),
+      module: mappingModule,
+      sheetName: mappingSheetName,
+      headerMap,
+      writeBackEnabled,
+      createdAt: new Date().toISOString()
+    };
+
+    if (activeMappingId === 'new') {
+      updated.sheetMappings.push(mapData);
+      setActiveMappingId(mapData.id);
+    } else {
+      const idx = updated.sheetMappings.findIndex(m => m.id === activeMappingId);
+      if (idx !== -1) {
+        updated.sheetMappings[idx] = mapData;
+      } else {
+        updated.sheetMappings.push(mapData);
+      }
+    }
+
+    const res = await saveMetadata(updated);
+    if (res.success) {
+      showStatus('success', 'Mapping template saved successfully!');
+    } else {
+      showStatus('error', res.message || 'Failed to save mapping template.');
+    }
+  };
+
+  const handleDeleteMapping = async () => {
+    if (activeMappingId === 'new') return;
+    const updated = { ...metadata };
+    updated.sheetMappings = (updated.sheetMappings || []).filter(m => m.id !== activeMappingId);
+    
+    const res = await saveMetadata(updated);
+    if (res.success) {
+      setActiveMappingId('new');
+      showStatus('success', 'Mapping template deleted successfully.');
+    } else {
+      showStatus('error', res.message || 'Failed to delete template.');
+    }
+  };
+
+  const handleDuplicateMapping = () => {
+    if (activeMappingId === 'new') return;
+    const mappings = metadata?.sheetMappings || [];
+    const match = mappings.find(m => m.id === activeMappingId);
+    if (!match) return;
+
+    const dup = {
+      ...match,
+      id: `MAP-${Date.now()}`,
+      name: `${match.name} (Copy)`
+    };
+
+    const updated = { ...metadata };
+    updated.sheetMappings = updated.sheetMappings || [];
+    updated.sheetMappings.push(dup);
+
+    saveMetadata(updated).then(res => {
+      if (res.success) {
+        setActiveMappingId(dup.id);
+        showStatus('success', 'Template duplicated successfully.');
+      } else {
+        showStatus('error', 'Failed to duplicate template.');
+      }
+    });
+  };
+
+  const handleExportMapping = () => {
+    if (activeMappingId === 'new') return;
+    const mappings = metadata?.sheetMappings || [];
+    const match = mappings.find(m => m.id === activeMappingId);
+    if (!match) return;
+
+    const blob = new Blob([JSON.stringify(match, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${match.name.replace(/\s+/g, '_')}_mapping.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportMapping = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (!parsed.module || !parsed.sheetName || !parsed.headerMap) {
+          showStatus('error', 'Invalid mapping file format.');
+          return;
+        }
+
+        parsed.id = `MAP-${Date.now()}`;
+        parsed.name = `${parsed.name || 'Imported Template'} (Imported)`;
+
+        const updated = { ...metadata };
+        updated.sheetMappings = updated.sheetMappings || [];
+        updated.sheetMappings.push(parsed);
+
+        const res = await saveMetadata(updated);
+        if (res.success) {
+          setActiveMappingId(parsed.id);
+          showStatus('success', 'Mapping template imported successfully!');
+        } else {
+          showStatus('error', 'Failed to save imported template.');
+        }
+      } catch (err) {
+        showStatus('error', 'Failed to parse JSON file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleResetMapping = () => {
+    setHeaderMap({});
+    showStatus('success', 'Selections cleared.');
+  };
+
+  const handleTestMapping = async () => {
+    if (!mappingSheetName) {
+      showStatus('error', 'Please select a Google Sheet tab.');
+      return;
+    }
+    try {
+      setTestingMapping(true);
+      const payload = {
+        name: mappingName,
+        module: mappingModule,
+        sheetName: mappingSheetName,
+        headerMap,
+        writeBackEnabled
+      };
+      const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
+      const res = await axios.post(`${API_BASE_URL}/sync/mappings/test`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setTestingMapping(false);
+      setTestResults(res.data);
+      setOpenImportPreviewDialog(true);
+    } catch (err) {
+      setTestingMapping(false);
+      showStatus('error', err.response?.data?.message || 'Simulation test failed.');
+    }
+  };
+
+  const handleExecuteImport = async () => {
+    if (!mappingSheetName) {
+      showStatus('error', 'Please select a Google Sheet tab.');
+      return;
+    }
+    try {
+      setImportingMapping(true);
+      const payload = {
+        name: mappingName,
+        module: mappingModule,
+        sheetName: mappingSheetName,
+        headerMap,
+        writeBackEnabled
+      };
+      const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
+      const res = await axios.post(`${API_BASE_URL}/sync/import-with-mapping`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setImportingMapping(false);
+      setOpenImportPreviewDialog(false);
+      if (res.data.success) {
+        setSyncResultModal({
+          success: true,
+          title: 'Google Sheet Import Complete (Sheet ➔ CRM)',
+          message: `Mapping-based import completed successfully.`,
+          summary: {
+            details: {
+              [mappingModule]: {
+                added: res.data.metrics.imported,
+                skipped: res.data.metrics.skipped,
+                updated: res.data.metrics.updated,
+                total: res.data.metrics.totalRows,
+                validationErrors: res.data.metrics.validationErrors.length,
+                duration: res.data.metrics.duration
+              }
+            }
+          }
+        });
+      }
+    } catch (err) {
+      setImportingMapping(false);
+      showStatus('error', err.response?.data?.message || 'Import execution failed.');
+    }
+  };
+
   const handleSyncFromSheet = async () => {
     try {
       setSyncingSheet(true);
@@ -964,6 +1269,10 @@ const Settings = () => {
                  <ListItem button onClick={() => setActiveTab('sheets')} selected={activeTab === 'sheets'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'sheets' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'sheets' ? '#2563EB' : '#4B5563' }}>
                   <Icons.FileSpreadsheet size={18} style={{ marginRight: 10 }} />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>Google Sheets Config</Typography>
+                </ListItem>
+                 <ListItem button onClick={() => setActiveTab('mapping')} selected={activeTab === 'mapping'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'mapping' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'mapping' ? '#2563EB' : '#4B5563' }}>
+                  <Icons.Sliders size={18} style={{ marginRight: 10 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Google Sheets Mapping</Typography>
                 </ListItem>
                  <ListItem button onClick={() => setActiveTab('rotation')} selected={activeTab === 'rotation'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'rotation' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'rotation' ? '#2563EB' : '#4B5563' }}>
                    <Icons.RefreshCw size={18} style={{ marginRight: 10 }} />
@@ -2368,6 +2677,347 @@ const Settings = () => {
             </Card>
           )}
 
+          {/* TAB 8: GOOGLE SHEETS MAPPING CONFIGURATION */}
+          {activeTab === 'mapping' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Row 1: Header / Template Manager */}
+              <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '20px', fontFamily: 'Poppins', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Icons.Sliders size={20} className="text-blue-600" /> Sheets Header Mapping Configuration
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#64748B', mb: 3 }}>
+                    Build custom schemas mapping arbitrary Google Sheets columns to dynamic CRM fields. Adapts automatically to database schema changes.
+                  </Typography>
+
+                  <Divider sx={{ mb: 3 }} />
+
+                  <Grid container spacing={3} alignItems="center">
+                    <Grid item xs={12} sm={4}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Mapping Template</InputLabel>
+                        <Select
+                          value={activeMappingId}
+                          onChange={(e) => setActiveMappingId(e.target.value)}
+                          label="Mapping Template"
+                        >
+                          <MenuItem value="new"><em>Create New Template...</em></MenuItem>
+                          {(metadata?.sheetMappings || []).map(m => (
+                            <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} sm={5}>
+                      <TextField
+                        size="small"
+                        label="Template Name"
+                        fullWidth
+                        value={mappingName}
+                        onChange={(e) => setMappingName(e.target.value)}
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={3} display="flex" gap={1}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={handleSaveMapping}
+                        sx={{ textTransform: 'none', fontWeight: 700, backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' } }}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleDuplicateMapping}
+                        disabled={activeMappingId === 'new'}
+                        sx={{ textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Duplicate
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        onClick={handleDeleteMapping}
+                        disabled={activeMappingId === 'new'}
+                        sx={{ textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Delete
+                      </Button>
+                    </Grid>
+                  </Grid>
+
+                  <Box display="flex" gap={1.5} mt={2.5} flexWrap="wrap">
+                    <Button
+                      variant="text"
+                      size="small"
+                      startIcon={<Icons.Download size={14} />}
+                      onClick={handleExportMapping}
+                      disabled={activeMappingId === 'new'}
+                      sx={{ textTransform: 'none', fontWeight: 600, color: '#475569' }}
+                    >
+                      Export JSON
+                    </Button>
+                    
+                    <Button
+                      variant="text"
+                      component="label"
+                      size="small"
+                      startIcon={<Icons.Upload size={14} />}
+                      sx={{ textTransform: 'none', fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+                    >
+                      Import JSON
+                      <input type="file" hidden accept=".json" onChange={handleImportMapping} />
+                    </Button>
+
+                    <Button
+                      variant="text"
+                      size="small"
+                      startIcon={<Icons.RotateCcw size={14} />}
+                      onClick={handleResetMapping}
+                      sx={{ textTransform: 'none', fontWeight: 600, color: '#DC2626' }}
+                    >
+                      Reset Configuration
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+
+              {/* Row 2: Target CRM module and Spreadsheet Source Tab */}
+              <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Target CRM Module</InputLabel>
+                        <Select
+                          value={mappingModule}
+                          onChange={(e) => {
+                            setMappingModule(e.target.value);
+                            setHeaderMap({});
+                          }}
+                          label="Target CRM Module"
+                        >
+                          {Object.entries(metadata?.modules || {}).map(([key, mod]) => (
+                            <MenuItem key={key} value={key}>{mod.label}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small" error={sheetTabs.length === 0 && !loadingTabs}>
+                        <InputLabel>Spreadsheet Tab Name</InputLabel>
+                        <Select
+                          value={mappingSheetName}
+                          onChange={(e) => {
+                            setMappingSheetName(e.target.value);
+                            setHeaderMap({});
+                          }}
+                          label="Spreadsheet Tab Name"
+                          disabled={loadingTabs}
+                        >
+                          {loadingTabs ? (
+                            <MenuItem disabled><em>Loading spreadsheet tabs...</em></MenuItem>
+                          ) : sheetTabs.length === 0 ? (
+                            <MenuItem disabled><em>No tabs detected. Check Sheets Config.</em></MenuItem>
+                          ) : (
+                            sheetTabs.map(t => (
+                              <MenuItem key={t} value={t}>{t}</MenuItem>
+                            ))
+                          )}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={writeBackEnabled}
+                            onChange={(e) => setWriteBackEnabled(e.target.checked)}
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#334155' }}>
+                              Auto Write-Back generated CRM IDs
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
+                              When enabled, newly created records will have their generated CRM IDs written back to Google Sheets automatically.
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+
+              {/* Row 3: Mapping Panel */}
+              <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={1.5}>
+                    <Box>
+                      <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '17px', fontFamily: 'Poppins', mb: 0.5 }}>
+                        Columns Mapping Matrix
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#64748B' }}>
+                        Match the detected Google Sheets columns to appropriate CRM destination fields.
+                      </Typography>
+                    </Box>
+
+                    {/* Quick filter inputs */}
+                    <Box display="flex" gap={1.5}>
+                      <TextField
+                        size="small"
+                        placeholder="Search Sheet Headers..."
+                        value={searchHeaderQuery}
+                        onChange={(e) => setSearchHeaderQuery(e.target.value)}
+                        InputProps={{
+                          startAdornment: <Icons.Search size={14} style={{ marginRight: 8, color: '#94A3B8' }} />
+                        }}
+                      />
+                      <TextField
+                        size="small"
+                        placeholder="Search CRM Fields..."
+                        value={searchCrmQuery}
+                        onChange={(e) => setSearchCrmQuery(e.target.value)}
+                        InputProps={{
+                          startAdornment: <Icons.Search size={14} style={{ marginRight: 8, color: '#94A3B8' }} />
+                        }}
+                      />
+                    </Box>
+                  </Box>
+
+                  {/* Warning message for unmapped required CRM fields */}
+                  {(() => {
+                    const modFields = metadata?.modules[mappingModule]?.fields || [];
+                    const reqFields = modFields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated');
+                    const missing = reqFields.filter(f => !Object.values(headerMap).includes(f.name));
+                    if (missing.length > 0) {
+                      return (
+                        <Alert severity="warning" sx={{ mb: 3, borderRadius: '8px' }}>
+                          <strong>Required CRM Fields Unmapped:</strong> {missing.map(f => f.label).join(', ')}. Imports may fail if rows contain missing data.
+                        </Alert>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {loadingHeaders ? (
+                    <Box display="flex" justifyContent="center" alignItems="center" py={6}>
+                      <CircularProgress size={30} />
+                      <Typography variant="body2" sx={{ ml: 2, color: '#64748B' }}>Fetching spreadsheet columns...</Typography>
+                    </Box>
+                  ) : detectedHeaders.length === 0 ? (
+                    <Box sx={{ border: '1px dashed #E2E8F0', borderRadius: '12px', p: 5, textAlign: 'center', backgroundColor: '#F8FAFC' }}>
+                      <Icons.FileSpreadsheet size={40} style={{ color: '#94A3B8', marginBottom: 12 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                        No spreadsheet tab columns detected
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', mt: 0.5 }}>
+                        Select an active sheet tab to load headers dynamically.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: '12px' }}>
+                      <Table size="small">
+                        <TableHead sx={{ backgroundColor: '#F8FAFC' }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700, color: '#475569', py: 1.5 }}>Google Sheet Header</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: '#475569', py: 1.5 }}>Destination CRM Field</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, color: '#475569', py: 1.5 }}>Validation Preview</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {detectedHeaders
+                            .filter(h => h.toLowerCase().includes(searchHeaderQuery.toLowerCase()))
+                            .map((h) => {
+                              const crmFields = metadata?.modules[mappingModule]?.fields || [];
+                              const selectedVal = headerMap[h] || '';
+                              const matchedFieldDef = crmFields.find(f => f.name === selectedVal);
+
+                              return (
+                                <TableRow key={h} hover>
+                                  <TableCell sx={{ py: 1.5, fontWeight: 600, color: '#1E293B' }}>{h}</TableCell>
+                                  <TableCell sx={{ py: 1 }}>
+                                    <FormControl size="small" sx={{ minWidth: 220 }}>
+                                      <Select
+                                        value={selectedVal}
+                                        onChange={(e) => {
+                                          setHeaderMap(prev => ({
+                                            ...prev,
+                                            [h]: e.target.value || undefined
+                                          }));
+                                        }}
+                                        displayEmpty
+                                      >
+                                        <MenuItem value=""><em>-- Unmapped --</em></MenuItem>
+                                        {crmFields
+                                          .filter(f => f.label.toLowerCase().includes(searchCrmQuery.toLowerCase()))
+                                          .map(f => (
+                                            <MenuItem key={f.name} value={f.name}>
+                                              {f.label} {f.required && <span style={{ color: '#EF4444', marginLeft: 3 }}>*</span>}
+                                            </MenuItem>
+                                          ))}
+                                      </Select>
+                                    </FormControl>
+                                  </TableCell>
+                                  <TableCell align="right" sx={{ py: 1 }}>
+                                    {matchedFieldDef ? (
+                                      <Chip 
+                                        size="small" 
+                                        label={matchedFieldDef.type.toUpperCase()} 
+                                        sx={{ 
+                                          fontWeight: 700, 
+                                          fontSize: '10px',
+                                          backgroundColor: matchedFieldDef.required ? '#FEE2E2' : '#F1F5F9',
+                                          color: matchedFieldDef.required ? '#B91C1C' : '#475569'
+                                        }} 
+                                      />
+                                    ) : (
+                                      <Typography variant="caption" sx={{ color: '#94A3B8' }}>Ignored during import</Typography>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+
+                  <Divider sx={{ my: 4 }} />
+
+                  <Box display="flex" justifyContent="flex-end" gap={2}>
+                    <Button
+                      variant="outlined"
+                      onClick={handleTestMapping}
+                      disabled={testingMapping || detectedHeaders.length === 0}
+                      startIcon={testingMapping ? <CircularProgress size={16} /> : <Icons.Eye size={16} />}
+                      sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}
+                    >
+                      {testingMapping ? 'Testing...' : 'Test Mapping & Preview'}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={handleExecuteImport}
+                      disabled={importingMapping || detectedHeaders.length === 0}
+                      startIcon={importingMapping ? <CircularProgress size={16} color="inherit" /> : <Icons.Play size={16} />}
+                      sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', backgroundColor: '#10B981', '&:hover': { backgroundColor: '#059669' } }}
+                    >
+                      {importingMapping ? 'Importing...' : 'Start Safe Import'}
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Box>
+          )}
+
         </Grid>
       </Grid>
 
@@ -2385,8 +3035,13 @@ const Settings = () => {
                 Module Import Breakdown:
               </Typography>
               {Object.entries(syncResultModal.summary.details).map(([mod, info]) => (
-                <Typography key={mod} variant="caption" sx={{ display: 'block', color: '#64748B' }}>
-                  • <strong>{mod}</strong>: +{info.added} new row(s) added ({info.skipped} skipped)
+                <Typography key={mod} variant="caption" sx={{ display: 'block', color: '#64748B', mb: 0.5 }}>
+                  • <strong>{mod}</strong>: 
+                  {` +${info.added} added`}
+                  {info.updated !== undefined && ` (${info.updated} updated)`}
+                  {` (${info.skipped} skipped)`}
+                  {info.validationErrors !== undefined && info.validationErrors > 0 && ` [${info.validationErrors} error(s)]`}
+                  {info.duration !== undefined && ` in ${info.duration}s`}
                 </Typography>
               ))}
             </Box>
@@ -2395,6 +3050,133 @@ const Settings = () => {
         <DialogActions>
           <Button onClick={() => { const wasSuccess = syncResultModal?.success; setSyncResultModal(null); if (wasSuccess && triggerAppReload) triggerAppReload(); }} variant="contained" sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
             OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Test / Simulation Dry-run Preview Dialog */}
+      <Dialog 
+        open={openImportPreviewDialog} 
+        onClose={() => setOpenImportPreviewDialog(false)} 
+        maxWidth="lg" 
+        fullWidth
+        PaperProps={{ style: { borderRadius: 16, padding: '12px' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Icons.ClipboardList size={22} className="text-blue-600" /> Mapping Test Results & Preview
+        </DialogTitle>
+        <DialogContent>
+          {testResults && (
+            <Box display="flex" flexDirection="column" gap={3}>
+              {/* Summary Stats Cards */}
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={3}>
+                  <Box sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', p: 2, textAlign: 'center', backgroundColor: '#F8FAFC' }}>
+                    <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontWeight: 600 }}>Total Rows Scanned</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5 }}>{testResults.metrics?.totalRows}</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Box sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', p: 2, textAlign: 'center', backgroundColor: '#ECFDF5' }}>
+                    <Typography variant="caption" sx={{ color: '#047857', display: 'block', fontWeight: 600 }}>New Records (Insert)</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800, color: '#10B981', mt: 0.5 }}>{testResults.metrics?.imported}</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Box sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', p: 2, textAlign: 'center', backgroundColor: '#EFF6FF' }}>
+                    <Typography variant="caption" sx={{ color: '#1D4ED8', display: 'block', fontWeight: 600 }}>Existing Updates (Update)</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800, color: '#3B82F6', mt: 0.5 }}>{testResults.metrics?.updated}</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Box sx={{ border: '1px solid #E2E8F0', borderRadius: '8px', p: 2, textAlign: 'center', backgroundColor: '#FEF2F2' }}>
+                    <Typography variant="caption" sx={{ color: '#B91C1C', display: 'block', fontWeight: 600 }}>Errors / Skipped</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800, color: '#EF4444', mt: 0.5 }}>{testResults.metrics?.skipped}</Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+
+              {/* Unmapped & Missing Warnings */}
+              {testResults.metrics?.missingRequired?.length > 0 && (
+                <Alert severity="error" sx={{ borderRadius: '8px' }}>
+                  <strong>Missing Required Mappings:</strong> The sheet mapping is missing critical required fields: {testResults.metrics.missingRequired.join(', ')}.
+                </Alert>
+              )}
+
+              {/* Row validation list */}
+              <Typography variant="h5" sx={{ fontWeight: 700, fontSize: '15px', mb: -1.5, mt: 1 }}>
+                Live Rows Data Validation Preview (Showing first 10 rows)
+              </Typography>
+
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: '12px', maxHeight: 350 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Row #</TableCell>
+                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Status Action</TableCell>
+                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Record Key / Data</TableCell>
+                      <TableCell sx={{ fontWeight: 700, backgroundColor: '#F8FAFC' }}>Validation Issues / Details</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(testResults.previewRows || []).map((pRow) => (
+                      <TableRow key={pRow.rowNumber} hover>
+                        <TableCell sx={{ py: 1.5, fontWeight: 700 }}>Row {pRow.rowNumber}</TableCell>
+                        <TableCell sx={{ py: 1 }}>
+                          <Chip 
+                            size="small" 
+                            label={pRow.status} 
+                            sx={{ 
+                              fontWeight: 800, 
+                              fontSize: '9px',
+                              backgroundColor: pRow.status === 'INSERT' ? '#D1FAE5' : (pRow.status === 'UPDATE' ? '#DBEAFE' : '#FEE2E2'),
+                              color: pRow.status === 'INSERT' ? '#065F46' : (pRow.status === 'UPDATE' ? '#1E40AF' : '#991B1B')
+                            }} 
+                          />
+                        </TableCell>
+                        <TableCell sx={{ py: 1 }}>
+                          <Box>
+                            <Typography variant="caption" sx={{ display: 'block', color: '#334155', fontWeight: 600 }}>
+                              {pRow.data.name || pRow.data.firm_name || pRow.data.id || 'N/A'}
+                            </Typography>
+                            <Typography variant="caption" sx={{ display: 'block', color: '#64748B' }}>
+                              Phone: {pRow.data.phone || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ py: 1 }}>
+                          {pRow.errors && pRow.errors.length > 0 ? (
+                            pRow.errors.map((e, idx) => (
+                              <Typography key={idx} variant="caption" sx={{ display: 'block', color: '#EF4444' }}>
+                                • <strong>{e.field}</strong>: {e.error} (Value: "{e.value}")
+                              </Typography>
+                            ))
+                          ) : (
+                            <Typography variant="caption" sx={{ color: '#10B981', fontWeight: 600 }}>Ready to import (Validation passed)</Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setOpenImportPreviewDialog(false)} 
+            sx={{ textTransform: 'none', fontWeight: 600, color: '#64748B' }}
+          >
+            Cancel / Edit Mapping
+          </Button>
+          <Button 
+            onClick={handleExecuteImport} 
+            variant="contained" 
+            disabled={importingMapping || (testResults?.metrics?.skipped > 0 && testResults?.metrics?.imported === 0 && testResults?.metrics?.updated === 0)}
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', backgroundColor: '#10B981', '&:hover': { backgroundColor: '#059669' } }}
+          >
+            {importingMapping ? 'Importing...' : 'Accept Preview & Execute Import'}
           </Button>
         </DialogActions>
       </Dialog>

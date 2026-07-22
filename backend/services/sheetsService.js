@@ -507,6 +507,314 @@ async function syncFromSheets() {
   return false;
 }
 
+// Local helper to generate the next unique ID for imports
+function generateNextId(db, moduleName, prefix) {
+  const records = db[moduleName] || [];
+  let maxNum = 0;
+  records.forEach(rec => {
+    if (rec.id && typeof rec.id === 'string' && rec.id.startsWith(`${prefix}-`)) {
+      const parts = rec.id.split('-');
+      if (parts.length === 2) {
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  });
+  return `${prefix}-${String(maxNum + 1).padStart(3, '0')}`;
+}
+
+// Helper to convert index to Excel column letters (1 -> A, 27 -> AA, etc.)
+function getColLetter(col) {
+  let letter = '';
+  while (col > 0) {
+    let temp = (col - 1) % 26;
+    letter = String.fromCharCode(65 + temp) + letter;
+    col = Math.floor((col - temp) / 26);
+  }
+  return letter;
+}
+
+// Fetch all sheets (tabs) in configured Google Spreadsheet
+async function getSpreadsheetSheets(config) {
+  const sheets = getSheetsClient(config);
+  if (!sheets) throw new Error('Failed to initialize Google Sheets client.');
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
+  return (meta.data.sheets || []).map(s => s.properties?.title).filter(Boolean);
+}
+
+// Fetch headers from first row of sheet tab
+async function getSheetHeaders(config, sheetName) {
+  const sheets = getSheetsClient(config);
+  if (!sheets) throw new Error('Failed to initialize Google Sheets client.');
+  const getRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: `${sheetName}!A1:Z1`
+  });
+  const rows = getRes.data.values || [];
+  return (rows[0] || []).map(h => String(h).trim()).filter(Boolean);
+}
+
+// Perform validation on cell values based on CRM module metadata types
+function validateFieldValue(value, fieldDef, db, metadata) {
+  const strVal = value !== undefined && value !== null ? String(value).trim() : '';
+  
+  if (fieldDef.required && !strVal) {
+    return 'Required field is missing.';
+  }
+  
+  if (!strVal) return null;
+  
+  if (fieldDef.type === 'number') {
+    if (isNaN(Number(strVal))) return 'Must be a valid number.';
+  }
+  if (fieldDef.type === 'currency') {
+    const cleanNum = strVal.replace(/[$,₹\s]/g, '');
+    if (isNaN(Number(cleanNum))) return 'Must be a valid currency value.';
+  }
+  if (fieldDef.type === 'email') {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(strVal)) return 'Must be a valid email address.';
+  }
+  if (fieldDef.type === 'phone') {
+    const phoneDigits = strVal.replace(/\D/g, '');
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      return 'Must be a valid phone number (7-15 digits).';
+    }
+  }
+  if (fieldDef.type === 'date') {
+    if (isNaN(Date.parse(strVal)) && !/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(strVal)) {
+      return 'Must be a valid date.';
+    }
+  }
+  if (fieldDef.type === 'select') {
+    const chipGroup = fieldDef.chipGroup;
+    const chipList = metadata?.chipGroups?.[chipGroup] || metadata?.chips?.[chipGroup] || [];
+    if (chipList.length > 0) {
+      const match = chipList.some(c => 
+        String(c.value).toLowerCase() === strVal.toLowerCase() ||
+        String(c.label).toLowerCase() === strVal.toLowerCase()
+      );
+      if (!match) {
+        return `Value does not match allowed options: ${chipList.map(c => c.label).join(', ')}.`;
+      }
+    }
+  }
+  
+  if (fieldDef.relationship && fieldDef.relationship.module) {
+    const relModule = fieldDef.relationship.module;
+    const relRecords = db[relModule] || [];
+    const exists = relRecords.some(r => 
+      String(r.id).trim().toLowerCase() === strVal.toLowerCase() ||
+      (r.name && String(r.name).trim().toLowerCase() === strVal.toLowerCase()) ||
+      (r.firm_name && String(r.firm_name).trim().toLowerCase() === strVal.toLowerCase()) ||
+      (r.person_name && String(r.person_name).trim().toLowerCase() === strVal.toLowerCase())
+    );
+    if (!exists) {
+      return `Referenced record not found in related module '${relModule}'.`;
+    }
+  }
+  
+  return null;
+}
+
+// Core Import & Preview Engine
+async function executeImportWithMapping(config, mapping, dryRun = false) {
+  const startTime = Date.now();
+  const sheets = getSheetsClient(config);
+  if (!sheets || !config.spreadsheetId) {
+    throw new Error('Google Sheets integration is not configured or disabled.');
+  }
+
+  const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+
+  const spreadsheetId = config.spreadsheetId;
+  const sheetName = mapping.sheetName;
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheetObj = (meta.data.sheets || []).find(s => s.properties?.title === sheetName);
+  if (!sheetObj) {
+    throw new Error(`Sheet tab '${sheetName}' does not exist in the spreadsheet.`);
+  }
+
+  const getRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheetName}!A1:Z10000`
+  });
+  const rows = getRes.data.values || [];
+  if (rows.length === 0) {
+    throw new Error(`Sheet '${sheetName}' is completely empty.`);
+  }
+
+  const rawHeaders = rows[0] || [];
+  const headers = rawHeaders.map(h => String(h).trim());
+
+  const moduleName = mapping.module;
+  const fields = metadata.modules[moduleName]?.fields || [];
+  db[moduleName] = db[moduleName] || [];
+  const existingList = db[moduleName];
+
+  const headerMap = mapping.headerMap || {};
+  const unmappedHeaders = headers.filter(h => !headerMap[h]);
+
+  const requiredFields = fields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated');
+  const missingRequired = requiredFields.filter(f => !Object.values(headerMap).includes(f.name));
+
+  const prefixMap = {
+    employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
+    projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
+    tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
+    daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
+    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
+  };
+  const prefix = prefixMap[moduleName] || moduleName.substring(0, 4).toUpperCase();
+
+  const metrics = {
+    totalRows: Math.max(0, rows.length - 1),
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    duplicates: 0,
+    validationErrors: [],
+    missingRequired: missingRequired.map(f => f.label),
+    unmappedHeaders,
+    duration: 0
+  };
+
+  const previewRows = [];
+  const sheetsWriteBacks = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) {
+      metrics.skipped++;
+      continue;
+    }
+
+    const rowErrors = [];
+    const mappedRecord = {};
+
+    fields.forEach(f => {
+      const sheetHeader = Object.keys(headerMap).find(key => headerMap[key] === f.name);
+      if (!sheetHeader) return;
+
+      const colIdx = headers.indexOf(sheetHeader);
+      if (colIdx === -1) return;
+
+      const rawVal = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+      
+      const errorMsg = validateFieldValue(rawVal, f, db, metadata);
+      if (errorMsg) {
+        rowErrors.push({ field: f.label, value: rawVal, error: errorMsg });
+        metrics.validationErrors.push({ row: i + 1, field: f.label, value: rawVal, error: errorMsg });
+      }
+
+      if (f.type === 'number') {
+        mappedRecord[f.name] = rawVal ? Number(rawVal) : '';
+      } else if (f.type === 'checkbox') {
+        mappedRecord[f.name] = rawVal.toLowerCase() === 'true' || rawVal === '1' || rawVal.toLowerCase() === 'yes';
+      } else {
+        mappedRecord[f.name] = rawVal;
+      }
+    });
+
+    const idHeader = Object.keys(headerMap).find(key => headerMap[key] === 'id');
+    let rowId = '';
+    if (idHeader) {
+      const colIdx = headers.indexOf(idHeader);
+      if (colIdx !== -1 && row[colIdx]) {
+        rowId = String(row[colIdx]).trim();
+      }
+    }
+
+    const phoneHeader = Object.keys(headerMap).find(key => headerMap[key] === 'phone');
+    let rowPhone = '';
+    if (phoneHeader) {
+      const colIdx = headers.indexOf(phoneHeader);
+      if (colIdx !== -1 && row[colIdx]) {
+        rowPhone = String(row[colIdx]).trim();
+      }
+    }
+
+    let existingRecordIndex = -1;
+    if (rowId) {
+      existingRecordIndex = existingList.findIndex(rec => String(rec.id) === rowId);
+    }
+    if (existingRecordIndex === -1 && rowPhone) {
+      existingRecordIndex = existingList.findIndex(rec => rec.phone && String(rec.phone).trim() === rowPhone);
+    }
+
+    if (rowErrors.length > 0) {
+      metrics.skipped++;
+      previewRows.push({ rowNumber: i + 1, status: 'ERROR', data: mappedRecord, errors: rowErrors });
+      continue;
+    }
+
+    if (existingRecordIndex !== -1) {
+      if (!dryRun) {
+        const oldRecord = existingList[existingRecordIndex];
+        Object.keys(mappedRecord).forEach(k => {
+          if (k !== 'id') {
+            oldRecord[k] = mappedRecord[k];
+          }
+        });
+        oldRecord.last_updated = new Date().toLocaleString('en-IN');
+      }
+      metrics.updated++;
+      previewRows.push({ rowNumber: i + 1, status: 'UPDATE', data: { ...existingList[existingRecordIndex], ...mappedRecord } });
+    } else {
+      const generatedId = generateNextId(db, moduleName, prefix);
+      mappedRecord.id = generatedId;
+      mappedRecord.dateAdded = new Date().toISOString().split('T')[0];
+      mappedRecord.last_updated = new Date().toLocaleString('en-IN');
+
+      if (!dryRun) {
+        existingList.push(mappedRecord);
+        
+        if (mapping.writeBackEnabled && idHeader) {
+          const idColIdx = headers.indexOf(idHeader);
+          if (idColIdx !== -1) {
+            sheetsWriteBacks.push({
+              range: `${sheetName}!${getColLetter(idColIdx + 1)}${i + 1}`,
+              values: [[generatedId]]
+            });
+          }
+        }
+      }
+      metrics.imported++;
+      previewRows.push({ rowNumber: i + 1, status: 'INSERT', data: mappedRecord });
+    }
+  }
+
+  if (!dryRun && (metrics.imported > 0 || metrics.updated > 0)) {
+    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+
+    if (sheetsWriteBacks.length > 0) {
+      try {
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId,
+          resource: {
+            data: sheetsWriteBacks,
+            valueInputOption: 'USER_ENTERED'
+          }
+        });
+      } catch (writeErr) {
+        console.error('Failed to write generated IDs back to Google Sheets:', writeErr.message);
+      }
+    }
+  }
+
+  metrics.duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+  return {
+    success: true,
+    metrics,
+    previewRows
+  };
+}
+
 // Background daemon interval polling
 setInterval(() => {
   processSyncQueue();
@@ -519,5 +827,8 @@ module.exports = {
   syncToSheetsManual,
   getSheetsConfig,
   getSheetsClient,
+  getSpreadsheetSheets,
+  getSheetHeaders,
+  executeImportWithMapping,
   processSyncQueue
 };
