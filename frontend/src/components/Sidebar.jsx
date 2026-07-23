@@ -272,6 +272,31 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           <List sx={{ px: 1.5, py: 0 }}>
             <ListItem disablePadding sx={{ mb: 0.5 }}>
               <ListItemButton
+                onClick={() => handleNavClick('/sheets-mapping')}
+                selected={activePath === '/sheets-mapping'}
+                sx={{
+                  borderRadius: '8px',
+                  py: 1.2,
+                  px: 2,
+                  backgroundColor: activePath === '/sheets-mapping' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                  color: activePath === '/sheets-mapping' ? '#3B82F6' : '#94A3B8',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: '#FFFFFF'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                  <Icons.FileSpreadsheet size={20} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Sheets Mapping" 
+                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
                 onClick={() => handleNavClick('/settings')}
                 selected={activePath === '/settings'}
                 sx={{

@@ -16,6 +16,7 @@ import PipelineView from './pages/PipelineView';
 import EntityDetail from './pages/EntityDetail';
 import Attendance from './pages/Attendance';
 import Settings from './pages/Settings';
+import SheetsMapping from './pages/SheetsMapping';
 import LocationTracker from './pages/LocationTracker';
 import PullToRefresh from './components/PullToRefresh';
 import PublicIntake from './pages/PublicIntake';
@@ -166,6 +167,7 @@ const MainLayout = () => {
               <Route path="/module/:moduleName/:id" element={<EntityDetailWrapper />} />
               <Route path="/pipeline/:pipelineType" element={<PipelineViewWrapper />} />
               <Route path="/settings" element={user?.role === 'Admin' ? <Settings /> : <Navigate to="/" replace />} />
+              <Route path="/sheets-mapping" element={user?.role === 'Admin' ? <SheetsMapping /> : <Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </PullToRefresh>
