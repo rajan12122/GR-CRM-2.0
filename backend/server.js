@@ -3406,7 +3406,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
 });
 
 // Public Employee Quick-Add Intake Portal Form Submission
-app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
+app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req, res) => {
   const { website_url, module, payload, key } = req.body;
 
   // 1. Honeypot check
@@ -3441,121 +3441,100 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), (req, res) 
     }
   }
 
-  const db = readDb();
-  if (!db[module]) db[module] = [];
+  try {
+    const result = await runTransaction(async (db) => {
+      if (!db[module]) db[module] = [];
 
-  // ID generation
-  const prefixMap = {
-    employees: 'EMP',
-    customers: 'CUST',
-    leads: 'LEAD',
-    properties: 'PROP',
-    projects: 'PROJ',
-    site_visits: 'VISIT',
-    follow_ups: 'FOLLOW',
-    remarks: 'REM',
-    tasks: 'TASK',
-    sales: 'SALE',
-    documents: 'DOC',
-    attendance: 'ATT',
-    daily_prices: 'PRICE',
-    salaries: 'SAL',
-    queries: 'QRY',
-    deals: 'DEAL',
-    property_pitch_history: 'PITCH',
-    dealer_calls: 'CALL',
-    dealer_meetings: 'MEET'
-  };
-  const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
-  
-  const existingIds = (db[module] || []).map(r => r.id).filter(id => id && String(id).startsWith(prefix));
-  let maxNum = 0;
-  existingIds.forEach(id => {
-    const parts = id.split('-');
-    const num = parseInt(parts[1]);
-    if (!isNaN(num) && num > maxNum) {
-      maxNum = num;
-    }
-  });
-  
-  const nextNum = maxNum > 0 ? maxNum + 1 : (db[module] || []).length + 1;
-  payload.id = `${prefix}-${String(nextNum).padStart(3, '0')}`;
-  
-  // Enforce unique phone number / Master Customer record duplicate prevention
-  if (payload.phone && (module === 'customers' || module === 'leads')) {
-    const cleanPhone = String(payload.phone).trim();
-    const existingCust = (db.customers || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
-    const existingLead = (db.leads || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
-    
-    if (existingCust || existingLead) {
-      const matchedId = existingCust ? existingCust.id : existingLead.id;
-      const queryId = generateNextId(db, 'queries', 'QRY');
-      const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
-      
-      const newQuery = {
-        id: queryId,
-        customerId: matchedId,
-        assignedEmployeeId: payload.assignedEmployeeId || (existingCust ? existingCust.assignedEmployeeId : existingLead.assignedEmployeeId) || 'EMP-001',
-        date: new Date().toLocaleDateString('en-IN'),
-        status: 'Pending Approval',
-        queryType: queryType,
-        stage: 'New Query',
-        budget: payload.budget || '',
-        demand: payload.demand || '',
-        r_c_i: payload.r_c_i || '',
-        propertyType: payload.propertyType || '',
-        locality: payload.locality || '',
-        sector_block: payload.sector_block || '',
-        size: payload.size || '',
-        remarks: payload.remarks || payload.initial_notes || 'Auto-created query due to duplicate lead/customer submission via Quick-Add portal.'
+      // ID generation using shared helper
+      const prefixMap = {
+        employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
+        projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
+        tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
+        daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
+        property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
       };
-      
-      if (!db.queries) db.queries = [];
-      db.queries.push(newQuery);
+      const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
+      payload.id = generateNextId(db, module, prefix);
 
-      // Automatically schedule a follow up task for the new query
-      db.follow_ups = db.follow_ups || [];
-      const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
-      const newFollowUp = {
-        id: followUpId,
-        customerId: matchedId,
-        queryId: queryId,
-        employeeId: payload.assignedEmployeeId || (existingCust ? existingCust.assignedEmployeeId : existingLead.assignedEmployeeId) || 'EMP-001',
-        date: new Date().toLocaleDateString('en-IN'),
-        time: '12:00 PM',
-        status: 'Pending Call',
-        pipelineAction: 'Fresh Lead',
-        remarks: `Auto-scheduled follow up for Quick-Add Query ${queryId}.`
-      };
-      db.follow_ups.push(newFollowUp);
-      try { syncToSheets('follow_ups'); } catch(e) {}
+      // Enforce unique phone number / Master Customer record duplicate prevention
+      if (payload.phone && (module === 'customers' || module === 'leads')) {
+        const cleanPhone = String(payload.phone).trim();
+        const existingCust = (db.customers || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
+        const existingLead = (db.leads || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
+        
+        if (existingCust || existingLead) {
+          const matchedId = existingCust ? existingCust.id : existingLead.id;
+          const queryId = generateNextId(db, 'queries', 'QRY');
+          const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
+          
+          const newQuery = {
+            id: queryId,
+            customerId: matchedId,
+            assignedEmployeeId: payload.assignedEmployeeId || (existingCust ? existingCust.assignedEmployeeId : existingLead.assignedEmployeeId) || 'EMP-001',
+            date: new Date().toLocaleDateString('en-IN'),
+            status: 'Pending Approval',
+            queryType: queryType,
+            stage: 'New Query',
+            budget: payload.budget || '',
+            demand: payload.demand || '',
+            r_c_i: payload.r_c_i || '',
+            propertyType: payload.propertyType || '',
+            locality: payload.locality || '',
+            sector_block: payload.sector_block || '',
+            size: payload.size || '',
+            remarks: payload.remarks || payload.initial_notes || 'Auto-created query due to duplicate lead/customer submission via Quick-Add portal.'
+          };
+          
+          if (!db.queries) db.queries = [];
+          db.queries.push(newQuery);
 
-      writeDb(db);
-      try { syncToSheets('queries'); } catch(e) {}
-      
-      return res.json({
-        success: true,
-        message: `Customer already exists. Created Query (${queryId}) linked to customer profile instead.`,
-        record: newQuery
-      });
-    }
+          // Automatically schedule a follow up task for the new query
+          db.follow_ups = db.follow_ups || [];
+          const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+          const newFollowUp = {
+            id: followUpId,
+            customerId: matchedId,
+            queryId: queryId,
+            employeeId: payload.assignedEmployeeId || (existingCust ? existingCust.assignedEmployeeId : existingLead.assignedEmployeeId) || 'EMP-001',
+            date: new Date().toLocaleDateString('en-IN'),
+            time: '12:00 PM',
+            status: 'Pending Call',
+            pipelineAction: 'Fresh Lead',
+            remarks: `Auto-scheduled follow up for Quick-Add Query ${queryId}.`
+          };
+          db.follow_ups.push(newFollowUp);
+          try { syncToSheets('follow_ups'); } catch(e) {}
+          
+          try { syncToSheets('queries'); } catch(e) {}
+          
+          return {
+            __is_redirected_query: true,
+            message: `Customer already exists. Created Query (${queryId}) linked to customer profile instead.`,
+            record: newQuery
+          };
+        }
+      }
+
+      // Normalize default date added keys if not present
+      if (module === 'leads' && !payload.dateAdded) {
+        payload.dateAdded = new Date().toISOString().split('T')[0];
+      }
+
+      db[module].push(payload);
+      if (module === 'follow_ups') {
+        handleFollowUpPipelineAction(payload, db, req);
+      } else if (module === 'queries') {
+        handleQueryStageChange(payload, db, req);
+      }
+
+      return { record: payload };
+    });
+
+    syncToSheets(module);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
-
-  // Normalize default date added keys if not present
-  if (module === 'leads' && !payload.dateAdded) {
-    payload.dateAdded = new Date().toISOString().split('T')[0];
-  }
-
-  db[module].push(payload);
-  if (module === 'follow_ups') {
-    handleFollowUpPipelineAction(payload, db, req);
-  } else if (module === 'queries') {
-    handleQueryStageChange(payload, db, req);
-  }
-  writeDb(db);
-  syncToSheets(module);
-  
-  res.json({ success: true, record: payload });
 });
 
 // Start background task: Check immediately after 10 seconds, and run every 5 minutes
