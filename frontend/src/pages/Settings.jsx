@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Card, 
@@ -83,14 +83,50 @@ const Settings = () => {
   // --- Google Sheets Header Mapping States ---
   const [sheetTabs, setSheetTabs] = useState([]);
   const [loadingTabs, setLoadingTabs] = useState(false);
-  const [activeMappingId, setActiveMappingId] = useState('new');
-  const [mappingName, setMappingName] = useState('New Sheet Import Template');
-  const [mappingModule, setMappingModule] = useState('customers');
-  const [mappingSheetName, setMappingSheetName] = useState('');
+
+  // Try to load initial values from localStorage
+  const getInitialMappingState = () => {
+    try {
+      const saved = localStorage.getItem('gr_crm_last_mapping_state');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Failed to parse last mapping state:', e);
+    }
+    return null;
+  };
+
+  const savedState = getInitialMappingState() || {};
+
+  const [activeMappingId, setActiveMappingId] = useState(savedState.activeMappingId || 'new');
+  const [mappingName, setMappingName] = useState(savedState.mappingName || 'New Sheet Import Template');
+  const [mappingModule, setMappingModule] = useState(savedState.mappingModule || 'customers');
+  const [mappingSheetName, setMappingSheetName] = useState(savedState.mappingSheetName || '');
   const [detectedHeaders, setDetectedHeaders] = useState([]);
   const [loadingHeaders, setLoadingHeaders] = useState(false);
-  const [headerMap, setHeaderMap] = useState({});
-  const [writeBackEnabled, setWriteBackEnabled] = useState(true);
+  const [headerMap, setHeaderMap] = useState(savedState.headerMap || {});
+  const [writeBackEnabled, setWriteBackEnabled] = useState(savedState.writeBackEnabled !== false);
+
+  const isFirstMount = useRef(true);
+
+  // Save mapping state to localStorage on any change
+  useEffect(() => {
+    const state = {
+      activeMappingId,
+      mappingName,
+      mappingModule,
+      mappingSheetName,
+      headerMap,
+      writeBackEnabled
+    };
+    localStorage.setItem('gr_crm_last_mapping_state', JSON.stringify(state));
+
+    if (mappingSheetName && Object.keys(headerMap).length > 0) {
+      const tabStorageKey = `gr_crm_map_${metadata?.sheetsConfig?.spreadsheetId || 'default'}_${mappingSheetName}`;
+      localStorage.setItem(tabStorageKey, JSON.stringify(headerMap));
+    }
+  }, [activeMappingId, mappingName, mappingModule, mappingSheetName, headerMap, writeBackEnabled, metadata?.sheetsConfig?.spreadsheetId]);
   const [searchHeaderQuery, setSearchHeaderQuery] = useState('');
   const [searchCrmQuery, setSearchCrmQuery] = useState('');
   const [testingMapping, setTestingMapping] = useState(false);
@@ -156,6 +192,10 @@ const Settings = () => {
 
   // Load existing mapping configuration when template selection changes
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     const mappings = metadata?.sheetMappings || [];
     if (activeMappingId === 'new') {
       setMappingName('New Sheet Import Template');
@@ -2814,8 +2854,21 @@ const Settings = () => {
                         <Select
                           value={mappingSheetName}
                           onChange={(e) => {
-                            setMappingSheetName(e.target.value);
-                            setHeaderMap({});
+                            const newTab = e.target.value;
+                            setMappingSheetName(newTab);
+                            
+                            // Load tab-specific mapped columns from localStorage if available
+                            const storageKey = `gr_crm_map_${metadata?.sheetsConfig?.spreadsheetId || 'default'}_${newTab}`;
+                            const saved = localStorage.getItem(storageKey);
+                            if (saved) {
+                              try {
+                                setHeaderMap(JSON.parse(saved));
+                              } catch (err) {
+                                setHeaderMap({});
+                              }
+                            } else {
+                              setHeaderMap({});
+                            }
                           }}
                           label="Spreadsheet Tab Name"
                           disabled={loadingTabs}
