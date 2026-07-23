@@ -21,8 +21,16 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
-const metadataPath = path.join(__dirname, 'config/metadata.json');
-const dbPath = path.join(__dirname, 'config/db.json');
+const {
+  dbPath,
+  metadataPath,
+  readDb,
+  writeDb,
+  readMetadata,
+  writeMetadata,
+  runTransaction,
+  generateNextId
+} = require('./services/dbService');
 
 // Ensure database files exist on boot
 if (!fs.existsSync(metadataPath)) {
@@ -59,43 +67,6 @@ function updateGlobalReferences(db, oldId, newId) {
   });
 }
 
-function generateNextId(db, moduleName, prefix) {
-  const prefixMap = {
-    employees: 'EMP',
-    customers: 'CUST',
-    leads: 'LEAD',
-    properties: 'PROP',
-    projects: 'PROJ',
-    site_visits: 'VISIT',
-    follow_ups: 'FOLLOW',
-    remarks: 'REM',
-    tasks: 'TASK',
-    sales: 'SALE',
-    documents: 'DOC',
-    attendance: 'ATT',
-    daily_prices: 'PRICE',
-    salaries: 'SAL',
-    queries: 'QRY',
-    deals: 'DEAL',
-    property_pitch_history: 'PITCH',
-    dealer_calls: 'CALL',
-    dealer_meetings: 'MEET'
-  };
-  const effPrefix = prefix || prefixMap[moduleName] || String(moduleName).substring(0, 4).toUpperCase();
-  const list = db[moduleName] || [];
-  let maxNum = 0;
-  list.forEach(rec => {
-    if (rec && rec.id && String(rec.id).startsWith(`${effPrefix}-`)) {
-      const parts = String(rec.id).split('-');
-      const num = parseInt(parts[1], 10);
-      if (!isNaN(num) && num > maxNum) {
-        maxNum = num;
-      }
-    }
-  });
-  return `${effPrefix}-${String(maxNum + 1).padStart(3, '0')}`;
-}
-
 function resequenceAllModules() {
   // IDs once assigned must NEVER be modified or re-sequenced to preserve reference & relationship integrity permanently.
   console.log('ID re-sequencer is disabled to protect assigned IDs and relationships.');
@@ -106,34 +77,6 @@ syncFromSheets().then(res => {
   if (res) console.log('Initial Google Sheets sync completed on boot.');
   else console.log('Running on local JSON database cache.');
 });
-
-// Helper functions to read/write DB and Metadata with in-memory caching
-let dbCache = null;
-let metadataCache = null;
-
-function readDb() {
-  if (!dbCache) {
-    dbCache = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-  }
-  return dbCache;
-}
-
-function writeDb(data) {
-  dbCache = data;
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
-}
-
-function readMetadata() {
-  if (!metadataCache) {
-    metadataCache = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-  }
-  return metadataCache;
-}
-
-function writeMetadata(data) {
-  metadataCache = data;
-  fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
-}
 
 // Authentication Middleware
 function authenticateToken(req, res, next) {
@@ -1627,7 +1570,6 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
   checkPermission(module, 'create')(req, res, next);
 }, async (req, res) => {
   const { module } = req.params;
-  const db = readDb();
   const payload = req.body;
 
   if (module === 'employees') {
@@ -1636,298 +1578,284 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
-  // Generate automated primary key if not provided (e.g. CUST-003)
-  if (!payload.id) {
-    const prefixMap = {
-      employees: 'EMP',
-      customers: 'CUST',
-      leads: 'LEAD',
-      properties: 'PROP',
-      projects: 'PROJ',
-      site_visits: 'VISIT',
-      follow_ups: 'FOLLOW',
-      remarks: 'REM',
-      tasks: 'TASK',
-      sales: 'SALE',
-      documents: 'DOC',
-      attendance: 'ATT',
-      daily_prices: 'PRICE',
-      salaries: 'SAL',
-      queries: 'QRY',
-      deals: 'DEAL',
-      property_pitch_history: 'PITCH',
-      dealer_calls: 'CALL',
-      dealer_meetings: 'MEET'
-    };
-    const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
-    
-    payload.id = generateNextId(db, module, prefix);
-  }
-
-  // Populate basic date tracker if applicable
-  const metadata = readMetadata();
-  const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
-  fields.forEach(f => {
-    if (f.name === 'dateAdded' && !payload[f.name]) {
-      payload[f.name] = new Date().toISOString().split('T')[0];
-    }
-    if (f.name === 'last_updated') {
-      payload[f.name] = new Date().toLocaleString('en-IN');
-    }
-    if (f.name === 'created_by' && !payload[f.name]) {
-      payload[f.name] = req.user.name;
-    }
-    if (f.name === 'date' && !payload[f.name]) {
-      payload[f.name] = new Date().toLocaleDateString('en-IN');
-    }
-    if (f.name === 'pipelineAction' && !payload[f.name] && module === 'follow_ups') {
-      payload[f.name] = 'Fresh Lead';
-    }
-    if (f.name === 'stage' && !payload[f.name] && module === 'queries') {
-      payload[f.name] = 'New Query';
-    }
-    if (f.name === 'status' && !payload[f.name] && module === 'property_pitch_history') {
-      payload[f.name] = 'Pitched';
-    }
-    if (f.name === 'pitchDate' && !payload[f.name] && module === 'property_pitch_history') {
-      payload[f.name] = new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN');
-    }
-    if (f.name === 'employeeName' && !payload[f.name] && (module === 'property_pitch_history' || module === 'dealer_calls')) {
-      payload[f.name] = req.user.name;
-    }
-    if (f.name === 'employeeId' && !payload[f.name] && module === 'property_pitch_history') {
-      payload[f.name] = req.user.id;
-    }
-    if (f.name === 'assignedEmployeeId' && !payload[f.name] && module === 'dealer_meetings') {
-      payload[f.name] = req.user.id;
-    }
-  });
-
-  // Enforce unique phone number / Master Customer record duplicate prevention
-  if (payload.phone && (module === 'customers' || module === 'leads')) {
-    const cleanPhone = String(payload.phone).trim();
-    const existingCust = (db.customers || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
-    if (existingCust) {
-      const queryId = generateNextId(db, 'queries', 'QRY');
-      const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
-      
-      const newQuery = {
-        id: queryId,
-        customerId: existingCust.id,
-        assignedEmployeeId: payload.assignedEmployeeId || existingCust.assignedEmployeeId || 'EMP-001',
-        date: new Date().toLocaleDateString('en-IN'),
-        status: 'Pending Approval',
-        queryType: queryType,
-        stage: 'New Query',
-        budget: payload.budget || '',
-        demand: payload.demand || '',
-        r_c_i: payload.r_c_i || '',
-        propertyType: payload.propertyType || '',
-        locality: payload.locality || '',
-        sector_block: payload.sector_block || '',
-        size: payload.size || '',
-        remarks: payload.remarks || payload.initial_notes || 'Auto-created query due to duplicate lead/customer submission.'
-      };
-      
-      if (!db.queries) db.queries = [];
-      db.queries.push(newQuery);
-
-      if (newQuery.queryType !== 'Sell Property') {
-        // Automatically schedule a follow up task for the auto-created query
-        db.follow_ups = db.follow_ups || [];
-        const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
-        const newFollowUp = {
-          id: followUpId,
-          customerId: existingCust.id,
-          queryId: queryId,
-          employeeId: payload.assignedEmployeeId || existingCust.assignedEmployeeId || 'EMP-001',
-          date: new Date().toLocaleDateString('en-IN'),
-          time: '12:00 PM',
-          status: 'Pending Call',
-          pipelineAction: 'Fresh Lead',
-          remarks: `Auto-scheduled follow up for auto-created duplicate check Query ${queryId}.`
+  try {
+    const result = await runTransaction(async (db) => {
+      // Generate automated primary key if not provided (e.g. CUST-003)
+      if (!payload.id) {
+        const prefixMap = {
+          employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
+          projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
+          tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
+          daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
+          property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
         };
-        db.follow_ups.push(newFollowUp);
-        try { syncToSheets('follow_ups'); } catch(e) {}
+        const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
+        payload.id = generateNextId(db, module, prefix);
+      }
+
+      // Populate basic date tracker if applicable
+      const metadata = readMetadata();
+      const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
+      fields.forEach(f => {
+        if (f.name === 'dateAdded' && !payload[f.name]) {
+          payload[f.name] = new Date().toISOString().split('T')[0];
+        }
+        if (f.name === 'last_updated') {
+          payload[f.name] = new Date().toLocaleString('en-IN');
+        }
+        if (f.name === 'created_by' && !payload[f.name]) {
+          payload[f.name] = req.user.name;
+        }
+        if (f.name === 'date' && !payload[f.name]) {
+          payload[f.name] = new Date().toLocaleDateString('en-IN');
+        }
+        if (f.name === 'pipelineAction' && !payload[f.name] && module === 'follow_ups') {
+          payload[f.name] = 'Fresh Lead';
+        }
+        if (f.name === 'stage' && !payload[f.name] && module === 'queries') {
+          payload[f.name] = 'New Query';
+        }
+        if (f.name === 'status' && !payload[f.name] && module === 'property_pitch_history') {
+          payload[f.name] = 'Pitched';
+        }
+        if (f.name === 'pitchDate' && !payload[f.name] && module === 'property_pitch_history') {
+          payload[f.name] = new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN');
+        }
+        if (f.name === 'employeeName' && !payload[f.name] && (module === 'property_pitch_history' || module === 'dealer_calls')) {
+          payload[f.name] = req.user.name;
+        }
+        if (f.name === 'employeeId' && !payload[f.name] && module === 'property_pitch_history') {
+          payload[f.name] = req.user.id;
+        }
+        if (f.name === 'assignedEmployeeId' && !payload[f.name] && module === 'dealer_meetings') {
+          payload[f.name] = req.user.id;
+        }
+      });
+
+      // Enforce unique phone number / Master Customer record duplicate prevention
+      if (payload.phone && (module === 'customers' || module === 'leads')) {
+        const cleanPhone = String(payload.phone).trim();
+        const existingCust = (db.customers || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
+        if (existingCust) {
+          const queryId = generateNextId(db, 'queries', 'QRY');
+          const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
+          
+          const newQuery = {
+            id: queryId,
+            customerId: existingCust.id,
+            assignedEmployeeId: payload.assignedEmployeeId || existingCust.assignedEmployeeId || 'EMP-001',
+            date: new Date().toLocaleDateString('en-IN'),
+            status: 'Pending Approval',
+            queryType: queryType,
+            stage: 'New Query',
+            budget: payload.budget || '',
+            demand: payload.demand || '',
+            r_c_i: payload.r_c_i || '',
+            propertyType: payload.propertyType || '',
+            locality: payload.locality || '',
+            sector_block: payload.sector_block || '',
+            size: payload.size || '',
+            remarks: payload.remarks || payload.initial_notes || 'Auto-created query due to duplicate lead/customer submission.'
+          };
+          
+          if (!db.queries) db.queries = [];
+          db.queries.push(newQuery);
+
+          if (newQuery.queryType !== 'Sell Property') {
+            // Automatically schedule a follow up task for the auto-created query
+            db.follow_ups = db.follow_ups || [];
+            const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+            const newFollowUp = {
+              id: followUpId,
+              customerId: existingCust.id,
+              queryId: queryId,
+              employeeId: payload.assignedEmployeeId || existingCust.assignedEmployeeId || 'EMP-001',
+              date: new Date().toLocaleDateString('en-IN'),
+              time: '12:00 PM',
+              status: 'Pending Call',
+              pipelineAction: 'Fresh Lead',
+              remarks: `Auto-scheduled follow up for auto-created duplicate check Query ${queryId}.`
+            };
+            db.follow_ups.push(newFollowUp);
+            try { syncToSheets('follow_ups'); } catch(e) {}
+          }
+          
+          const log = {
+            id: `LOG-${Date.now()}`,
+            employeeName: req.user.name,
+            action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing customer ${existingCust.id}`,
+            dateTime: new Date().toLocaleString()
+          };
+          if (!db.activity_logs) db.activity_logs = [];
+          db.activity_logs.unshift(log);
+          
+          try { syncToSheets('queries'); } catch(e) {}
+          
+          return {
+            __is_redirected_query: true,
+            message: `Customer already exists. Created Query (${queryId}) linked to customer ${existingCust.name} (${existingCust.id}) instead.`,
+            data: newQuery
+          };
+        }
+      }
+
+      if (payload.phone) {
+        const cleanPhone = String(payload.phone).trim();
+        const isDuplicate = (db[module] || []).some(r => r.phone && String(r.phone).trim() === cleanPhone);
+        if (isDuplicate) {
+          throw new Error(`Phone number '${payload.phone}' is already registered in this module.`);
+        }
+      }
+
+      // Prevent duplicate dealers by returning existing matching record
+      if (module === 'dealers' && payload.contact_num) {
+        const cleanContact = String(payload.contact_num).trim();
+        const existingDealer = (db.dealers || []).find(r => r.contact_num && String(r.contact_num).trim() === cleanContact);
+        if (existingDealer) {
+          return existingDealer;
+        }
+      }
+
+      if (module === 'properties') {
+        if (payload.dealer_owner_booked === 'Direct' || payload.dealer_owner_booked === 'Owner' || !payload.dealer_owner_booked) {
+          payload.dealer_owner_booked = 'Direct';
+          const ownerName = payload.contact_person_name || 'Direct Property Owner';
+          const ownerPhone = payload.contact_number ? String(payload.contact_number).trim() : '';
+
+          if ((ownerName || ownerPhone) && !payload.current_owner_id) {
+            db.customers = db.customers || [];
+            let cust = null;
+            if (ownerPhone) {
+              cust = db.customers.find(c => c.phone && String(c.phone).trim() === ownerPhone);
+            }
+            if (!cust && ownerName) {
+              cust = db.customers.find(c => c.name && c.name.toLowerCase() === ownerName.toLowerCase());
+            }
+            if (!cust) {
+              const custId = generateNextId(db, 'customers', 'CUST');
+              cust = {
+                id: custId,
+                name: ownerName,
+                phone: ownerPhone,
+                stage: 'Active Seller',
+                assignedEmployeeId: payload.assignedEmployeeId || (req.user ? req.user.id : 'EMP-001'),
+                city: payload.locality || '',
+                requirements: `Direct Property Owner for Property ${payload.id || ''}`,
+                source: payload.source || 'Direct Property Seller',
+                dateAdded: new Date().toISOString().split('T')[0]
+              };
+              db.customers.push(cust);
+              try { syncToSheets('customers'); } catch(e) {}
+            }
+            if (cust) {
+              payload.current_owner_id = cust.id;
+              payload.booked_by_customer_id = cust.id;
+            }
+          }
+        }
+      }
+
+      if (module === 'leads') {
+        payload.assignmentStatus = 'accepted';
+        payload.assignmentTime = null;
+        payload.droppedBy = [];
+        if (payload.assignedEmployeeId) {
+          setTimeout(() => {
+            notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
+          }, 500);
+        }
+      }
+
+      if (!db[module]) db[module] = [];
+      db[module].push(payload);
+
+      if (module === 'queries') {
+        handleQueryStageChange(payload, db, req);
+        
+        if (module === 'queries' && payload.queryType !== 'Sell Property') {
+          db.follow_ups = db.follow_ups || [];
+          const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+          const newFollowUp = {
+            id: followUpId,
+            customerId: payload.customerId,
+            queryId: payload.id,
+            employeeId: payload.assignedEmployeeId || 'EMP-001',
+            date: new Date().toLocaleDateString('en-IN'),
+            time: '12:00 PM',
+            status: 'Pending Call',
+            pipelineAction: 'Fresh Lead',
+            remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
+          };
+          db.follow_ups.push(newFollowUp);
+          try { syncToSheets('follow_ups'); } catch(e) {}
+        }
+      }
+      if (module === 'deals') handleDealStatusChange(payload, db, req);
+      if (module === 'property_pitch_history') handlePitchStatusChange(payload, db, req);
+      if (module === 'leads') {
+        handleLeadStatusChange(payload, db, req);
+        if (payload.assignmentStatus === 'accepted') {
+          createFollowUpForLead(payload, db);
+        }
+        if (payload.assignedEmployeeId) {
+          syncAssignedEmployeeUniversally('leads', payload.id, payload.assignedEmployeeId, db);
+        }
+      }
+      if (module === 'customers' && payload.assignedEmployeeId) {
+        syncAssignedEmployeeUniversally('customers', payload.id, payload.assignedEmployeeId, db);
+      }
+      if (module === 'follow_ups' && payload.employeeId) {
+        syncAssignedEmployeeUniversally('follow_ups', payload.id, payload.employeeId, db);
+      }
+      if (module === 'follow_ups') handleFollowUpPipelineAction(payload, db, req);
+      if (module === 'dealer_calls') handleDealerCallInsertion(payload, db);
+      if (module === 'dealers') handleDealerVisitAssignment(payload, db, req);
+      if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && payload.pitchedPropertyId) {
+        handleAutomatedPitchLogging(payload, db, req);
+      }
+
+      if (module === 'site_visits' && payload.employeeId) {
+        notifyUser(payload.employeeId, 'visit-assigned', {
+          visitId: payload.id,
+          message: `New Site Visit ${payload.id} scheduled/assigned to you.`
+        });
+      }
+      if (module === 'dealer_meetings' && payload.assignedEmployeeId) {
+        notifyUser(payload.assignedEmployeeId, 'meeting-assigned', {
+          meetingId: payload.id,
+          message: `New Dealer Meeting ${payload.id} assigned to you.`
+        });
+      }
+      if (module === 'queries' && payload.assignedEmployeeId && payload.status === 'Approved') {
+        notifyUser(payload.assignedEmployeeId, 'query-approved', {
+          queryId: payload.id,
+          message: `Your Property Query ${payload.id} has been Approved.`
+        });
+      }
+      if (module === 'documents') {
+        notifyUser('EMP-001', 'pending-docs-alert', {
+          docId: payload.id,
+          message: `New document "${payload.name}" uploaded. Verification pending.`
+        });
       }
       
       const log = {
         id: `LOG-${Date.now()}`,
         employeeName: req.user.name,
-        action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing customer ${existingCust.id}`,
+        action: `Created record ${payload.id} in ${module}`,
         dateTime: new Date().toLocaleString()
       };
       if (!db.activity_logs) db.activity_logs = [];
       db.activity_logs.unshift(log);
-      
-      writeDb(db);
-      try { syncToSheets('queries'); } catch(e) {}
-      
-      return res.status(201).json({
-        __is_redirected_query: true,
-        message: `Customer already exists. Created Query (${queryId}) linked to customer ${existingCust.name} (${existingCust.id}) instead.`,
-        data: newQuery
-      });
-    }
-  }
 
-  if (payload.phone) {
-    const cleanPhone = String(payload.phone).trim();
-    const isDuplicate = (db[module] || []).some(r => r.phone && String(r.phone).trim() === cleanPhone);
-    if (isDuplicate) {
-      return res.status(400).json({ message: `Phone number '${payload.phone}' is already registered in this module.` });
-    }
-  }
-
-  // Prevent duplicate dealers by returning existing matching record
-  if (module === 'dealers' && payload.contact_num) {
-    const cleanContact = String(payload.contact_num).trim();
-    const existingDealer = (db.dealers || []).find(r => r.contact_num && String(r.contact_num).trim() === cleanContact);
-    if (existingDealer) {
-      return res.status(201).json(existingDealer);
-    }
-  }
-
-  if (module === 'properties') {
-    if (payload.dealer_owner_booked === 'Direct' || payload.dealer_owner_booked === 'Owner' || !payload.dealer_owner_booked) {
-      payload.dealer_owner_booked = 'Direct';
-      const ownerName = payload.contact_person_name || 'Direct Property Owner';
-      const ownerPhone = payload.contact_number ? String(payload.contact_number).trim() : '';
-
-      if ((ownerName || ownerPhone) && !payload.current_owner_id) {
-        db.customers = db.customers || [];
-        let cust = null;
-        if (ownerPhone) {
-          cust = db.customers.find(c => c.phone && String(c.phone).trim() === ownerPhone);
-        }
-        if (!cust && ownerName) {
-          cust = db.customers.find(c => c.name && c.name.toLowerCase() === ownerName.toLowerCase());
-        }
-        if (!cust) {
-          const custId = generateNextId(db, 'customers', 'CUST');
-          cust = {
-            id: custId,
-            name: ownerName,
-            phone: ownerPhone,
-            stage: 'Active Seller',
-            assignedEmployeeId: payload.assignedEmployeeId || (req.user ? req.user.id : 'EMP-001'),
-            city: payload.locality || '',
-            requirements: `Direct Property Owner for Property ${payload.id || ''}`,
-            source: payload.source || 'Direct Property Seller',
-            dateAdded: new Date().toISOString().split('T')[0]
-          };
-          db.customers.push(cust);
-          try { syncToSheets('customers'); } catch(e) {}
-        }
-        if (cust) {
-          payload.current_owner_id = cust.id;
-          payload.booked_by_customer_id = cust.id;
-        }
-      }
-    }
-  }
-
-  if (module === 'leads') {
-    payload.assignmentStatus = 'accepted';
-    payload.assignmentTime = null;
-    payload.droppedBy = [];
-    if (payload.assignedEmployeeId) {
-      setTimeout(() => {
-        notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
-      }, 500);
-    }
-  }
-
-  if (!db[module]) db[module] = [];
-  db[module].push(payload);
-
-  if (module === 'queries') {
-    handleQueryStageChange(payload, db, req);
-    
-    if (module === 'queries' && payload.queryType !== 'Sell Property') {
-      // Automatically schedule a follow up task for the new query
-      db.follow_ups = db.follow_ups || [];
-      const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
-      const newFollowUp = {
-        id: followUpId,
-        customerId: payload.customerId,
-        queryId: payload.id,
-        employeeId: payload.assignedEmployeeId || 'EMP-001',
-        date: new Date().toLocaleDateString('en-IN'),
-        time: '12:00 PM',
-        status: 'Pending Call',
-        pipelineAction: 'Fresh Lead',
-        remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
-      };
-      db.follow_ups.push(newFollowUp);
-      try { syncToSheets('follow_ups'); } catch(e) {}
-    }
-  }
-  if (module === 'deals') handleDealStatusChange(payload, db, req);
-  if (module === 'property_pitch_history') handlePitchStatusChange(payload, db, req);
-  if (module === 'leads') {
-    handleLeadStatusChange(payload, db, req);
-    if (payload.assignmentStatus === 'accepted') {
-      createFollowUpForLead(payload, db);
-    }
-    if (payload.assignedEmployeeId) {
-      syncAssignedEmployeeUniversally('leads', payload.id, payload.assignedEmployeeId, db);
-    }
-  }
-  if (module === 'customers' && payload.assignedEmployeeId) {
-    syncAssignedEmployeeUniversally('customers', payload.id, payload.assignedEmployeeId, db);
-  }
-  if (module === 'follow_ups' && payload.employeeId) {
-    syncAssignedEmployeeUniversally('follow_ups', payload.id, payload.employeeId, db);
-  }
-  if (module === 'follow_ups') handleFollowUpPipelineAction(payload, db, req);
-  if (module === 'dealer_calls') handleDealerCallInsertion(payload, db);
-  if (module === 'dealers') handleDealerVisitAssignment(payload, db, req);
-  if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && payload.pitchedPropertyId) {
-    handleAutomatedPitchLogging(payload, db, req);
-  }
-
-  // Custom SSE notifications triggers
-  if (module === 'site_visits' && payload.employeeId) {
-    notifyUser(payload.employeeId, 'visit-assigned', {
-      visitId: payload.id,
-      message: `New Site Visit ${payload.id} scheduled/assigned to you.`
+      return payload;
     });
-  }
-  if (module === 'dealer_meetings' && payload.assignedEmployeeId) {
-    notifyUser(payload.assignedEmployeeId, 'meeting-assigned', {
-      meetingId: payload.id,
-      message: `New Dealer Meeting ${payload.id} assigned to you.`
-    });
-  }
-  if (module === 'queries' && payload.assignedEmployeeId && payload.status === 'Approved') {
-    notifyUser(payload.assignedEmployeeId, 'query-approved', {
-      queryId: payload.id,
-      message: `Your Property Query ${payload.id} has been Approved.`
-    });
-  }
-  if (module === 'documents') {
-    notifyUser('EMP-001', 'pending-docs-alert', {
-      docId: payload.id,
-      message: `New document "${payload.name}" uploaded. Verification pending.`
-    });
-  }
-  
-  // Track Activity Log
-  const log = {
-    id: `LOG-${Date.now()}`,
-    employeeName: req.user.name,
-    action: `Created record ${payload.id} in ${module}`,
-    dateTime: new Date().toLocaleString()
-  };
-  if (!db.activity_logs) db.activity_logs = [];
-  db.activity_logs.unshift(log);
 
-  writeDb(db);
-
-  // Sync back to Google sheets asynchronously
-  syncToSheets(module);
-  res.status(201).json(payload);
+    syncToSheets(module);
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
@@ -1935,7 +1863,6 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
   checkPermission(module, 'edit')(req, res, next);
 }, async (req, res) => {
   const { module, id } = req.params;
-  const db = readDb();
   const payload = req.body;
 
   if (module === 'employees') {
@@ -1944,185 +1871,197 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
-  const index = db[module].findIndex(rec => String(rec.id) === String(id));
-  if (index === -1) return res.status(404).json({ message: `Record ${id} not found.` });
-  const oldPayload = { ...db[module][index] };
-
-  // Enforce unique phone number on update
-  if (payload.phone) {
-    const cleanPhone = String(payload.phone).trim();
-    const isDuplicate = db[module].some(r => r.phone && String(r.phone).trim() === cleanPhone && String(r.id) !== String(id));
-    if (isDuplicate) {
-      return res.status(400).json({ message: `Phone number '${payload.phone}' is already registered in this module.` });
-    }
-  }
-
-  // Auto-update last_updated date on edits
-  const metadata = readMetadata();
-  const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
-  fields.forEach(f => {
-    if (f.name === 'last_updated') {
-      payload[f.name] = new Date().toLocaleString('en-IN');
-    }
-  });
-
-  if (module === 'leads') {
-    const oldLead = db[module][index];
-    if (payload.assignedEmployeeId && payload.assignedEmployeeId !== oldLead.assignedEmployeeId) {
-      payload.assignmentStatus = 'accepted';
-      payload.assignmentTime = null;
-      payload.droppedBy = [];
-      setTimeout(() => {
-        notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: id, leadName: payload.name || payload.person_name || 'New Lead' });
-      }, 500);
-    }
-  }
-
-  if (module === 'projects') {
-    const oldProj = db.projects[index];
-    const trackFields = ['pricing_details', 'plc_percent', 'status', 'configurations_sizes', 'total_land_area'];
-    const historyEntries = [];
-    
-    trackFields.forEach(f => {
-      const oldVal = oldProj[f];
-      const newVal = payload[f];
-      if (newVal !== undefined && String(oldVal || '').trim() !== String(newVal || '').trim()) {
-        historyEntries.push({
-          id: `PRJH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          projectId: id,
-          field: f,
-          fieldName: metadata.modules.projects.fields.find(field => field.name === f)?.label || f,
-          oldValue: oldVal || 'None',
-          newValue: newVal || 'None',
-          date: new Date().toLocaleDateString('en-IN'),
-          employeeName: req.user.name
-        });
+  try {
+    const result = await runTransaction(async (db) => {
+      const index = db[module].findIndex(rec => String(rec.id) === String(id));
+      if (index === -1) {
+        throw new Error(`Record ${id} not found.`);
       }
-    });
-    
-    if (historyEntries.length > 0) {
-      db.project_history = db.project_history || [];
-      db.project_history.push(...historyEntries);
-    }
-  }
+      const oldPayload = { ...db[module][index] };
 
-  if (module === 'properties') {
-    const oldProp = db.properties[index];
-    const trackFields = ['demand', 'status', 'locality', 'sector_block', 'size', 'propertyType'];
-    const historyEntries = [];
-    
-    trackFields.forEach(f => {
-      const oldVal = oldProp[f];
-      const newVal = payload[f];
-      if (newVal !== undefined && String(oldVal || '').trim() !== String(newVal || '').trim()) {
-        historyEntries.push({
-          id: `PROPH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          propertyId: id,
-          field: f,
-          fieldName: metadata.modules.properties.fields.find(field => field.name === f)?.label || f,
-          oldValue: oldVal || 'None',
-          newValue: newVal || 'None',
-          date: new Date().toLocaleDateString('en-IN'),
-          employeeName: req.user.name
-        });
+      // Enforce unique phone number on update
+      if (payload.phone) {
+        const cleanPhone = String(payload.phone).trim();
+        const isDuplicate = db[module].some(r => r.phone && String(r.phone).trim() === cleanPhone && String(r.id) !== String(id));
+        if (isDuplicate) {
+          throw new Error(`Phone number '${payload.phone}' is already registered in this module.`);
+        }
       }
-    });
-    
-    if (historyEntries.length > 0) {
-      db.property_history = db.property_history || [];
-      db.property_history.push(...historyEntries);
-    }
-  }
 
-  // Update record preserving fixed identifiers
-  db[module][index] = { ...db[module][index], ...payload, id };
+      // Auto-update last_updated date on edits
+      const metadata = readMetadata();
+      const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
+      fields.forEach(f => {
+        if (f.name === 'last_updated') {
+          payload[f.name] = new Date().toLocaleString('en-IN');
+        }
+      });
 
-  if (module === 'properties') {
-    syncPropertyDetailsUniversally(id, db);
-    try { syncToSheets('leads'); } catch(e) {}
-    try { syncToSheets('customers'); } catch(e) {}
-    try { syncToSheets('queries'); } catch(e) {}
-    try { syncToSheets('follow_ups'); } catch(e) {}
-  }
+      if (module === 'leads') {
+        const oldLead = db[module][index];
+        if (payload.assignedEmployeeId && payload.assignedEmployeeId !== oldLead.assignedEmployeeId) {
+          payload.assignmentStatus = 'accepted';
+          payload.assignmentTime = null;
+          payload.droppedBy = [];
+          setTimeout(() => {
+            notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: id, leadName: payload.name || payload.person_name || 'New Lead' });
+          }, 500);
+        }
+      }
 
-  if (module === 'site_visits') {
-    const sv = db[module][index];
-    if (sv && sv.linkedFollowUpId) {
-      const fup = (db.follow_ups || []).find(f => f.id === sv.linkedFollowUpId);
-      if (fup && fup.date !== sv.date) {
-        fup.date = sv.date;
+      if (module === 'projects') {
+        const oldProj = db.projects[index];
+        const trackFields = ['pricing_details', 'plc_percent', 'status', 'configurations_sizes', 'total_land_area'];
+        const historyEntries = [];
+        
+        trackFields.forEach(f => {
+          const oldVal = oldProj[f];
+          const newVal = payload[f];
+          if (newVal !== undefined && String(oldVal || '').trim() !== String(newVal || '').trim()) {
+            historyEntries.push({
+              id: `PRJH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              projectId: id,
+              field: f,
+              fieldName: metadata.modules.projects.fields.find(field => field.name === f)?.label || f,
+              oldValue: oldVal || 'None',
+              newValue: newVal || 'None',
+              date: new Date().toLocaleDateString('en-IN'),
+              employeeName: req.user.name
+            });
+          }
+        });
+        
+        if (historyEntries.length > 0) {
+          db.project_history = db.project_history || [];
+          db.project_history.push(...historyEntries);
+        }
+      }
+
+      if (module === 'properties') {
+        const oldProp = db.properties[index];
+        const trackFields = ['demand', 'status', 'locality', 'sector_block', 'size', 'propertyType'];
+        const historyEntries = [];
+        
+        trackFields.forEach(f => {
+          const oldVal = oldProp[f];
+          const newVal = payload[f];
+          if (newVal !== undefined && String(oldVal || '').trim() !== String(newVal || '').trim()) {
+            historyEntries.push({
+              id: `PROPH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              propertyId: id,
+              field: f,
+              fieldName: metadata.modules.properties.fields.find(field => field.name === f)?.label || f,
+              oldValue: oldVal || 'None',
+              newValue: newVal || 'None',
+              date: new Date().toLocaleDateString('en-IN'),
+              employeeName: req.user.name
+            });
+          }
+        });
+        
+        if (historyEntries.length > 0) {
+          db.property_history = db.property_history || [];
+          db.property_history.push(...historyEntries);
+        }
+      }
+
+      // Update record preserving fixed identifiers
+      db[module][index] = { ...db[module][index], ...payload, id };
+
+      if (module === 'properties') {
+        syncPropertyDetailsUniversally(id, db);
+        try { syncToSheets('leads'); } catch(e) {}
+        try { syncToSheets('customers'); } catch(e) {}
+        try { syncToSheets('queries'); } catch(e) {}
         try { syncToSheets('follow_ups'); } catch(e) {}
       }
+
+      if (module === 'site_visits') {
+        const sv = db[module][index];
+        if (sv && sv.linkedFollowUpId) {
+          const fup = (db.follow_ups || []).find(f => f.id === sv.linkedFollowUpId);
+          if (fup && fup.date !== sv.date) {
+            fup.date = sv.date;
+            try { syncToSheets('follow_ups'); } catch(e) {}
+          }
+        }
+      }
+
+      if (module === 'queries') handleQueryStageChange(db[module][index], db, req);
+      if (module === 'deals') handleDealStatusChange(db[module][index], db, req);
+      if (module === 'property_pitch_history') handlePitchStatusChange(db[module][index], db, req);
+      if (module === 'leads') {
+        handleLeadStatusChange(db[module][index], db, req);
+        if (db[module][index].assignmentStatus === 'accepted') {
+          createFollowUpForLead(db[module][index], db);
+        }
+        if (db[module][index].assignedEmployeeId) {
+          syncAssignedEmployeeUniversally('leads', id, db[module][index].assignedEmployeeId, db);
+        }
+      }
+      if (module === 'customers' && db[module][index].assignedEmployeeId) {
+        syncAssignedEmployeeUniversally('customers', id, db[module][index].assignedEmployeeId, db);
+      }
+      if (module === 'follow_ups' && db[module][index].employeeId) {
+        syncAssignedEmployeeUniversally('follow_ups', id, db[module][index].employeeId, db);
+      }
+      if (module === 'follow_ups') handleFollowUpPipelineAction(db[module][index], db, req);
+      if (module === 'dealer_calls') handleDealerCallInsertion(db[module][index], db);
+      if (module === 'dealers') handleDealerVisitAssignment(db[module][index], db, req, oldPayload);
+      if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && db[module][index].pitchedPropertyId) {
+        handleAutomatedPitchLogging(db[module][index], db, req);
+      }
+
+      // Custom SSE notifications triggers
+      const updatedRec = db[module][index];
+      if (module === 'site_visits' && updatedRec.employeeId) {
+        notifyUser(updatedRec.employeeId, 'visit-assigned', {
+          visitId: updatedRec.id,
+          message: `Site Visit ${updatedRec.id} has been updated/assigned to you.`
+        });
+      }
+      if (module === 'dealer_meetings' && updatedRec.assignedEmployeeId) {
+        notifyUser(updatedRec.assignedEmployeeId, 'meeting-assigned', {
+          meetingId: updatedRec.id,
+          message: `Dealer Meeting ${updatedRec.id} has been updated/assigned to you.`
+        });
+      }
+      if (module === 'queries' && updatedRec.assignedEmployeeId && updatedRec.status === 'Approved') {
+        notifyUser(updatedRec.assignedEmployeeId, 'query-approved', {
+          queryId: updatedRec.id,
+          message: `Your Property Query ${updatedRec.id} has been Approved.`
+        });
+      }
+      if (module === 'documents') {
+        notifyUser('EMP-001', 'pending-docs-alert', {
+          docId: updatedRec.id,
+          message: `Document "${updatedRec.name}" has been updated. Verification pending.`
+        });
+      }
+
+      // Track Activity Log
+      const log = {
+        id: `LOG-${Date.now()}`,
+        employeeName: req.user.name,
+        action: `Updated record ${id} in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+      if (!db.activity_logs) db.activity_logs = [];
+      db.activity_logs.unshift(log);
+
+      return db[module][index];
+    });
+
+    // Sync to Google sheets
+    syncToSheets(module);
+    res.json(result);
+  } catch (err) {
+    if (err.message.includes('not found')) {
+      res.status(404).json({ message: err.message });
+    } else {
+      res.status(400).json({ message: err.message });
     }
   }
-
-  if (module === 'queries') handleQueryStageChange(db[module][index], db, req);
-  if (module === 'deals') handleDealStatusChange(db[module][index], db, req);
-  if (module === 'property_pitch_history') handlePitchStatusChange(db[module][index], db, req);
-  if (module === 'leads') {
-    handleLeadStatusChange(db[module][index], db, req);
-    if (db[module][index].assignmentStatus === 'accepted') {
-      createFollowUpForLead(db[module][index], db);
-    }
-    if (db[module][index].assignedEmployeeId) {
-      syncAssignedEmployeeUniversally('leads', id, db[module][index].assignedEmployeeId, db);
-    }
-  }
-  if (module === 'customers' && db[module][index].assignedEmployeeId) {
-    syncAssignedEmployeeUniversally('customers', id, db[module][index].assignedEmployeeId, db);
-  }
-  if (module === 'follow_ups' && db[module][index].employeeId) {
-    syncAssignedEmployeeUniversally('follow_ups', id, db[module][index].employeeId, db);
-  }
-  if (module === 'follow_ups') handleFollowUpPipelineAction(db[module][index], db, req);
-  if (module === 'dealer_calls') handleDealerCallInsertion(db[module][index], db);
-  if (module === 'dealers') handleDealerVisitAssignment(db[module][index], db, req, oldPayload);
-  if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && db[module][index].pitchedPropertyId) {
-    handleAutomatedPitchLogging(db[module][index], db, req);
-  }
-
-  // Custom SSE notifications triggers
-  const updatedRec = db[module][index];
-  if (module === 'site_visits' && updatedRec.employeeId) {
-    notifyUser(updatedRec.employeeId, 'visit-assigned', {
-      visitId: updatedRec.id,
-      message: `Site Visit ${updatedRec.id} has been updated/assigned to you.`
-    });
-  }
-  if (module === 'dealer_meetings' && updatedRec.assignedEmployeeId) {
-    notifyUser(updatedRec.assignedEmployeeId, 'meeting-assigned', {
-      meetingId: updatedRec.id,
-      message: `Dealer Meeting ${updatedRec.id} has been updated/assigned to you.`
-    });
-  }
-  if (module === 'queries' && updatedRec.assignedEmployeeId && updatedRec.status === 'Approved') {
-    notifyUser(updatedRec.assignedEmployeeId, 'query-approved', {
-      queryId: updatedRec.id,
-      message: `Your Property Query ${updatedRec.id} has been Approved.`
-    });
-  }
-  if (module === 'documents') {
-    notifyUser('EMP-001', 'pending-docs-alert', {
-      docId: updatedRec.id,
-      message: `Document "${updatedRec.name}" has been updated. Verification pending.`
-    });
-  }
-
-  // Track Activity Log
-  const log = {
-    id: `LOG-${Date.now()}`,
-    employeeName: req.user.name,
-    action: `Updated record ${id} in ${module}`,
-    dateTime: new Date().toLocaleString()
-  };
-  if (!db.activity_logs) db.activity_logs = [];
-  db.activity_logs.unshift(log);
-
-  writeDb(db);
-
-  // Sync to Google sheets
-  syncToSheets(module);
-  res.json(db[module][index]);
 });
 // DELETE data record handler
 app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
@@ -2130,113 +2069,125 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
   checkPermission(module, 'delete')(req, res, next);
 }, async (req, res) => {
   const { module, id } = req.params;
-  const db = readDb();
 
-  if (!db[module]) return res.status(404).json({ message: `Module ${module} is empty.` });
+  try {
+    const result = await runTransaction(async (db) => {
+      if (!db[module]) {
+        throw new Error(`Module ${module} is empty.`);
+      }
 
-  const index = db[module].findIndex(rec => String(rec.id) === String(id));
-  if (index === -1) return res.status(404).json({ message: `Record ${id} not found.` });
+      const index = db[module].findIndex(rec => String(rec.id) === String(id));
+      if (index === -1) {
+        throw new Error(`Record ${id} not found.`);
+      }
 
-  db[module].splice(index, 1);
+      const rec = db[module][index] || {};
+      db[module].splice(index, 1);
 
-  // Automatically delete all linked child records if a lead or customer is deleted
-  if (module === 'leads' || module === 'customers') {
-    const rec = db[module]?.find(r => String(r.id) === String(id)) || {};
-    const targetPhone = String(rec.phone || '').trim();
-    const targetEmail = String(rec.email || '').trim();
+      // Automatically delete all linked child records if a lead or customer is deleted
+      if (module === 'leads' || module === 'customers') {
+        const targetPhone = String(rec.phone || '').trim();
+        const targetEmail = String(rec.email || '').trim();
 
-    // 1. Cross-delete client/lead
-    if (module === 'leads') {
-      db.customers = (db.customers || []).filter(c => 
-        String(c.leadId) !== String(id) && 
-        (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
-        (targetEmail === '' || String(c.email).trim() !== targetEmail)
-      );
-      try { syncToSheets('customers'); } catch(e) {}
-    } else {
-      db.leads = (db.leads || []).filter(l => 
-        String(l.id) !== String(rec.leadId) && 
-        (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
-        (targetEmail === '' || String(l.email).trim() !== targetEmail)
-      );
-      try { syncToSheets('leads'); } catch(e) {}
-    }
+        // 1. Cross-delete client/lead
+        if (module === 'leads') {
+          db.customers = (db.customers || []).filter(c => 
+            String(c.leadId) !== String(id) && 
+            (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
+            (targetEmail === '' || String(c.email).trim() !== targetEmail)
+          );
+          try { syncToSheets('customers'); } catch(e) {}
+        } else {
+          db.leads = (db.leads || []).filter(l => 
+            String(l.id) !== String(rec.leadId) && 
+            (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
+            (targetEmail === '' || String(l.email).trim() !== targetEmail)
+          );
+          try { syncToSheets('leads'); } catch(e) {}
+        }
 
-    // 2. Find all query IDs for this customer/lead
-    const customerQueries = (db.queries || []).filter(q => String(q.customerId) === String(id));
-    const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
+        // 2. Find all query IDs for this customer/lead
+        const customerQueries = (db.queries || []).filter(q => String(q.customerId) === String(id));
+        const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
 
-    // 3. Delete properties linked via queryId, booked_by_customer_id, or phone
-    db.properties = (db.properties || []).filter(p => {
-      if (String(p.booked_by_customer_id) === String(id)) return false;
-      if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
-      if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
+        // 3. Delete properties linked via queryId, booked_by_customer_id, or phone
+        db.properties = (db.properties || []).filter(p => {
+          if (String(p.booked_by_customer_id) === String(id)) return false;
+          if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
+          if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
+          return true;
+        });
+        try { syncToSheets('properties'); } catch(e) {}
+
+        // 4. Delete follow_ups
+        db.follow_ups = (db.follow_ups || []).filter(f => 
+          String(f.customerId) !== String(id) && 
+          (!f.queryId || !customerQueryIds.has(String(f.queryId)))
+        );
+        try { syncToSheets('follow_ups'); } catch(e) {}
+
+        // 5. Delete queries
+        db.queries = (db.queries || []).filter(q => String(q.customerId) !== String(id));
+        try { syncToSheets('queries'); } catch(e) {}
+
+        // 6. Delete site_visits
+        db.site_visits = (db.site_visits || []).filter(s => String(s.customerId) !== String(id));
+        try { syncToSheets('site_visits'); } catch(e) {}
+
+        // 7. Delete property_pitch_history
+        db.property_pitch_history = (db.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
+        try { syncToSheets('property_pitch_history'); } catch(e) {}
+
+        // 8. Delete sales bookings
+        db.sales_bookings = (db.sales_bookings || []).filter(s => 
+          String(s.customerId) !== String(id) || 
+          (targetPhone !== '' && String(s.customerPhone).trim() === targetPhone)
+        );
+        try { syncToSheets('sales_bookings'); } catch(e) {}
+
+        // 9. Delete deals
+        db.deals = (db.deals || []).filter(d => String(d.customerId) !== String(id));
+        try { syncToSheets('deals'); } catch(e) {}
+      }
+      if (module === 'deals') {
+        db.properties = db.properties || [];
+        db.properties.forEach(p => {
+          if (p.owner_history) {
+            p.owner_history = p.owner_history.filter(h => String(h.dealId) !== String(id));
+          }
+        });
+        try { syncToSheets('properties'); } catch(e) {}
+      }
+      if (module === 'queries') {
+        db.follow_ups = (db.follow_ups || []).filter(f => String(f.queryId) !== String(id));
+        db.properties = (db.properties || []).filter(p => String(p.linkedQueryId) !== String(id));
+        try { syncToSheets('follow_ups'); } catch(e) {}
+        try { syncToSheets('properties'); } catch(e) {}
+      }
+
+      // Track Activity Log
+      const log = {
+        id: `LOG-${Date.now()}`,
+        employeeName: req.user.name,
+        action: `Deleted record ${id} in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+      if (!db.activity_logs) db.activity_logs = [];
+      db.activity_logs.unshift(log);
+
       return true;
     });
-    try { syncToSheets('properties'); } catch(e) {}
 
-    // 4. Delete follow_ups
-    db.follow_ups = (db.follow_ups || []).filter(f => 
-      String(f.customerId) !== String(id) && 
-      (!f.queryId || !customerQueryIds.has(String(f.queryId)))
-    );
-    try { syncToSheets('follow_ups'); } catch(e) {}
-
-    // 5. Delete queries
-    db.queries = (db.queries || []).filter(q => String(q.customerId) !== String(id));
-    try { syncToSheets('queries'); } catch(e) {}
-
-    // 6. Delete site_visits
-    db.site_visits = (db.site_visits || []).filter(s => String(s.customerId) !== String(id));
-    try { syncToSheets('site_visits'); } catch(e) {}
-
-    // 7. Delete property_pitch_history
-    db.property_pitch_history = (db.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
-    try { syncToSheets('property_pitch_history'); } catch(e) {}
-
-    // 8. Delete sales bookings
-    db.sales_bookings = (db.sales_bookings || []).filter(s => 
-      String(s.customerId) !== String(id) || 
-      (targetPhone !== '' && String(s.customerPhone).trim() === targetPhone)
-    );
-    try { syncToSheets('sales_bookings'); } catch(e) {}
-
-    // 9. Delete deals
-    db.deals = (db.deals || []).filter(d => String(d.customerId) !== String(id));
-    try { syncToSheets('deals'); } catch(e) {}
+    // Sync to Google sheets
+    syncToSheets(module);
+    res.json({ success: true, message: `Record ${id} deleted successfully.` });
+  } catch (err) {
+    if (err.message.includes('empty') || err.message.includes('not found')) {
+      res.status(404).json({ message: err.message });
+    } else {
+      res.status(400).json({ message: err.message });
+    }
   }
-  if (module === 'deals') {
-    db.properties = db.properties || [];
-    db.properties.forEach(p => {
-      if (p.owner_history) {
-        p.owner_history = p.owner_history.filter(h => String(h.dealId) !== String(id));
-      }
-    });
-    try { syncToSheets('properties'); } catch(e) {}
-  }
-  if (module === 'queries') {
-    db.follow_ups = (db.follow_ups || []).filter(f => String(f.queryId) !== String(id));
-    db.properties = (db.properties || []).filter(p => String(p.linkedQueryId) !== String(id));
-    try { syncToSheets('follow_ups'); } catch(e) {}
-    try { syncToSheets('properties'); } catch(e) {}
-  }
-  // Do NOT shift or resequence sequential IDs on delete to preserve relationship integrity
-
-  // Track Activity Log
-  const log = {
-    id: `LOG-${Date.now()}`,
-    employeeName: req.user.name,
-    action: `Deleted record ${id} in ${module}`,
-    dateTime: new Date().toLocaleString()
-  };
-  if (!db.activity_logs) db.activity_logs = [];
-  db.activity_logs.unshift(log);
-
-  writeDb(db);
-
-  // Sync to Google sheets
-  syncToSheets(module);
-  res.json({ success: true, message: `Record ${id} deleted successfully.` });
 });
 
 // Bulk Delete Route

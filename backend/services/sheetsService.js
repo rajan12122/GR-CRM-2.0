@@ -1,10 +1,6 @@
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const { google } = require('googleapis');
-
-const dbPath = path.join(__dirname, '../config/db.json');
-const metadataPath = path.join(__dirname, '../config/metadata.json');
+const { dbPath, metadataPath, readDb, writeDb, readMetadata, writeMetadata, runTransaction, generateNextId } = require('./dbService');
 
 // Memory queue locks for concurrency protection
 const queueLocks = {};
@@ -16,7 +12,7 @@ function getSheetsConfig() {
   let syncActive = false;
   
   try {
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    const metadata = readMetadata();
     if (metadata && metadata.sheetsConfig) {
       spreadsheetId = metadata.sheetsConfig.spreadsheetId;
       syncActive = metadata.sheetsConfig.syncActive === true || metadata.sheetsConfig.syncActive === 'true';
@@ -85,7 +81,7 @@ function getSheetsClient(config) {
 // Helper to get module headers
 function getModuleHeaders(moduleName) {
   try {
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    const metadata = readMetadata();
     const fields = (metadata.modules[moduleName] && metadata.modules[moduleName].fields) || [];
     const headers = fields.map(f => f.name);
     if (!headers.includes('crm_id')) {
@@ -102,7 +98,7 @@ function getModuleHeaders(moduleName) {
  */
 async function syncToSheets(moduleName) {
   try {
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    const db = readDb();
     db.sync_jobs = db.sync_jobs || [];
 
     // Calculate idempotency key for this module sync operation
@@ -137,7 +133,7 @@ async function syncToSheets(moduleName) {
     };
 
     db.sync_jobs.push(newJob);
-    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+    writeDb(db);
     
     // Trigger the queue runner
     setImmediate(() => processSyncQueue());
@@ -166,7 +162,7 @@ async function processSyncQueue() {
     const spreadsheetId = config.spreadsheetId;
 
     while (true) {
-      const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      const db = readDb();
       db.sync_jobs = db.sync_jobs || [];
       const now = new Date().toISOString();
 
@@ -191,7 +187,7 @@ async function processSyncQueue() {
       queueLocks[lockKey] = true;
       job.status = 'PROCESSING';
       job.updatedAt = new Date().toISOString();
-      fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+      writeDb(db);
 
       try {
         const sheetName = `data_${job.moduleName}`;
@@ -219,20 +215,20 @@ async function processSyncQueue() {
         await syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbRecords, headers);
 
         // Update job to success
-        const updatedDb = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+        const updatedDb = readDb();
         const freshJob = updatedDb.sync_jobs.find(j => j.id === job.id);
         if (freshJob) {
           freshJob.status = 'SUCCESS';
           freshJob.syncedAt = new Date().toISOString();
           freshJob.updatedAt = new Date().toISOString();
           freshJob.lastError = null;
-          fs.writeFileSync(dbPath, JSON.stringify(updatedDb, null, 2), 'utf8');
+          writeDb(updatedDb);
         }
 
       } catch (err) {
         console.error(`[Queue Worker] Sync job ${job.id} failed:`, err.message);
 
-        const updatedDb = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+        const updatedDb = readDb();
         const freshJob = updatedDb.sync_jobs.find(j => j.id === job.id);
         if (freshJob) {
           freshJob.attemptCount += 1;
@@ -246,7 +242,7 @@ async function processSyncQueue() {
             const delaySec = Math.pow(2, freshJob.attemptCount) * 10;
             freshJob.nextAttemptAt = new Date(Date.now() + delaySec * 1000).toISOString();
           }
-          fs.writeFileSync(dbPath, JSON.stringify(updatedDb, null, 2), 'utf8');
+          writeDb(updatedDb);
         }
       } finally {
         delete queueLocks[lockKey];
@@ -376,16 +372,32 @@ async function syncFromSheetsIncremental(targetModule = null) {
     throw new Error('Google Sheets integration is not configured or disabled in environment settings.');
   }
 
-  const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-
   const spreadsheetId = config.spreadsheetId;
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
   const allSheets = meta.data.sheets || [];
 
+  const metadata = readMetadata();
   const modulesToSync = targetModule ? [targetModule] : Object.keys(metadata.modules || {});
-  const importSummary = { added: 0, skipped: 0, details: {} };
+  
+  // Fetch all sheet data first (outside of mutex lock)
+  const sheetsData = {};
+  for (const mod of modulesToSync) {
+    const sheetName = `data_${mod}`;
+    const sheetObj = allSheets.find(s => s.properties && s.properties.title === sheetName);
+    if (!sheetObj) continue;
 
+    try {
+      const getRes = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A1:Z10000`
+      });
+      sheetsData[mod] = getRes.data.values || [];
+    } catch (e) {
+      console.error(`Failed to read sheet for ${mod}:`, e.message);
+    }
+  }
+
+  const importSummary = { added: 0, skipped: 0, details: {} };
   const prefixMap = {
     employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
     projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
@@ -394,88 +406,66 @@ async function syncFromSheetsIncremental(targetModule = null) {
     property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
   };
 
-  for (const mod of modulesToSync) {
-    const sheetName = `data_${mod}`;
-    const sheetObj = allSheets.find(s => s.properties && s.properties.title === sheetName);
-    if (!sheetObj) continue;
+  // Run DB writes inside transaction Mutex
+  await runTransaction(async (db) => {
+    for (const mod of modulesToSync) {
+      const rows = sheetsData[mod];
+      if (!rows || rows.length < 2) continue;
 
-    const getRes = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${sheetName}!A1:Z10000`
-    });
+      const rawHeaders = rows[0] || [];
+      const headers = rawHeaders.map(h => String(h).trim());
+      const lowerHeaders = headers.map(h => h.toLowerCase());
 
-    const rows = getRes.data.values || [];
-    if (rows.length < 2) continue; // No data rows (only header or empty)
+      const crmIdIdx = lowerHeaders.indexOf('crm_id') !== -1 ? lowerHeaders.indexOf('crm_id') : lowerHeaders.indexOf('id');
+      const phoneIdx = lowerHeaders.indexOf('phone') !== -1 ? lowerHeaders.indexOf('phone') : lowerHeaders.indexOf('contact_number');
 
-    const rawHeaders = rows[0] || [];
-    const headers = rawHeaders.map(h => String(h).trim());
-    const lowerHeaders = headers.map(h => h.toLowerCase());
+      db[mod] = db[mod] || [];
+      const existingList = db[mod];
+      const prefix = prefixMap[mod] || mod.substring(0, 4).toUpperCase();
 
-    const crmIdIdx = lowerHeaders.indexOf('crm_id') !== -1 ? lowerHeaders.indexOf('crm_id') : lowerHeaders.indexOf('id');
-    const phoneIdx = lowerHeaders.indexOf('phone') !== -1 ? lowerHeaders.indexOf('phone') : lowerHeaders.indexOf('contact_number');
+      let modAdded = 0;
+      let modSkipped = 0;
 
-    db[mod] = db[mod] || [];
-    const existingList = db[mod];
-    const prefix = prefixMap[mod] || mod.substring(0, 4).toUpperCase();
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) continue;
 
-    let modAdded = 0;
-    let modSkipped = 0;
+        const rowCrmId = crmIdIdx !== -1 && row[crmIdIdx] ? String(row[crmIdIdx]).trim() : '';
+        const rowPhone = phoneIdx !== -1 && row[phoneIdx] ? String(row[phoneIdx]).trim() : '';
 
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) continue;
+        let exists = false;
+        if (rowCrmId) {
+          exists = existingList.some(rec => String(rec.id) === rowCrmId);
+        }
+        if (!exists && rowPhone) {
+          exists = existingList.some(rec => rec.phone && String(rec.phone).trim() === rowPhone);
+        }
 
-      const rowCrmId = crmIdIdx !== -1 && row[crmIdIdx] ? String(row[crmIdIdx]).trim() : '';
-      const rowPhone = phoneIdx !== -1 && row[phoneIdx] ? String(row[phoneIdx]).trim() : '';
+        if (exists) {
+          modSkipped++;
+          continue;
+        }
 
-      // Check if record already exists in CRM (by ID or Phone)
-      let exists = false;
-      if (rowCrmId) {
-        exists = existingList.some(rec => String(rec.id) === rowCrmId);
-      }
-      if (!exists && rowPhone) {
-        exists = existingList.some(rec => rec.phone && String(rec.phone).trim() === rowPhone);
-      }
-
-      if (exists) {
-        modSkipped++;
-        continue;
-      }
-
-      // Map row values into new CRM record object
-      const newRec = {};
-      headers.forEach((h, colIdx) => {
-        if (h.toLowerCase() === 'crm_id') return;
-        const fieldName = h;
-        const val = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
-        newRec[fieldName] = val;
-      });
-
-      // Assign permanent unique ID if missing or colliding
-      if (!newRec.id || existingList.some(rec => String(rec.id) === String(newRec.id))) {
-        let maxNum = 0;
-        existingList.forEach(rec => {
-          if (rec && rec.id && String(rec.id).startsWith(`${prefix}-`)) {
-            const parts = String(rec.id).split('-');
-            const num = parseInt(parts[1], 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
-          }
+        const newRec = {};
+        headers.forEach((h, colIdx) => {
+          if (h.toLowerCase() === 'crm_id') return;
+          const fieldName = h;
+          const val = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+          newRec[fieldName] = val;
         });
-        newRec.id = `${prefix}-${String(maxNum + 1).padStart(3, '0')}`;
+
+        // Use sequential persistent ID counter
+        newRec.id = generateNextId(db, mod, prefix);
+
+        existingList.push(newRec);
+        modAdded++;
       }
 
-      existingList.push(newRec);
-      modAdded++;
+      importSummary.added += modAdded;
+      importSummary.skipped += modSkipped;
+      importSummary.details[mod] = { added: modAdded, skipped: modSkipped };
     }
-
-    importSummary.added += modAdded;
-    importSummary.skipped += modSkipped;
-    importSummary.details[mod] = { added: modAdded, skipped: modSkipped };
-  }
-
-  if (importSummary.added > 0) {
-    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
-  }
+  });
 
   return importSummary;
 }
@@ -484,7 +474,7 @@ async function syncFromSheetsIncremental(targetModule = null) {
  * Force manual export of all modules (or target module) from CRM -> Google Sheets
  */
 async function syncToSheetsManual(targetModule = null) {
-  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  const metadata = readMetadata();
   const modulesToSync = targetModule ? [targetModule] : Object.keys(metadata.modules || {});
   
   const enqueuedJobs = [];
@@ -505,24 +495,6 @@ async function syncToSheetsManual(targetModule = null) {
 async function syncFromSheets() {
   console.log('Direct automated imports are deprecated. Please use the Sync Dashboard Reconcile feature.');
   return false;
-}
-
-// Local helper to generate the next unique ID for imports
-function generateNextId(db, moduleName, prefix) {
-  const records = db[moduleName] || [];
-  let maxNum = 0;
-  records.forEach(rec => {
-    if (rec.id && typeof rec.id === 'string' && rec.id.startsWith(`${prefix}-`)) {
-      const parts = rec.id.split('-');
-      if (parts.length === 2) {
-        const num = parseInt(parts[1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      }
-    }
-  });
-  return `${prefix}-${String(maxNum + 1).padStart(3, '0')}`;
 }
 
 // Helper to convert index to Excel column letters (1 -> A, 27 -> AA, etc.)
@@ -627,9 +599,6 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
     throw new Error('Google Sheets integration is not configured or disabled.');
   }
 
-  const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-
   const spreadsheetId = config.spreadsheetId;
   const sheetName = mapping.sheetName;
 
@@ -652,15 +621,8 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
   const headers = rawHeaders.map(h => String(h).trim());
 
   const moduleName = mapping.module;
-  const fields = metadata.modules[moduleName]?.fields || [];
-  db[moduleName] = db[moduleName] || [];
-  const existingList = db[moduleName];
-
   const headerMap = mapping.headerMap || {};
   const unmappedHeaders = headers.filter(h => !headerMap[h]);
-
-  const requiredFields = fields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated');
-  const missingRequired = requiredFields.filter(f => !Object.values(headerMap).includes(f.name));
 
   const prefixMap = {
     employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
@@ -671,109 +633,126 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
   };
   const prefix = prefixMap[moduleName] || moduleName.substring(0, 4).toUpperCase();
 
-  const metrics = {
-    totalRows: Math.max(0, rows.length - 1),
-    imported: 0,
-    updated: 0,
-    skipped: 0,
-    duplicates: 0,
-    validationErrors: [],
-    missingRequired: missingRequired.map(f => f.label),
-    unmappedHeaders,
-    duration: 0
-  };
-
-  const previewRows = [];
   const sheetsWriteBacks = [];
+  let metrics;
+  let previewRows = [];
 
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) {
-      metrics.skipped++;
-      continue;
-    }
-
-    const rowErrors = [];
-    const mappedRecord = {};
-
-    fields.forEach(f => {
-      const sheetHeader = Object.keys(headerMap).find(key => headerMap[key] === f.name);
-      if (!sheetHeader) return;
-
-      const colIdx = headers.indexOf(sheetHeader);
-      if (colIdx === -1) return;
-
-      const rawVal = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
-      
-      const errorMsg = validateFieldValue(rawVal, f, db, metadata);
-      if (errorMsg) {
-        rowErrors.push({ field: f.label, value: rawVal, error: errorMsg });
-        metrics.validationErrors.push({ row: i + 1, field: f.label, value: rawVal, error: errorMsg });
-      }
-
-      if (f.type === 'number') {
-        mappedRecord[f.name] = rawVal ? Number(rawVal) : '';
-      } else if (f.type === 'checkbox') {
-        mappedRecord[f.name] = rawVal.toLowerCase() === 'true' || rawVal === '1' || rawVal.toLowerCase() === 'yes';
-      } else {
-        mappedRecord[f.name] = rawVal;
-      }
-    });
-
-    const idHeader = Object.keys(headerMap).find(key => headerMap[key] === 'id');
-    let rowId = '';
-    if (idHeader) {
-      const colIdx = headers.indexOf(idHeader);
-      if (colIdx !== -1 && row[colIdx]) {
-        rowId = String(row[colIdx]).trim();
-      }
-    }
-
-    const phoneHeader = Object.keys(headerMap).find(key => headerMap[key] === 'phone');
-    let rowPhone = '';
-    if (phoneHeader) {
-      const colIdx = headers.indexOf(phoneHeader);
-      if (colIdx !== -1 && row[colIdx]) {
-        rowPhone = String(row[colIdx]).trim();
-      }
-    }
-
-    let existingRecordIndex = -1;
-    if (rowId) {
-      existingRecordIndex = existingList.findIndex(rec => String(rec.id) === rowId);
-    }
-    if (existingRecordIndex === -1 && rowPhone) {
-      existingRecordIndex = existingList.findIndex(rec => rec.phone && String(rec.phone).trim() === rowPhone);
-    }
-
-    if (rowErrors.length > 0) {
-      metrics.skipped++;
-      previewRows.push({ rowNumber: i + 1, status: 'ERROR', data: mappedRecord, errors: rowErrors });
-      continue;
-    }
-
-    if (existingRecordIndex !== -1) {
-      if (!dryRun) {
-        const oldRecord = existingList[existingRecordIndex];
-        Object.keys(mappedRecord).forEach(k => {
-          if (k !== 'id') {
-            oldRecord[k] = mappedRecord[k];
-          }
-        });
-        oldRecord.last_updated = new Date().toLocaleString('en-IN');
-      }
-      metrics.updated++;
-      previewRows.push({ rowNumber: i + 1, status: 'UPDATE', data: { ...existingList[existingRecordIndex], ...mappedRecord } });
+  await runTransaction(async (db) => {
+    const metadata = readMetadata();
+    const fields = metadata.modules[moduleName]?.fields || [];
+    
+    // For dryRun preview, copy existing List so we don't pollute database cache in-memory
+    let existingList;
+    if (dryRun) {
+      existingList = [...(db[moduleName] || [])];
     } else {
-      const generatedId = generateNextId(db, moduleName, prefix);
-      mappedRecord.id = generatedId;
-      mappedRecord.dateAdded = new Date().toISOString().split('T')[0];
-      mappedRecord.last_updated = new Date().toLocaleString('en-IN');
+      db[moduleName] = db[moduleName] || [];
+      existingList = db[moduleName];
+    }
 
-      if (!dryRun) {
+    const requiredFields = fields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated');
+    const missingRequired = requiredFields.filter(f => !Object.values(headerMap).includes(f.name));
+
+    metrics = {
+      totalRows: Math.max(0, rows.length - 1),
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      duplicates: 0,
+      validationErrors: [],
+      missingRequired: missingRequired.map(f => f.label),
+      unmappedHeaders,
+      duration: 0
+    };
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) {
+        metrics.skipped++;
+        continue;
+      }
+
+      const rowErrors = [];
+      const mappedRecord = {};
+
+      fields.forEach(f => {
+        const sheetHeader = Object.keys(headerMap).find(key => headerMap[key] === f.name);
+        if (!sheetHeader) return;
+
+        const colIdx = headers.indexOf(sheetHeader);
+        if (colIdx === -1) return;
+
+        const rawVal = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+        
+        const errorMsg = validateFieldValue(rawVal, f, db, metadata);
+        if (errorMsg) {
+          rowErrors.push({ field: f.label, value: rawVal, error: errorMsg });
+          metrics.validationErrors.push({ row: i + 1, field: f.label, value: rawVal, error: errorMsg });
+        }
+
+        if (f.type === 'number') {
+          mappedRecord[f.name] = rawVal ? Number(rawVal) : '';
+        } else if (f.type === 'checkbox') {
+          mappedRecord[f.name] = rawVal.toLowerCase() === 'true' || rawVal === '1' || rawVal.toLowerCase() === 'yes';
+        } else {
+          mappedRecord[f.name] = rawVal;
+        }
+      });
+
+      const idHeader = Object.keys(headerMap).find(key => headerMap[key] === 'id');
+      let rowId = '';
+      if (idHeader) {
+        const colIdx = headers.indexOf(idHeader);
+        if (colIdx !== -1 && row[colIdx]) {
+          rowId = String(row[colIdx]).trim();
+        }
+      }
+
+      const phoneHeader = Object.keys(headerMap).find(key => headerMap[key] === 'phone');
+      let rowPhone = '';
+      if (phoneHeader) {
+        const colIdx = headers.indexOf(phoneHeader);
+        if (colIdx !== -1 && row[colIdx]) {
+          rowPhone = String(row[colIdx]).trim();
+        }
+      }
+
+      let existingRecordIndex = -1;
+      if (rowId) {
+        existingRecordIndex = existingList.findIndex(rec => String(rec.id) === rowId);
+      }
+      if (existingRecordIndex === -1 && rowPhone) {
+        existingRecordIndex = existingList.findIndex(rec => rec.phone && String(rec.phone).trim() === rowPhone);
+      }
+
+      if (rowErrors.length > 0) {
+        metrics.skipped++;
+        previewRows.push({ rowNumber: i + 1, status: 'ERROR', data: mappedRecord, errors: rowErrors });
+        continue;
+      }
+
+      if (existingRecordIndex !== -1) {
+        if (!dryRun) {
+          const oldRecord = existingList[existingRecordIndex];
+          Object.keys(mappedRecord).forEach(k => {
+            if (k !== 'id') {
+              oldRecord[k] = mappedRecord[k];
+            }
+          });
+          oldRecord.last_updated = new Date().toLocaleString('en-IN');
+        }
+        metrics.updated++;
+        previewRows.push({ rowNumber: i + 1, status: 'UPDATE', data: { ...existingList[existingRecordIndex], ...mappedRecord } });
+      } else {
+        const generatedId = generateNextId(db, moduleName, prefix);
+        mappedRecord.id = generatedId;
+        mappedRecord.dateAdded = new Date().toISOString().split('T')[0];
+        mappedRecord.last_updated = new Date().toLocaleString('en-IN');
+
+        // Always push to in-memory list (cloned list if dryRun, db list if real)
         existingList.push(mappedRecord);
         
-        if (mapping.writeBackEnabled && idHeader) {
+        if (!dryRun && mapping.writeBackEnabled && idHeader) {
           const idColIdx = headers.indexOf(idHeader);
           if (idColIdx !== -1) {
             sheetsWriteBacks.push({
@@ -782,27 +761,23 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
             });
           }
         }
+        metrics.imported++;
+        previewRows.push({ rowNumber: i + 1, status: 'INSERT', data: mappedRecord });
       }
-      metrics.imported++;
-      previewRows.push({ rowNumber: i + 1, status: 'INSERT', data: mappedRecord });
     }
-  }
+  });
 
-  if (!dryRun && (metrics.imported > 0 || metrics.updated > 0)) {
-    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
-
-    if (sheetsWriteBacks.length > 0) {
-      try {
-        await sheets.spreadsheets.values.batchUpdate({
-          spreadsheetId,
-          resource: {
-            data: sheetsWriteBacks,
-            valueInputOption: 'USER_ENTERED'
-          }
-        });
-      } catch (writeErr) {
-        console.error('Failed to write generated IDs back to Google Sheets:', writeErr.message);
-      }
+  if (!dryRun && sheetsWriteBacks.length > 0) {
+    try {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        resource: {
+          data: sheetsWriteBacks,
+          valueInputOption: 'USER_ENTERED'
+        }
+      });
+    } catch (writeErr) {
+      console.error('Failed to write generated IDs back to Google Sheets:', writeErr.message);
     }
   }
 
