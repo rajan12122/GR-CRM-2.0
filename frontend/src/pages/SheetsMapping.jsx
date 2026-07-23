@@ -407,6 +407,15 @@ const SheetsMapping = () => {
     showStatus('success', 'Selections cleared.');
   };
 
+  if (!metadata || !metadata.modules) {
+    return (
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 2 }}>
+        <CircularProgress size={40} sx={{ color: '#2563EB' }} />
+        <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 600 }}>Loading Sheets Configuration...</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Title */}
@@ -634,7 +643,7 @@ const SheetsMapping = () => {
 
             {/* Warning message for unmapped required CRM fields */}
             {(() => {
-              const modFields = metadata?.modules[mappingModule]?.fields || [];
+              const modFields = metadata?.modules?.[mappingModule]?.fields || [];
               const reqFields = modFields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated' && f.name !== 'propertyName');
               const missing = reqFields.filter(f => !Object.values(headerMap).includes(f.name));
               if (missing.length > 0) {
@@ -702,7 +711,7 @@ const SheetsMapping = () => {
                         .filter(h => h.toLowerCase().includes(searchHeaderQuery.toLowerCase()))
                         .map(header => {
                           const mappedField = headerMap[header] || '';
-                          const crmFieldObj = (metadata?.modules[mappingModule]?.fields || []).find(f => f.name === mappedField);
+                          const crmFieldObj = (metadata?.modules?.[mappingModule]?.fields || []).find(f => f.name === mappedField);
                           
                           // Check if search CRM filter matches
                           if (searchCrmQuery && (!crmFieldObj || !crmFieldObj.label.toLowerCase().includes(searchCrmQuery.toLowerCase()))) {
@@ -731,7 +740,7 @@ const SheetsMapping = () => {
                                     displayEmpty
                                   >
                                     <MenuItem value=""><em>-- Unmapped --</em></MenuItem>
-                                    {(metadata?.modules[mappingModule]?.fields || [])
+                                    {(metadata?.modules?.[mappingModule]?.fields || [])
                                       .filter(f => f.editable !== false || f.name === 'id')
                                       .map(f => (
                                         <MenuItem key={f.name} value={f.name}>
