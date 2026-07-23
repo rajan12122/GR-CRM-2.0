@@ -29,7 +29,8 @@ const {
   readMetadata,
   writeMetadata,
   runTransaction,
-  generateNextId
+  generateNextId,
+  handlePropertyDealerAssociation
 } = require('./services/dbService');
 
 // Ensure database files exist on boot
@@ -1593,6 +1594,10 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         payload.id = generateNextId(db, module, prefix);
       }
 
+      if (module === 'properties') {
+        handlePropertyDealerAssociation(payload, db);
+      }
+
       // Populate basic date tracker if applicable
       const metadata = readMetadata();
       const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
@@ -1852,6 +1857,9 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     });
 
     syncToSheets(module);
+    if (module === 'properties') {
+      try { syncToSheets('dealers'); } catch (e) {}
+    }
     res.status(201).json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -1878,6 +1886,10 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         throw new Error(`Record ${id} not found.`);
       }
       const oldPayload = { ...db[module][index] };
+
+      if (module === 'properties') {
+        handlePropertyDealerAssociation(payload, db);
+      }
 
       // Enforce unique phone number on update
       if (payload.phone) {
@@ -2054,6 +2066,9 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
     // Sync to Google sheets
     syncToSheets(module);
+    if (module === 'properties') {
+      try { syncToSheets('dealers'); } catch (e) {}
+    }
     res.json(result);
   } catch (err) {
     if (err.message.includes('not found')) {
@@ -3515,6 +3530,10 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         }
       }
 
+      if (module === 'properties') {
+        handlePropertyDealerAssociation(payload, db);
+      }
+
       // Normalize default date added keys if not present
       if (module === 'leads' && !payload.dateAdded) {
         payload.dateAdded = new Date().toISOString().split('T')[0];
@@ -3531,6 +3550,9 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
     });
 
     syncToSheets(module);
+    if (module === 'properties') {
+      try { syncToSheets('dealers'); } catch (e) {}
+    }
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(400).json({ error: err.message });

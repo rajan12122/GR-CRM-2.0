@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const { google } = require('googleapis');
-const { dbPath, metadataPath, readDb, writeDb, readMetadata, writeMetadata, runTransaction, generateNextId } = require('./dbService');
+const { dbPath, metadataPath, readDb, writeDb, readMetadata, writeMetadata, runTransaction, generateNextId, handlePropertyDealerAssociation } = require('./dbService');
 
 // Memory queue locks for concurrency protection
 const queueLocks = {};
@@ -733,6 +733,10 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
         metrics.skipped++;
         previewRows.push({ rowNumber: i + 1, status: 'ERROR', data: mappedRecord, errors: rowErrors });
         continue;
+      }
+
+      if (moduleName === 'properties') {
+        handlePropertyDealerAssociation(mappedRecord, db, dryRun);
       }
 
       if (existingRecordIndex !== -1) {

@@ -416,6 +416,14 @@
           "editable": true
         },
         {
+          "name": "firm_name",
+          "label": "Firm Name",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
           "name": "dealer_owner_booked",
           "label": "Dealer/Owner/Booked",
           "type": "select",

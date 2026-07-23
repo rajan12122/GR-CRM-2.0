@@ -107,6 +107,42 @@ function generateNextId(db, moduleName, prefix) {
   return `${effPrefix}-${String(nextNum).padStart(3, '0')}`;
 }
 
+function handlePropertyDealerAssociation(payload, db, dryRun = false) {
+  const isDealer = payload.dealer_owner_booked && String(payload.dealer_owner_booked).trim().toLowerCase() === 'dealer';
+  if (!isDealer) return;
+
+  const contactPhone = payload.contact_number;
+  if (!contactPhone) return;
+  const cleanPhone = String(contactPhone).trim();
+
+  db.dealers = db.dealers || [];
+  let dealer = db.dealers.find(d => d.contact_num && String(d.contact_num).trim() === cleanPhone);
+
+  if (!dealer) {
+    if (dryRun) {
+      payload.dealerId = 'DEAL-TEMP';
+      return;
+    }
+    const dealerId = generateNextId(db, 'dealers', 'DEAL');
+    dealer = {
+      id: dealerId,
+      firm_name: payload.firm_name ? String(payload.firm_name).trim() : 'Property Dealer',
+      address: payload.locality || payload.address || '',
+      sector_block: payload.sector_block || '',
+      person_name: payload.contact_person_name ? String(payload.contact_person_name).trim() : 'Contact Person',
+      contact_num: cleanPhone,
+      contacted_num: '',
+      remarks: 'Auto-created from property registration.',
+      callOutcome: '',
+      assignedEmployeeId: payload.assignedEmployeeId || 'EMP-001',
+      visitStatus: ''
+    };
+    db.dealers.push(dealer);
+  }
+
+  payload.dealerId = dealer.id;
+}
+
 module.exports = {
   dbPath,
   metadataPath,
@@ -115,5 +151,6 @@ module.exports = {
   readMetadata,
   writeMetadata,
   runTransaction,
-  generateNextId
+  generateNextId,
+  handlePropertyDealerAssociation
 };
