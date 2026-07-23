@@ -1,8 +1,37 @@
 const fs = require('fs');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '../config/db.json');
-const metadataPath = path.join(__dirname, '../config/metadata.json');
+const defaultDbPath = path.join(__dirname, '../config/db.json');
+const dbPath = process.env.DATABASE_PATH || defaultDbPath;
+
+const defaultMetadataPath = path.join(__dirname, '../config/metadata.json');
+const metadataPath = process.env.METADATA_PATH || defaultMetadataPath;
+
+if (!fs.existsSync(dbPath)) {
+  try {
+    const parentDir = path.dirname(dbPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+    fs.copyFileSync(defaultDbPath, dbPath);
+    console.log(`Initialized database file at: ${dbPath}`);
+  } catch (err) {
+    console.error(`Failed to initialize database at ${dbPath}:`, err.message);
+  }
+}
+
+if (!fs.existsSync(metadataPath)) {
+  try {
+    const parentDir = path.dirname(metadataPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+    fs.copyFileSync(defaultMetadataPath, metadataPath);
+    console.log(`Initialized metadata file at: ${metadataPath}`);
+  } catch (err) {
+    console.error(`Failed to initialize metadata at ${metadataPath}:`, err.message);
+  }
+}
 
 let dbCache = null;
 let metadataCache = null;
