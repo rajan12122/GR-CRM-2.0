@@ -125,11 +125,11 @@ const SheetsMapping = () => {
     try {
       setLoadingTabs(true);
       const token = localStorage.getItem('gr_crm_token') || localStorage.getItem('token');
-      const res = await axios.get(`${API_BASE_URL}/sync/sheets/tabs`, {
+      const res = await axios.get(`${API_BASE_URL}/sync/sheets`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.success) {
-        setSheetTabs(res.data.tabs || []);
+        setSheetTabs(res.data.sheets || []);
       }
       setLoadingTabs(false);
     } catch (err) {
