@@ -579,21 +579,6 @@ function validateFieldValue(value, fieldDef, db, metadata) {
       return `Referenced record not found in related module '${relModule}'.`;
     }
   }
-  
-  if (fieldDef.relationship && fieldDef.relationship.module) {
-    const relModule = fieldDef.relationship.module;
-    const relRecords = db[relModule] || [];
-    const exists = relRecords.some(r => 
-      String(r.id).trim().toLowerCase() === strVal.toLowerCase() ||
-      (r.name && String(r.name).trim().toLowerCase() === strVal.toLowerCase()) ||
-      (r.firm_name && String(r.firm_name).trim().toLowerCase() === strVal.toLowerCase()) ||
-      (r.person_name && String(r.person_name).trim().toLowerCase() === strVal.toLowerCase())
-    );
-    if (!exists) {
-      return `Referenced record not found in related module '${relModule}'.`;
-    }
-  }
-  
   return null;
 }
 
