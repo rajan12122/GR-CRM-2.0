@@ -2949,7 +2949,7 @@ const Settings = () => {
                   {/* Warning message for unmapped required CRM fields */}
                   {(() => {
                     const modFields = metadata?.modules[mappingModule]?.fields || [];
-                    const reqFields = modFields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated');
+                    const reqFields = modFields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated' && f.name !== 'propertyName');
                     const missing = reqFields.filter(f => !Object.values(headerMap).includes(f.name));
                     if (missing.length > 0) {
                       return (

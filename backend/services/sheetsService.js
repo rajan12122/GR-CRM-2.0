@@ -533,7 +533,9 @@ function validateFieldValue(value, fieldDef, db, metadata) {
   const strVal = value !== undefined && value !== null ? String(value).trim() : '';
   
   if (fieldDef.required && !strVal) {
-    return 'Required field is missing.';
+    if (fieldDef.name !== 'id' && fieldDef.name !== 'last_updated' && fieldDef.name !== 'propertyName') {
+      return 'Required field is missing.';
+    }
   }
   
   if (!strVal) return null;
@@ -560,17 +562,21 @@ function validateFieldValue(value, fieldDef, db, metadata) {
       return 'Must be a valid date.';
     }
   }
-  if (fieldDef.type === 'select') {
-    const chipGroup = fieldDef.chipGroup;
-    const chipList = metadata?.chipGroups?.[chipGroup] || metadata?.chips?.[chipGroup] || [];
-    if (chipList.length > 0) {
-      const match = chipList.some(c => 
-        String(c.value).toLowerCase() === strVal.toLowerCase() ||
-        String(c.label).toLowerCase() === strVal.toLowerCase()
-      );
-      if (!match) {
-        return `Value does not match allowed options: ${chipList.map(c => c.label).join(', ')}.`;
-      }
+  
+  // Accept custom select options under "Others" without throwing a validation error.
+  // Case-insensitive normalization is performed separately inside the execution loop.
+  
+  if (fieldDef.relationship && fieldDef.relationship.module) {
+    const relModule = fieldDef.relationship.module;
+    const relRecords = db[relModule] || [];
+    const exists = relRecords.some(r => 
+      String(r.id).trim().toLowerCase() === strVal.toLowerCase() ||
+      (r.name && String(r.name).trim().toLowerCase() === strVal.toLowerCase()) ||
+      (r.firm_name && String(r.firm_name).trim().toLowerCase() === strVal.toLowerCase()) ||
+      (r.person_name && String(r.person_name).trim().toLowerCase() === strVal.toLowerCase())
+    );
+    if (!exists) {
+      return `Referenced record not found in related module '${relModule}'.`;
     }
   }
   
@@ -650,7 +656,7 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
       existingList = db[moduleName];
     }
 
-    const requiredFields = fields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated');
+    const requiredFields = fields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated' && f.name !== 'propertyName');
     const missingRequired = requiredFields.filter(f => !Object.values(headerMap).includes(f.name));
 
     metrics = {
@@ -682,7 +688,20 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
         const colIdx = headers.indexOf(sheetHeader);
         if (colIdx === -1) return;
 
-        const rawVal = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+        let rawVal = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
+
+        // Case-insensitive normalization for select options
+        if (f.type === 'select' && rawVal) {
+          const chipGroup = f.chipGroup;
+          const chipList = metadata?.chipGroups?.[chipGroup] || metadata?.chips?.[chipGroup] || [];
+          const match = chipList.find(c => 
+            String(c.value).toLowerCase() === rawVal.toLowerCase() ||
+            String(c.label).toLowerCase() === rawVal.toLowerCase()
+          );
+          if (match) {
+            rawVal = match.value;
+          }
+        }
         
         const errorMsg = validateFieldValue(rawVal, f, db, metadata);
         if (errorMsg) {
