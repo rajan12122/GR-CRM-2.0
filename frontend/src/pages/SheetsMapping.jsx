@@ -866,7 +866,7 @@ const SheetsMapping = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {testResults.preview.map((row, idx) => (
+                    {(testResults.previewRows || []).map((row, idx) => (
                       <TableRow key={idx} hover>
                         <TableCell sx={{ fontWeight: 700 }}>Row {row.rowNumber}</TableCell>
                         <TableCell>
