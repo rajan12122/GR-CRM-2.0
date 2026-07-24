@@ -257,8 +257,13 @@ async function migrate() {
         const valueValues = [];
         const updateSets = [];
 
+        const filteredColumns = columns.filter(c => {
+          const l = c.toLowerCase();
+          return l !== 'created_at' && l !== 'updated_at' && l !== 'createdat' && l !== 'updatedat';
+        });
+
         let index = 1;
-        columns.forEach(col => {
+        filteredColumns.forEach(col => {
           let val = rec[col];
           
           // Coerce boolean types
@@ -293,7 +298,7 @@ async function migrate() {
           index++;
         });
 
-        const colNamesStr = columns.map(c => `"${c}"`).join(', ');
+        const colNamesStr = filteredColumns.map(c => `"${c}"`).join(', ');
         const placeholdersStr = valuePlaceholders.join(', ');
         
         let upsertSql = '';
@@ -356,8 +361,13 @@ async function migrate() {
         const valueValues = [];
         const updateSets = [];
 
+        const filteredCols = cols.filter(c => {
+          const l = c.toLowerCase();
+          return l !== 'created_at' && l !== 'updated_at' && l !== 'createdat' && l !== 'updatedat';
+        });
+
         let index = 1;
-        cols.forEach(col => {
+        filteredCols.forEach(col => {
           let val = rec[col];
           const dbCol = col.replace(/([A-Z])/g, '_$1').toLowerCase();
           
@@ -370,7 +380,7 @@ async function migrate() {
           index++;
         });
 
-        const dbColNames = cols.map(c => c.replace(/([A-Z])/g, '_$1').toLowerCase());
+        const dbColNames = filteredCols.map(c => c.replace(/([A-Z])/g, '_$1').toLowerCase());
         const colNamesStr = dbColNames.join(', ');
         const placeholdersStr = valuePlaceholders.join(', ');
 
