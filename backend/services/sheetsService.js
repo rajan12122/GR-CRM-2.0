@@ -500,6 +500,11 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
       await dbService.runTransaction(async (client) => {
         for (let i = 0; i < mappedRecords.length; i++) {
           const rec = mappedRecords[i];
+
+          if (moduleName === 'properties') {
+            await dbService.handlePropertyDealerAssociation(rec.data, client);
+          }
+
           if (rec.isUpdate) {
             const { id, ...data } = rec.data;
             await dbService.updateRecord(moduleName, id, data, client);
@@ -527,6 +532,11 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
       let nextMockCounter = 1;
       for (let i = 0; i < mappedRecords.length; i++) {
         const rec = mappedRecords[i];
+
+        if (moduleName === 'properties') {
+          await dbService.handlePropertyDealerAssociation(rec.data, null, true); // dryRun = true
+        }
+
         if (rec.isUpdate) {
           metrics.updated++;
         } else {
