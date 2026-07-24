@@ -1673,7 +1673,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       }
 
       if (module === 'properties') {
-        handlePropertyDealerAssociation(payload, db);
+        await handlePropertyDealerAssociation(payload, client);
       }
 
       // Populate basic date tracker if applicable
@@ -1971,7 +1971,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       const oldPayload = { ...db[module][index] };
 
       if (module === 'properties') {
-        handlePropertyDealerAssociation(payload, db);
+        await handlePropertyDealerAssociation(payload, client);
       }
 
       // Enforce unique phone number on update
@@ -3636,7 +3636,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
       }
 
       if (module === 'properties') {
-        handlePropertyDealerAssociation(payload, db);
+        await handlePropertyDealerAssociation(payload, client);
       }
 
       // Normalize default date added keys if not present
