@@ -6,8 +6,8 @@ const dbPath = path.join(__dirname, '../config/db.json');
 const metadataPath = path.join(__dirname, '../config/metadata.json');
 
 if (process.env.RUN_MIGRATION !== 'true') {
-  console.warn('Migration Guard: RUN_MIGRATION environment variable is not set to "true". Refusing to run.');
-  process.exit(1);
+  console.log('Migration Guard: RUN_MIGRATION environment variable is not set to "true". Skipping migration (NO-OP).');
+  process.exit(0);
 }
 
 if (!process.env.DATABASE_URL) {
