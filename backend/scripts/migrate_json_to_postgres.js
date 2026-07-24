@@ -143,6 +143,33 @@ async function migrate() {
       );
     `);
 
+    // Recreate system logging/alert tables to fix schemas
+    await client.query('DROP TABLE IF EXISTS activity_logs, reminders;');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id TEXT PRIMARY KEY,
+        "employeeName" TEXT,
+        action TEXT,
+        "dateTime" TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reminders (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        message TEXT,
+        "dateTime" TEXT,
+        status TEXT,
+        "employeeId" TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      );
+    `);
+
     // 2. Define modules to migrate
     const modulesToMigrate = [
       'employees', 'customers', 'leads', 'properties', 'projects', 'site_visits', 'follow_ups',
@@ -155,7 +182,7 @@ async function migrate() {
     const extraModulesInDb = dbKeys.filter(k => 
       Array.isArray(db[k]) && 
       !modulesToMigrate.includes(k) && 
-      !['remarks', 'documents', 'sync_jobs', 'project_history', 'property_history', 'location_logs'].includes(k)
+      !['remarks', 'documents', 'sync_jobs', 'project_history', 'property_history', 'location_logs', 'activity_logs', 'reminders'].includes(k)
     );
     console.log('Extra modules discovered in db.json:', extraModulesInDb);
     const allModules = [...modulesToMigrate, ...extraModulesInDb];
@@ -333,7 +360,7 @@ async function migrate() {
     }
 
     // 4. Migrate remarks & documents from db.json
-    const specialTables = ['remarks', 'documents', 'sync_jobs', 'project_history', 'property_history', 'location_logs'];
+    const specialTables = ['remarks', 'documents', 'sync_jobs', 'project_history', 'property_history', 'location_logs', 'activity_logs', 'reminders'];
     for (const tbl of specialTables) {
       console.log(`\nMigrating special table: ${tbl}...`);
       const records = db[tbl] || [];
@@ -352,6 +379,10 @@ async function migrate() {
         cols = ['id', 'propertyId', 'field', 'fieldName', 'oldValue', 'newValue', 'date', 'employeeName'];
       } else if (tbl === 'location_logs') {
         cols = ['id', 'employeeId', 'employeeName', 'latitude', 'longitude', 'status', 'timestamp'];
+      } else if (tbl === 'activity_logs') {
+        cols = ['id', 'employeeName', 'action', 'dateTime'];
+      } else if (tbl === 'reminders') {
+        cols = ['id', 'title', 'message', 'dateTime', 'status', 'employeeId'];
       }
 
       let migratedCount = 0;
