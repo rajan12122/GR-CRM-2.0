@@ -498,7 +498,8 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
     if (!dryRun) {
       // Run actual database transactions
       await dbService.runTransaction(async (client) => {
-        for (const rec of mappedRecords) {
+        for (let i = 0; i < mappedRecords.length; i++) {
+          const rec = mappedRecords[i];
           if (rec.isUpdate) {
             const { id, ...data } = rec.data;
             await dbService.updateRecord(moduleName, id, data, client);
@@ -510,12 +511,22 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
             await dbService.insertRecord(moduleName, rec.data, client);
             metrics.imported++;
           }
+
+          if (i < 50) {
+            previewRows.push({
+              rowNumber: i + 2,
+              status: rec.isUpdate ? 'UPDATE' : 'INSERT',
+              data: rec.data,
+              errors: []
+            });
+          }
         }
       });
     } else {
       // In dry run, count preview metrics and populate preview list
       let nextMockCounter = 1;
-      for (const rec of mappedRecords) {
+      for (let i = 0; i < mappedRecords.length; i++) {
+        const rec = mappedRecords[i];
         if (rec.isUpdate) {
           metrics.updated++;
         } else {
@@ -524,7 +535,15 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
             rec.data.id = `NEW-${nextMockCounter++}`;
           }
         }
-        previewRows.push(rec.data);
+
+        if (i < 50) {
+          previewRows.push({
+            rowNumber: i + 2,
+            status: rec.isUpdate ? 'UPDATE' : 'INSERT',
+            data: rec.data,
+            errors: []
+          });
+        }
       }
     }
 
