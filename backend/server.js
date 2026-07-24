@@ -22,23 +22,74 @@ if (!fs.existsSync(uploadsDir)) {
 app.use('/uploads', express.static(uploadsDir));
 
 const {
-  dbPath,
   metadataPath,
-  readDb,
-  writeDb,
   readMetadata,
   writeMetadata,
   runTransaction,
-  generateNextId,
-  handlePropertyDealerAssociation
+  generateNextId: generateNextIdAsync,
+  handlePropertyDealerAssociation,
+  getRecords,
+  getRecord,
+  insertRecord,
+  updateRecord,
+  deleteRecord,
+  loadTransactionDb,
+  syncDbChangesToPostgres,
+  pool
 } = require('./services/dbService');
 
-// Ensure database files exist on boot
-if (!fs.existsSync(metadataPath)) {
-  console.error("Critical Error: config/metadata.json missing!");
+function generateNextId(db, moduleName, prefix) {
+  db.idCounters = db.idCounters || {};
+  const prefixMap = {
+    employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
+    projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
+    tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
+    daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
+    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET',
+    dealers: 'DEAL'
+  };
+  const effPrefix = prefix || prefixMap[moduleName] || String(moduleName).substring(0, 4).toUpperCase();
+
+  if (db.idCounters[moduleName] === undefined) {
+    const list = db[moduleName] || [];
+    let maxNum = 0;
+    list.forEach(rec => {
+      if (rec && rec.id && String(rec.id).startsWith(`${effPrefix}-`)) {
+        const parts = String(rec.id).split('-');
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    db.idCounters[moduleName] = maxNum;
+  }
+
+  db.idCounters[moduleName]++;
+  const nextNum = db.idCounters[moduleName];
+  return `${effPrefix}-${String(nextNum).padStart(3, '0')}`;
 }
-if (!fs.existsSync(dbPath)) {
-  console.error("Critical Error: config/db.json missing!");
+
+let dbCache = null;
+
+function readDb() {
+  if (!dbCache) {
+    console.warn("readDb called before cache was initialized!");
+    return {};
+  }
+  return dbCache;
+}
+
+async function writeDb(db) {
+  dbCache = db;
+  try {
+    await runTransaction(async (client) => {
+      const dbBefore = await loadTransactionDb(client);
+      await syncDbChangesToPostgres(dbBefore, db, client);
+    });
+  } catch (err) {
+    console.error('Error writing dbCache back to PostgreSQL:', err);
+  }
 }
 
 function updateGlobalReferences(db, oldId, newId) {
@@ -89,15 +140,16 @@ function authenticateToken(req, res, next) {
   jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
     if (err) return res.status(403).json({ message: 'Invalid or expired token.' });
     
-    // Check session validity & token version
-    const db = readDb();
-    const employee = (db.employees || []).find(e => e.id === decodedUser.id);
-    if (!employee || employee.status !== 'Active' || (employee.tokenVersion !== undefined && employee.tokenVersion !== decodedUser.tokenVersion)) {
-      return res.status(403).json({ message: 'Session has expired or been revoked. Please log in again.' });
-    }
-    
-    req.user = decodedUser;
-    next();
+    // Check session validity & token version from PostgreSQL
+    getRecord('employees', decodedUser.id).then(employee => {
+      if (!employee || employee.status !== 'Active' || (employee.tokenVersion !== undefined && employee.tokenVersion !== decodedUser.tokenVersion)) {
+        return res.status(403).json({ message: 'Session has expired or been revoked. Please log in again.' });
+      }
+      req.user = decodedUser;
+      next();
+    }).catch(err => {
+      return res.status(500).json({ message: 'Session verification database error.' });
+    });
   });
 }
 
@@ -132,55 +184,61 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ message: 'Email and password required.' });
   }
 
-  const db = readDb();
-  const employee = db.employees.find(emp => emp.email.toLowerCase() === email.toLowerCase());
+  pool.query('SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]).then(result => {
+    const employee = result.rows[0];
+    if (!employee) {
+      return res.status(401).json({ message: 'Invalid credentials.' });
+    }
 
-  if (!employee) {
-    return res.status(401).json({ message: 'Invalid credentials.' });
-  }
+    if (employee.status !== 'Active') {
+      return res.status(403).json({ message: 'Employee account is inactive.' });
+    }
 
-  if (employee.status !== 'Active') {
-    return res.status(403).json({ message: 'Employee account is inactive.' });
-  }
+    // Strictly check bcrypt hash
+    const hash = employee.passwordHash;
+    if (!hash) {
+      return res.status(401).json({ message: 'Account is not configured with a login password. Please contact the Admin.' });
+    }
 
-  // Strictly check bcrypt hash
-  const hash = employee.passwordHash;
-  if (!hash) {
-    return res.status(401).json({ message: 'Account is not configured with a login password. Please contact the Admin.' });
-  }
+    const isValidPassword = bcrypt.compareSync(password, hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid credentials.' });
+    }
 
-  const isValidPassword = bcrypt.compareSync(password, hash);
-  if (!isValidPassword) {
-    return res.status(401).json({ message: 'Invalid credentials.' });
-  }
+    const tokenVersion = employee.tokenVersion || 1;
+    const token = jwt.sign(
+      { id: employee.id, name: employee.name, email: employee.email, role: employee.role, tokenVersion },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
 
-  const tokenVersion = employee.tokenVersion || 1;
-  const token = jwt.sign(
-    { id: employee.id, name: employee.name, email: employee.email, role: employee.role, tokenVersion },
-    JWT_SECRET,
-    { expiresIn: '8h' }
-  );
+    const sanitizedUser = {
+      id: employee.id,
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+      status: employee.status
+    };
 
-  const sanitizedUser = {
-    id: employee.id,
-    name: employee.name,
-    email: employee.email,
-    role: employee.role,
-    status: employee.status
-  };
-
-  res.json({ token, user: sanitizedUser });
+    res.json({ token, user: sanitizedUser });
+  }).catch(err => {
+    console.error('Login database error:', err);
+    res.status(500).json({ message: 'Database error during login.' });
+  });
 });
 
-app.get('/api/auth/me', authenticateToken, (req, res) => {
-  const db = readDb();
-  const employee = db.employees.find(emp => emp.id === req.user.id);
-  if (!employee) return res.status(404).json({ message: 'Profile not found.' });
-  res.json(employee);
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const employee = await getRecord('employees', req.user.id);
+    if (!employee) return res.status(404).json({ message: 'Profile not found.' });
+    res.json(employee);
+  } catch (err) {
+    console.error('Get profile database error:', err);
+    res.status(500).json({ message: 'Database error fetching profile.' });
+  }
 });
 
-app.post('/api/auth/admin/reset-password', authenticateToken, (req, res) => {
-  // Enforce Admin role authorization in the backend
+app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) => {
   if (req.user.role !== 'Admin') {
     return res.status(403).json({ message: 'Access denied: Only Admins can set or reset employee passwords.' });
   }
@@ -194,43 +252,41 @@ app.post('/api/auth/admin/reset-password', authenticateToken, (req, res) => {
     return res.status(400).json({ message: 'Passwords do not match.' });
   }
 
-  // Password strength validation (min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special character)
   const strengthRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
   if (!strengthRegex.test(password)) {
     return res.status(400).json({ message: 'Password must be at least 8 characters long, contain at least one uppercase letter, one lowercase letter, one number, and one special character.' });
   }
 
-  const db = readDb();
-  const employee = db.employees.find(e => e.id === employeeId);
-  if (!employee) {
-    return res.status(404).json({ message: 'Employee account not found.' });
+  try {
+    const employee = await getRecord('employees', employeeId);
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee account not found.' });
+    }
+
+    const salt = bcrypt.genSaltSync(12);
+    const hash = bcrypt.hashSync(password, salt);
+    const newTokenVersion = (employee.tokenVersion || 1) + 1;
+
+    await runTransaction(async (client) => {
+      await client.query(
+        'UPDATE employees SET "passwordHash" = $1, "tokenVersion" = $2 WHERE id = $3',
+        [hash, newTokenVersion, employeeId]
+      );
+
+      const auditLog = {
+        id: `LOG-AUD-${Date.now()}`,
+        employeeName: req.user.name,
+        action: `Reset password for employee: ${employee.name} (${employee.id})`,
+        dateTime: new Date().toLocaleString()
+      };
+      await insertRecord('activity_logs', auditLog, client);
+    });
+
+    res.json({ success: true, message: `Password for employee ${employee.name} updated successfully. Active sessions revoked.` });
+  } catch (err) {
+    console.error('Reset password database error:', err);
+    res.status(500).json({ message: 'Database error resetting password: ' + err.message });
   }
-
-  // Hash using secure cost factor (12 rounds)
-  const salt = bcrypt.genSaltSync(12);
-  const hash = bcrypt.hashSync(password, salt);
-
-  employee.passwordHash = hash;
-  
-  // Invalidate any active sessions by incrementing version
-  employee.tokenVersion = (employee.tokenVersion || 1) + 1;
-
-  // Remove any legacy plaintext password field
-  delete employee.password;
-
-  // Add audit log
-  const auditLog = {
-    id: `LOG-AUD-${Date.now()}`,
-    employeeName: req.user.name,
-    action: `Reset password for employee: ${employee.name} (${employee.id})`,
-    dateTime: new Date().toLocaleString()
-  };
-  if (!db.activity_logs) db.activity_logs = [];
-  db.activity_logs.unshift(auditLog);
-
-  writeDb(db);
-
-  res.json({ success: true, message: `Password for employee ${employee.name} updated successfully. Active sessions revoked.` });
 });
 
 // --- METADATA ROUTES (Schema changes) ---
@@ -750,13 +806,10 @@ function handlePitchStatusChange(p, db, req) {
         f.pitchRemarks = p.remarks || f.pitchRemarks;
         
         // Trigger automated post-pipeline action handlers (like auto-creating site visits!)
-        setTimeout(() => {
-          const freshDb = readDb();
-          const freshFollowUp = (freshDb.follow_ups || []).find(x => x.id === f.id);
-          if (freshFollowUp) {
-            handleFollowUpPipelineAction(freshFollowUp, freshDb, req);
-          }
-        }, 10);
+        const freshFollowUp = (db.follow_ups || []).find(x => x.id === f.id);
+        if (freshFollowUp) {
+          handleFollowUpPipelineAction(freshFollowUp, db, req);
+        }
       }
       return f;
     });
@@ -1499,71 +1552,81 @@ app.get('/api/data/:module', authenticateToken, (req, res, next) => {
     return next();
   }
   checkPermission(module, 'view')(req, res, next);
-}, (req, res) => {
+}, async (req, res) => {
   const { module } = req.params;
   const { role } = req.user;
-  const db = readDb();
-  let records = db[module] || [];
   
-  if (role !== 'Admin') {
-    if (module === 'leads') {
-      const myFollowUpCustomerIds = (db.follow_ups || [])
-        .filter(f => String(f.employeeId) === String(req.user.id))
-        .map(f => String(f.customerId));
-      const mySiteVisitCustomerIds = (db.site_visits || [])
-        .filter(sv => String(sv.employeeId) === String(req.user.id))
-        .map(sv => String(sv.customerId));
-      const myPitchCustomerIds = (db.property_pitch_history || [])
-        .filter(p => String(p.employeeId) === String(req.user.id))
-        .map(p => String(p.customerId));
-      
-      records = records.filter(r => 
-        String(r.assignedEmployeeId) === String(req.user.id) ||
-        myFollowUpCustomerIds.includes(String(r.id)) ||
-        mySiteVisitCustomerIds.includes(String(r.id)) ||
-        myPitchCustomerIds.includes(String(r.id))
-      );
-    } else if (module === 'follow_ups') {
-      records = records.filter(r => String(r.employeeId) === String(req.user.id));
-    } else if (module === 'queries') {
-      const myFollowUpQueryIds = (db.follow_ups || [])
-        .filter(f => String(f.employeeId) === String(req.user.id))
-        .map(f => String(f.queryId));
-      records = records.filter(r => 
-        String(r.assignedEmployeeId) === String(req.user.id) ||
-        myFollowUpQueryIds.includes(String(r.id))
-      );
-    } else if (module === 'property_pitch_history') {
-      records = records.filter(r => String(r.employeeId) === String(req.user.id));
-    } else if (module === 'site_visits') {
-      records = records.filter(r => String(r.employeeId) === String(req.user.id));
-    } else if (module === 'salaries') {
-      records = records.filter(r => String(r.employeeId) === String(req.user.id));
+  try {
+    let records = await getRecords(module);
+    
+    if (role !== 'Admin') {
+      if (module === 'leads') {
+        const followUps = await getRecords('follow_ups');
+        const siteVisits = await getRecords('site_visits');
+        const pitches = await getRecords('property_pitch_history');
+        
+        const myFollowUpCustomerIds = followUps
+          .filter(f => String(f.employeeId) === String(req.user.id))
+          .map(f => String(f.customerId));
+        const mySiteVisitCustomerIds = siteVisits
+          .filter(sv => String(sv.employeeId) === String(req.user.id))
+          .map(sv => String(sv.customerId));
+        const myPitchCustomerIds = pitches
+          .filter(p => String(p.employeeId) === String(req.user.id))
+          .map(p => String(p.customerId));
+        
+        records = records.filter(r => 
+          String(r.assignedEmployeeId) === String(req.user.id) ||
+          myFollowUpCustomerIds.includes(String(r.id)) ||
+          mySiteVisitCustomerIds.includes(String(r.id)) ||
+          myPitchCustomerIds.includes(String(r.id))
+        );
+      } else if (module === 'follow_ups') {
+        records = records.filter(r => String(r.employeeId) === String(req.user.id));
+      } else if (module === 'queries') {
+        const followUps = await getRecords('follow_ups');
+        const myFollowUpQueryIds = followUps
+          .filter(f => String(f.employeeId) === String(req.user.id))
+          .map(f => String(f.queryId));
+        records = records.filter(r => 
+          String(r.assignedEmployeeId) === String(req.user.id) ||
+          myFollowUpQueryIds.includes(String(r.id))
+        );
+      } else if (module === 'property_pitch_history') {
+        records = records.filter(r => String(r.employeeId) === String(req.user.id));
+      } else if (module === 'site_visits') {
+        records = records.filter(r => String(r.employeeId) === String(req.user.id));
+      } else if (module === 'salaries') {
+        records = records.filter(r => String(r.employeeId) === String(req.user.id));
+      }
     }
-  }
-  
-  // Apply field-level filtering for non-Admin roles
-  const metadata = readMetadata();
-  if (role !== 'Admin' && metadata.fieldPermissions && metadata.fieldPermissions[role]) {
-    const allowedFields = metadata.fieldPermissions[role][module];
-    if (allowedFields) {
-      const filteredRecords = records.map(record => {
-        const filteredRecord = {};
-        allowedFields.forEach(field => {
-          if (record[field] !== undefined) {
-            filteredRecord[field] = record[field];
+    
+    // Apply field-level filtering for non-Admin roles
+    const metadata = readMetadata();
+    if (role !== 'Admin' && metadata.fieldPermissions && metadata.fieldPermissions[role]) {
+      const allowedFields = metadata.fieldPermissions[role][module];
+      if (allowedFields) {
+        const filteredRecords = records.map(record => {
+          const filteredRecord = {};
+          allowedFields.forEach(field => {
+            if (record[field] !== undefined) {
+              filteredRecord[field] = record[field];
+            }
+          });
+          if (record.id) {
+            filteredRecord.id = record.id;
           }
+          return filteredRecord;
         });
-        if (record.id) {
-          filteredRecord.id = record.id;
-        }
-        return filteredRecord;
-      });
-      return res.json(filteredRecords);
+        return res.json(filteredRecords);
+      }
     }
-  }
 
-  res.json(records);
+    res.json(records);
+  } catch (err) {
+    console.error('Error fetching data for module:', module, err);
+    res.status(500).json({ message: 'Database error fetching module data.' });
+  }
 });
 
 app.post('/api/data/:module', authenticateToken, (req, res, next) => {
@@ -1580,7 +1643,9 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
   }
 
   try {
-    const result = await runTransaction(async (db) => {
+    const result = await runTransaction(async (client) => {
+      const dbBefore = await loadTransactionDb(client);
+      const db = JSON.parse(JSON.stringify(dbBefore));
       // Generate automated primary key if not provided (e.g. CUST-003)
       if (!payload.id) {
         const prefixMap = {
@@ -1853,6 +1918,8 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (!db.activity_logs) db.activity_logs = [];
       db.activity_logs.unshift(log);
 
+      // Sync changes back to Postgres
+      await syncDbChangesToPostgres(dbBefore, db, client);
       return payload;
     });
 
@@ -1880,7 +1947,9 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
   }
 
   try {
-    const result = await runTransaction(async (db) => {
+    const result = await runTransaction(async (client) => {
+      const dbBefore = await loadTransactionDb(client);
+      const db = JSON.parse(JSON.stringify(dbBefore));
       const index = db[module].findIndex(rec => String(rec.id) === String(id));
       if (index === -1) {
         throw new Error(`Record ${id} not found.`);
@@ -2061,6 +2130,8 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       if (!db.activity_logs) db.activity_logs = [];
       db.activity_logs.unshift(log);
 
+      // Sync changes back to Postgres
+      await syncDbChangesToPostgres(dbBefore, db, client);
       return db[module][index];
     });
 
@@ -2086,7 +2157,9 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
   const { module, id } = req.params;
 
   try {
-    const result = await runTransaction(async (db) => {
+    const result = await runTransaction(async (client) => {
+      const dbBefore = await loadTransactionDb(client);
+      const db = JSON.parse(JSON.stringify(dbBefore));
       if (!db[module]) {
         throw new Error(`Module ${module} is empty.`);
       }
@@ -2190,6 +2263,8 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       if (!db.activity_logs) db.activity_logs = [];
       db.activity_logs.unshift(log);
 
+      // Sync changes back to Postgres
+      await syncDbChangesToPostgres(dbBefore, db, client);
       return true;
     });
 
@@ -2213,119 +2288,132 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
     return res.status(400).json({ message: 'Invalid IDs array.' });
   }
 
-  const db = readDb();
-  if (!db[module]) return res.status(404).json({ message: `Module ${module} is empty.` });
+  try {
+    await runTransaction(async (client) => {
+      const dbBefore = await loadTransactionDb(client);
+      const db = JSON.parse(JSON.stringify(dbBefore));
+      
+      if (!db[module]) throw new Error(`Module ${module} is empty.`);
 
-  // Delete all matches
-  db[module] = db[module].filter(rec => !ids.includes(String(rec.id)));
+      // Delete all matches
+      db[module] = db[module].filter(rec => !ids.includes(String(rec.id)));
 
-  // If lead or customer deleted, delete child followups etc.
-  if (module === 'leads' || module === 'customers') {
-    ids.forEach(id => {
-      const rec = (db[module] || []).find(r => String(r.id) === String(id));
-      if (!rec) return;
+      // If lead or customer deleted, delete child followups etc.
+      if (module === 'leads' || module === 'customers') {
+        ids.forEach(id => {
+          const rec = (dbBefore[module] || []).find(r => String(r.id) === String(id));
+          if (!rec) return;
 
-      const targetPhone = String(rec.phone || '').trim();
-      const targetEmail = String(rec.email || '').trim();
+          const targetPhone = String(rec.phone || '').trim();
+          const targetEmail = String(rec.email || '').trim();
 
-      // 1. Cross-delete client/lead
-      if (module === 'leads') {
-        db.customers = (db.customers || []).filter(c => 
-          String(c.leadId) !== String(id) && 
-          (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
-          (targetEmail === '' || String(c.email).trim() !== targetEmail)
-        );
-      } else {
-        db.leads = (db.leads || []).filter(l => 
-          String(l.id) !== String(rec.leadId) && 
-          (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
-          (targetEmail === '' || String(l.email).trim() !== targetEmail)
-        );
+          // 1. Cross-delete client/lead
+          if (module === 'leads') {
+            db.customers = (db.customers || []).filter(c => 
+              String(c.leadId) !== String(id) && 
+              (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
+              (targetEmail === '' || String(c.email).trim() !== targetEmail)
+            );
+          } else {
+            db.leads = (db.leads || []).filter(l => 
+              String(l.id) !== String(rec.leadId) && 
+              (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
+              (targetEmail === '' || String(l.email).trim() !== targetEmail)
+            );
+          }
+
+          // 2. Query IDs
+          const customerQueries = (dbBefore.queries || []).filter(q => String(q.customerId) === String(id));
+          const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
+
+          // 3. Properties
+          db.properties = (db.properties || []).filter(p => {
+            if (String(p.booked_by_customer_id) === String(id)) return false;
+            if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
+            if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
+            return true;
+          });
+
+          // 4. Follow ups
+          db.follow_ups = (db.follow_ups || []).filter(f => 
+            String(f.customerId) !== String(id) && 
+            (!f.queryId || !customerQueryIds.has(String(f.queryId)))
+          );
+
+          // 5. Queries
+          db.queries = (db.queries || []).filter(q => String(q.customerId) !== String(id));
+
+          // 6. Site visits
+          db.site_visits = (db.site_visits || []).filter(s => String(s.customerId) !== String(id));
+
+          // 7. Pitches
+          db.property_pitch_history = (db.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
+
+          // 8. Sales bookings
+          db.sales = (db.sales || []).filter(s => 
+            String(s.customerId) !== String(id) || 
+            (targetPhone !== '' && String(s.customerPhone).trim() === targetPhone)
+          );
+
+          // 9. Deals
+          db.deals = (db.deals || []).filter(d => String(d.customerId) !== String(id));
+        });
+      }
+      if (module === 'deals') {
+        ids.forEach(id => {
+          db.properties = db.properties || [];
+          db.properties.forEach(p => {
+            if (p.owner_history) {
+              p.owner_history = p.owner_history.filter(h => String(h.dealId) !== String(id));
+            }
+          });
+        });
+      }
+      if (module === 'queries') {
+        ids.forEach(id => {
+          db.follow_ups = (db.follow_ups || []).filter(f => String(f.queryId) !== String(id));
+          db.properties = (db.properties || []).filter(p => String(p.linkedQueryId) !== String(id));
+        });
       }
 
-      // 2. Query IDs
-      const customerQueries = (db.queries || []).filter(q => String(q.customerId) === String(id));
-      const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
+      // Track Activity Log
+      const log = {
+        id: `LOG-${Date.now()}`,
+        employeeName: req.user.name,
+        action: `Bulk deleted ${ids.length} records in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+      if (!db.activity_logs) db.activity_logs = [];
+      db.activity_logs.unshift(log);
 
-      // 3. Properties
-      db.properties = (db.properties || []).filter(p => {
-        if (String(p.booked_by_customer_id) === String(id)) return false;
-        if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
-        if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
-        return true;
-      });
-
-      // 4. Follow ups
-      db.follow_ups = (db.follow_ups || []).filter(f => 
-        String(f.customerId) !== String(id) && 
-        (!f.queryId || !customerQueryIds.has(String(f.queryId)))
-      );
-
-      // 5. Queries
-      db.queries = (db.queries || []).filter(q => String(q.customerId) !== String(id));
-
-      // 6. Site visits
-      db.site_visits = (db.site_visits || []).filter(s => String(s.customerId) !== String(id));
-
-      // 7. Pitches
-      db.property_pitch_history = (db.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
-
-      // 8. Sales bookings
-      db.sales_bookings = (db.sales_bookings || []).filter(s => 
-        String(s.customerId) !== String(id) || 
-        (targetPhone !== '' && String(s.customerPhone).trim() === targetPhone)
-      );
-
-      // 9. Deals
-      db.deals = (db.deals || []).filter(d => String(d.customerId) !== String(id));
+      // Sync changes back to Postgres
+      await syncDbChangesToPostgres(dbBefore, db, client);
     });
 
-    try { syncToSheets('leads'); } catch(e) {}
-    try { syncToSheets('customers'); } catch(e) {}
-    try { syncToSheets('properties'); } catch(e) {}
-    try { syncToSheets('follow_ups'); } catch(e) {}
-    try { syncToSheets('queries'); } catch(e) {}
-    try { syncToSheets('site_visits'); } catch(e) {}
-    try { syncToSheets('property_pitch_history'); } catch(e) {}
-    try { syncToSheets('sales_bookings'); } catch(e) {}
-    try { syncToSheets('deals'); } catch(e) {}
+    try { syncToSheets(module); } catch(e) {}
+    if (module === 'leads' || module === 'customers') {
+      try { syncToSheets('leads'); } catch(e) {}
+      try { syncToSheets('customers'); } catch(e) {}
+      try { syncToSheets('properties'); } catch(e) {}
+      try { syncToSheets('follow_ups'); } catch(e) {}
+      try { syncToSheets('queries'); } catch(e) {}
+      try { syncToSheets('site_visits'); } catch(e) {}
+      try { syncToSheets('property_pitch_history'); } catch(e) {}
+      try { syncToSheets('sales'); } catch(e) {}
+      try { syncToSheets('deals'); } catch(e) {}
+    }
+    if (module === 'deals') {
+      try { syncToSheets('properties'); } catch(e) {}
+    }
+    if (module === 'queries') {
+      try { syncToSheets('follow_ups'); } catch(e) {}
+      try { syncToSheets('properties'); } catch(e) {}
+    }
+
+    res.json({ success: true, message: `Successfully deleted ${ids.length} records.` });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
-  if (module === 'deals') {
-    ids.forEach(id => {
-      db.properties = db.properties || [];
-      db.properties.forEach(p => {
-        if (p.owner_history) {
-          p.owner_history = p.owner_history.filter(h => String(h.dealId) !== String(id));
-        }
-      });
-    });
-    try { syncToSheets('properties'); } catch(e) {}
-  }
-  if (module === 'queries') {
-    ids.forEach(id => {
-      db.follow_ups = (db.follow_ups || []).filter(f => String(f.queryId) !== String(id));
-      db.properties = (db.properties || []).filter(p => String(p.linkedQueryId) !== String(id));
-    });
-    try { syncToSheets('follow_ups'); } catch(e) {}
-    try { syncToSheets('properties'); } catch(e) {}
-  }
-
-  // Do NOT shift or resequence sequential IDs on delete to preserve relationship integrity
-
-  // Track Activity Log
-  const log = {
-    id: `LOG-${Date.now()}`,
-    employeeName: req.user.name,
-    action: `Bulk deleted ${ids.length} records in ${module}`,
-    dateTime: new Date().toLocaleString()
-  };
-  if (!db.activity_logs) db.activity_logs = [];
-  db.activity_logs.unshift(log);
-
-  writeDb(db);
-  try { syncToSheets(module); } catch(e) {}
-
-  res.json({ success: true, message: `Successfully deleted ${ids.length} records.` });
 });
 
 const ALGORITHM = 'aes-256-gcm';
@@ -4197,8 +4285,21 @@ app.post('/api/sync/dashboard/reconcile-confirm/:module', authenticateToken, che
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Gagan Realtech ERP+CRM API Server running on port ${PORT}`);
+  try {
+    const client = await pool.connect();
+    try {
+      dbCache = await loadTransactionDb(client);
+      console.log('Successfully initialized dbCache from PostgreSQL.');
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Failed to initialize dbCache from PostgreSQL:', err);
+    process.exit(1);
+  }
+
   try {
     const db = readDb();
     let updated = false;

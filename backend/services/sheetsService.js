@@ -1,18 +1,18 @@
 const crypto = require('crypto');
 const { google } = require('googleapis');
-const { dbPath, metadataPath, readDb, writeDb, readMetadata, writeMetadata, runTransaction, generateNextId, handlePropertyDealerAssociation } = require('./dbService');
+const dbService = require('./dbService');
 
 // Memory queue locks for concurrency protection
 const queueLocks = {};
 let isProcessingQueue = false;
 
-// Helper to load sheets config from metadata.json or environment variables
+// Helper to load sheets config
 function getSheetsConfig() {
   let spreadsheetId = null;
   let syncActive = false;
   
   try {
-    const metadata = readMetadata();
+    const metadata = dbService.readMetadata();
     if (metadata && metadata.sheetsConfig) {
       spreadsheetId = metadata.sheetsConfig.spreadsheetId;
       syncActive = metadata.sheetsConfig.syncActive === true || metadata.sheetsConfig.syncActive === 'true';
@@ -21,7 +21,7 @@ function getSheetsConfig() {
     // Ignore
   }
 
-  // Fallback to environment variables if not found in metadata
+  // Fallback to environment variables
   if (!spreadsheetId) {
     spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
   }
@@ -81,7 +81,7 @@ function getSheetsClient(config) {
 // Helper to get module headers
 function getModuleHeaders(moduleName) {
   try {
-    const metadata = readMetadata();
+    const metadata = dbService.readMetadata();
     const fields = (metadata.modules[moduleName] && metadata.modules[moduleName].fields) || [];
     const headers = fields.map(f => f.name);
     if (!headers.includes('crm_id')) {
@@ -98,42 +98,35 @@ function getModuleHeaders(moduleName) {
  */
 async function syncToSheets(moduleName) {
   try {
-    const db = readDb();
-    db.sync_jobs = db.sync_jobs || [];
-
-    // Calculate idempotency key for this module sync operation
-    const lastRecId = db[moduleName] && db[moduleName].length > 0 ? db[moduleName][db[moduleName].length - 1].id : 'empty';
-    const hash = crypto.createHash('md5').update(`moduleSync:${moduleName}:${db[moduleName]?.length || 0}:${lastRecId}`).digest('hex');
+    const records = await dbService.getRecords(moduleName);
+    const lastRecId = records.length > 0 ? records[records.length - 1].id : 'empty';
+    const hash = crypto.createHash('md5').update(`moduleSync:${moduleName}:${records.length}:${lastRecId}`).digest('hex');
     const idempotencyKey = `module:${hash}`;
 
     // Prevent duplicate enqueues if one is already pending or processing
-    const duplicateJob = db.sync_jobs.find(j => 
-      j.idempotencyKey === idempotencyKey && 
-      (j.status === 'PENDING' || j.status === 'PROCESSING')
-    );
-    if (duplicateJob) {
-      return duplicateJob.id;
+    const duplicateRes = await dbService.pool.query(`
+      SELECT id FROM sync_jobs 
+      WHERE idempotency_key = $1 AND (status = 'PENDING' OR status = 'PROCESSING')
+    `, [idempotencyKey]);
+
+    if (duplicateRes.rows.length > 0) {
+      return duplicateRes.rows[0].id;
     }
 
     const jobId = `JOB-MOD-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
-    const newJob = {
-      id: jobId,
-      moduleName,
-      crmRecordId: 'ALL',
-      operationType: 'MODULE_SYNC',
-      attemptCount: 0,
-      maxAttempts: 5,
-      lastError: null,
-      idempotencyKey,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      syncedAt: null,
-      nextAttemptAt: new Date().toISOString()
-    };
+    const now = new Date().toISOString();
 
-    db.sync_jobs.push(newJob);
-    writeDb(db);
+    await dbService.pool.query(`
+      INSERT INTO sync_jobs (
+        id, module_name, crm_record_id, operation_type, attempt_count, 
+        max_attempts, last_error, idempotency_key, status, 
+        created_at, updated_at, synced_at, next_attempt_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `, [
+      jobId, moduleName, 'ALL', 'MODULE_SYNC', 0,
+      5, null, idempotencyKey, 'PENDING', now, now, null, now
+    ]);
     
     // Trigger the queue runner
     setImmediate(() => processSyncQueue());
@@ -145,7 +138,7 @@ async function syncToSheets(moduleName) {
 }
 
 /**
- * Process the JSON-db sync queue
+ * Process the Postgres sync queue
  */
 async function processSyncQueue() {
   if (isProcessingQueue) return;
@@ -162,22 +155,23 @@ async function processSyncQueue() {
     const spreadsheetId = config.spreadsheetId;
 
     while (true) {
-      const db = readDb();
-      db.sync_jobs = db.sync_jobs || [];
       const now = new Date().toISOString();
 
       // Find next pending or failed job to process
-      const jobIndex = db.sync_jobs.findIndex(j => 
-        (j.status === 'PENDING' || (j.status === 'FAILED' && j.attemptCount < j.maxAttempts)) &&
-        (!j.nextAttemptAt || j.nextAttemptAt <= now)
-      );
+      const nextJobRes = await dbService.pool.query(`
+        SELECT * FROM sync_jobs
+        WHERE (status = 'PENDING' OR (status = 'FAILED' AND attempt_count < max_attempts))
+          AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+        ORDER BY created_at ASC
+        LIMIT 1
+      `, [now]);
 
-      if (jobIndex === -1) {
+      if (nextJobRes.rows.length === 0) {
         break;
       }
 
-      const job = db.sync_jobs[jobIndex];
-      const lockKey = `${job.moduleName}`;
+      const job = nextJobRes.rows[0];
+      const lockKey = `${job.module_name}`;
 
       if (queueLocks[lockKey]) {
         break; // Lock busy for this module
@@ -185,12 +179,15 @@ async function processSyncQueue() {
 
       // Acquire Lock
       queueLocks[lockKey] = true;
-      job.status = 'PROCESSING';
-      job.updatedAt = new Date().toISOString();
-      writeDb(db);
+
+      await dbService.pool.query(`
+        UPDATE sync_jobs 
+        SET status = 'PROCESSING', updated_at = $1 
+        WHERE id = $2
+      `, [new Date().toISOString(), job.id]);
 
       try {
-        const sheetName = `data_${job.moduleName}`;
+        const sheetName = `data_${job.module_name}`;
         
         // Retrieve spreadsheet metadata
         const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -208,42 +205,40 @@ async function processSyncQueue() {
         }
 
         const sheetId = sheet.properties ? sheet.properties.sheetId : sheet.sheetId;
-        const headers = getModuleHeaders(job.moduleName);
-        const dbRecords = db[job.moduleName] || [];
+        const headers = getModuleHeaders(job.module_name);
+        const dbRecords = await dbService.getRecords(job.module_name);
 
         // Execute row-level comparative sync
         await syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbRecords, headers);
 
         // Update job to success
-        const updatedDb = readDb();
-        const freshJob = updatedDb.sync_jobs.find(j => j.id === job.id);
-        if (freshJob) {
-          freshJob.status = 'SUCCESS';
-          freshJob.syncedAt = new Date().toISOString();
-          freshJob.updatedAt = new Date().toISOString();
-          freshJob.lastError = null;
-          writeDb(updatedDb);
-        }
+        await dbService.pool.query(`
+          UPDATE sync_jobs
+          SET status = 'SUCCESS', synced_at = $1, updated_at = $2, last_error = null
+          WHERE id = $3
+        `, [new Date().toISOString(), new Date().toISOString(), job.id]);
 
       } catch (err) {
         console.error(`[Queue Worker] Sync job ${job.id} failed:`, err.message);
 
-        const updatedDb = readDb();
-        const freshJob = updatedDb.sync_jobs.find(j => j.id === job.id);
-        if (freshJob) {
-          freshJob.attemptCount += 1;
-          freshJob.lastError = err.message;
-          freshJob.updatedAt = new Date().toISOString();
+        const attemptCount = job.attempt_count + 1;
+        let nextAttemptAt = now;
+        let newStatus = 'FAILED';
 
-          if (freshJob.attemptCount >= freshJob.maxAttempts) {
-            freshJob.status = 'FAILED';
-          } else {
-            // Exponential backoff
-            const delaySec = Math.pow(2, freshJob.attemptCount) * 10;
-            freshJob.nextAttemptAt = new Date(Date.now() + delaySec * 1000).toISOString();
-          }
-          writeDb(updatedDb);
+        if (attemptCount >= job.max_attempts) {
+          newStatus = 'FAILED';
+        } else {
+          // Exponential backoff
+          const delaySec = Math.pow(2, attemptCount) * 10;
+          nextAttemptAt = new Date(Date.now() + delaySec * 1000).toISOString();
         }
+
+        await dbService.pool.query(`
+          UPDATE sync_jobs
+          SET attempt_count = $1, last_error = $2, updated_at = $3, status = $4, next_attempt_at = $5
+          WHERE id = $6
+        `, [attemptCount, err.message, new Date().toISOString(), newStatus, nextAttemptAt, job.id]);
+
       } finally {
         delete queueLocks[lockKey];
       }
@@ -259,7 +254,6 @@ async function processSyncQueue() {
  * Performs comparison and row-level updates/deletes/creations
  */
 async function syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbRecords, headers) {
-  // Fetch columns up to Column Z
   const getRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${sheetName}!A1:Z10000`
@@ -339,7 +333,6 @@ async function syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbR
     }
   }
 
-  // Delete from bottom to top to preserve correct indices
   deleteRowIndices.sort((a, b) => b - a);
   for (const index of deleteRowIndices) {
     await sheets.spreadsheets.batchUpdate({
@@ -361,120 +354,18 @@ async function syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbR
 }
 
 /**
- * One-Way Incremental Import from Google Sheet -> CRM DB
- * Reads rows from Google Sheets, appends ONLY NEW rows into CRM database.
- * Does NOT duplicate existing records, and does NOT delete any CRM rows if removed from Google Sheets.
+ * DEPRECATED: One-Way Incremental Import from Google Sheet -> CRM DB
  */
 async function syncFromSheetsIncremental(targetModule = null) {
-  const config = getSheetsConfig();
-  const sheets = getSheetsClient(config);
-  if (!sheets || !config.spreadsheetId) {
-    throw new Error('Google Sheets integration is not configured or disabled in environment settings.');
-  }
-
-  const spreadsheetId = config.spreadsheetId;
-  const meta = await sheets.spreadsheets.get({ spreadsheetId });
-  const allSheets = meta.data.sheets || [];
-
-  const metadata = readMetadata();
-  const modulesToSync = targetModule ? [targetModule] : Object.keys(metadata.modules || {});
-  
-  // Fetch all sheet data first (outside of mutex lock)
-  const sheetsData = {};
-  for (const mod of modulesToSync) {
-    const sheetName = `data_${mod}`;
-    const sheetObj = allSheets.find(s => s.properties && s.properties.title === sheetName);
-    if (!sheetObj) continue;
-
-    try {
-      const getRes = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${sheetName}!A1:Z10000`
-      });
-      sheetsData[mod] = getRes.data.values || [];
-    } catch (e) {
-      console.error(`Failed to read sheet for ${mod}:`, e.message);
-    }
-  }
-
-  const importSummary = { added: 0, skipped: 0, details: {} };
-  const prefixMap = {
-    employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
-    projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
-    tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
-    daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
-  };
-
-  // Run DB writes inside transaction Mutex
-  await runTransaction(async (db) => {
-    for (const mod of modulesToSync) {
-      const rows = sheetsData[mod];
-      if (!rows || rows.length < 2) continue;
-
-      const rawHeaders = rows[0] || [];
-      const headers = rawHeaders.map(h => String(h).trim());
-      const lowerHeaders = headers.map(h => h.toLowerCase());
-
-      const crmIdIdx = lowerHeaders.indexOf('crm_id') !== -1 ? lowerHeaders.indexOf('crm_id') : lowerHeaders.indexOf('id');
-      const phoneIdx = lowerHeaders.indexOf('phone') !== -1 ? lowerHeaders.indexOf('phone') : lowerHeaders.indexOf('contact_number');
-
-      db[mod] = db[mod] || [];
-      const existingList = db[mod];
-      const prefix = prefixMap[mod] || mod.substring(0, 4).toUpperCase();
-
-      let modAdded = 0;
-      let modSkipped = 0;
-
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) continue;
-
-        const rowCrmId = crmIdIdx !== -1 && row[crmIdIdx] ? String(row[crmIdIdx]).trim() : '';
-        const rowPhone = phoneIdx !== -1 && row[phoneIdx] ? String(row[phoneIdx]).trim() : '';
-
-        let exists = false;
-        if (rowCrmId) {
-          exists = existingList.some(rec => String(rec.id) === rowCrmId);
-        }
-        if (!exists && rowPhone) {
-          exists = existingList.some(rec => rec.phone && String(rec.phone).trim() === rowPhone);
-        }
-
-        if (exists) {
-          modSkipped++;
-          continue;
-        }
-
-        const newRec = {};
-        headers.forEach((h, colIdx) => {
-          if (h.toLowerCase() === 'crm_id') return;
-          const fieldName = h;
-          const val = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
-          newRec[fieldName] = val;
-        });
-
-        // Use sequential persistent ID counter
-        newRec.id = generateNextId(db, mod, prefix);
-
-        existingList.push(newRec);
-        modAdded++;
-      }
-
-      importSummary.added += modAdded;
-      importSummary.skipped += modSkipped;
-      importSummary.details[mod] = { added: modAdded, skipped: modSkipped };
-    }
-  });
-
-  return importSummary;
+  console.warn('Google Sheets import paths are dropped (one-directional export only).');
+  return { success: false, message: 'Google Sheets import paths are deprecated. CRM is now the single source of truth.' };
 }
 
 /**
  * Force manual export of all modules (or target module) from CRM -> Google Sheets
  */
 async function syncToSheetsManual(targetModule = null) {
-  const metadata = readMetadata();
+  const metadata = dbService.readMetadata();
   const modulesToSync = targetModule ? [targetModule] : Object.keys(metadata.modules || {});
   
   const enqueuedJobs = [];
@@ -483,29 +374,16 @@ async function syncToSheetsManual(targetModule = null) {
     if (jobId) enqueuedJobs.push({ module: mod, jobId });
   }
 
-  // Trigger immediate processing of the sync queue
   await processSyncQueue();
-
   return { success: true, count: enqueuedJobs.length, jobs: enqueuedJobs };
 }
 
 /**
- * Compatibility function (Sync From Sheets) with explicit verification
+ * DEPRECATED: Compatibility function (Sync From Sheets)
  */
 async function syncFromSheets() {
-  console.log('Direct automated imports are deprecated. Please use the Sync Dashboard Reconcile feature.');
+  console.log('Automated imports from Google Sheets are deprecated.');
   return false;
-}
-
-// Helper to convert index to Excel column letters (1 -> A, 27 -> AA, etc.)
-function getColLetter(col) {
-  let letter = '';
-  while (col > 0) {
-    let temp = (col - 1) % 26;
-    letter = String.fromCharCode(65 + temp) + letter;
-    col = Math.floor((col - temp) / 26);
-  }
-  return letter;
 }
 
 // Fetch all sheets (tabs) in configured Google Spreadsheet
@@ -528,273 +406,14 @@ async function getSheetHeaders(config, sheetName) {
   return (rows[0] || []).map(h => String(h).trim()).filter(Boolean);
 }
 
-// Perform validation on cell values based on CRM module metadata types
-function validateFieldValue(value, fieldDef, db, metadata) {
-  const strVal = value !== undefined && value !== null ? String(value).trim() : '';
-  
-  if (fieldDef.required && !strVal) {
-    if (fieldDef.name !== 'id' && fieldDef.name !== 'last_updated' && fieldDef.name !== 'propertyName') {
-      return 'Required field is missing.';
-    }
-  }
-  
-  if (!strVal) return null;
-  
-  if (fieldDef.type === 'number') {
-    if (isNaN(Number(strVal))) return 'Must be a valid number.';
-  }
-  if (fieldDef.type === 'currency') {
-    const cleanNum = strVal.replace(/[$,₹\s]/g, '');
-    if (isNaN(Number(cleanNum))) return 'Must be a valid currency value.';
-  }
-  if (fieldDef.type === 'email') {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(strVal)) return 'Must be a valid email address.';
-  }
-  if (fieldDef.type === 'phone') {
-    const phoneDigits = strVal.replace(/\D/g, '');
-    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
-      return 'Must be a valid phone number (7-15 digits).';
-    }
-  }
-  if (fieldDef.type === 'date') {
-    if (isNaN(Date.parse(strVal)) && !/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(strVal)) {
-      return 'Must be a valid date.';
-    }
-  }
-  
-  // Accept custom select options under "Others" without throwing a validation error.
-  // Case-insensitive normalization is performed separately inside the execution loop.
-  
-  if (fieldDef.relationship && fieldDef.relationship.module) {
-    const relModule = fieldDef.relationship.module;
-    const relRecords = db[relModule] || [];
-    const exists = relRecords.some(r => 
-      String(r.id).trim().toLowerCase() === strVal.toLowerCase() ||
-      (r.name && String(r.name).trim().toLowerCase() === strVal.toLowerCase()) ||
-      (r.firm_name && String(r.firm_name).trim().toLowerCase() === strVal.toLowerCase()) ||
-      (r.person_name && String(r.person_name).trim().toLowerCase() === strVal.toLowerCase())
-    );
-    if (!exists) {
-      return `Referenced record not found in related module '${relModule}'.`;
-    }
-  }
-  return null;
-}
-
-// Core Import & Preview Engine
+/**
+ * DEPRECATED: Core Import & Preview Engine
+ */
 async function executeImportWithMapping(config, mapping, dryRun = false) {
-  const startTime = Date.now();
-  const sheets = getSheetsClient(config);
-  if (!sheets || !config.spreadsheetId) {
-    throw new Error('Google Sheets integration is not configured or disabled.');
-  }
-
-  const spreadsheetId = config.spreadsheetId;
-  const sheetName = mapping.sheetName;
-
-  const meta = await sheets.spreadsheets.get({ spreadsheetId });
-  const sheetObj = (meta.data.sheets || []).find(s => s.properties?.title === sheetName);
-  if (!sheetObj) {
-    throw new Error(`Sheet tab '${sheetName}' does not exist in the spreadsheet.`);
-  }
-
-  const getRes = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${sheetName}!A1:Z10000`
-  });
-  const rows = getRes.data.values || [];
-  if (rows.length === 0) {
-    throw new Error(`Sheet '${sheetName}' is completely empty.`);
-  }
-
-  const rawHeaders = rows[0] || [];
-  const headers = rawHeaders.map(h => String(h).trim());
-
-  const moduleName = mapping.module;
-  const headerMap = mapping.headerMap || {};
-  const unmappedHeaders = headers.filter(h => !headerMap[h]);
-
-  const prefixMap = {
-    employees: 'EMP', customers: 'CUST', leads: 'LEAD', properties: 'PROP',
-    projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
-    tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
-    daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
-  };
-  const prefix = prefixMap[moduleName] || moduleName.substring(0, 4).toUpperCase();
-
-  const sheetsWriteBacks = [];
-  let metrics;
-  let previewRows = [];
-
-  await runTransaction(async (db) => {
-    const metadata = readMetadata();
-    const fields = metadata.modules[moduleName]?.fields || [];
-    
-    // For dryRun preview, copy existing List so we don't pollute database cache in-memory
-    let existingList;
-    if (dryRun) {
-      existingList = [...(db[moduleName] || [])];
-    } else {
-      db[moduleName] = db[moduleName] || [];
-      existingList = db[moduleName];
-    }
-
-    const requiredFields = fields.filter(f => f.required && f.name !== 'id' && f.name !== 'last_updated' && f.name !== 'propertyName');
-    const missingRequired = requiredFields.filter(f => !Object.values(headerMap).includes(f.name));
-
-    metrics = {
-      totalRows: Math.max(0, rows.length - 1),
-      imported: 0,
-      updated: 0,
-      skipped: 0,
-      duplicates: 0,
-      validationErrors: [],
-      missingRequired: missingRequired.map(f => f.label),
-      unmappedHeaders,
-      duration: 0
-    };
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) {
-        metrics.skipped++;
-        continue;
-      }
-
-      const rowErrors = [];
-      const mappedRecord = {};
-
-      fields.forEach(f => {
-        const sheetHeader = Object.keys(headerMap).find(key => headerMap[key] === f.name);
-        if (!sheetHeader) return;
-
-        const colIdx = headers.indexOf(sheetHeader);
-        if (colIdx === -1) return;
-
-        let rawVal = row[colIdx] !== undefined ? String(row[colIdx]).trim() : '';
-
-        // Case-insensitive normalization for select options
-        if (f.type === 'select' && rawVal) {
-          const chipGroup = f.chipGroup;
-          const chipList = metadata?.chipGroups?.[chipGroup] || metadata?.chips?.[chipGroup] || [];
-          const match = chipList.find(c => 
-            String(c.value).toLowerCase() === rawVal.toLowerCase() ||
-            String(c.label).toLowerCase() === rawVal.toLowerCase()
-          );
-          if (match) {
-            rawVal = match.value;
-          }
-        }
-        
-        const errorMsg = validateFieldValue(rawVal, f, db, metadata);
-        if (errorMsg) {
-          rowErrors.push({ field: f.label, value: rawVal, error: errorMsg });
-          metrics.validationErrors.push({ row: i + 1, field: f.label, value: rawVal, error: errorMsg });
-        }
-
-        if (f.type === 'number') {
-          mappedRecord[f.name] = rawVal ? Number(rawVal) : '';
-        } else if (f.type === 'checkbox') {
-          mappedRecord[f.name] = rawVal.toLowerCase() === 'true' || rawVal === '1' || rawVal.toLowerCase() === 'yes';
-        } else {
-          mappedRecord[f.name] = rawVal;
-        }
-      });
-
-      const idHeader = Object.keys(headerMap).find(key => headerMap[key] === 'id');
-      let rowId = '';
-      if (idHeader) {
-        const colIdx = headers.indexOf(idHeader);
-        if (colIdx !== -1 && row[colIdx]) {
-          rowId = String(row[colIdx]).trim();
-        }
-      }
-
-      const phoneHeader = Object.keys(headerMap).find(key => headerMap[key] === 'phone');
-      let rowPhone = '';
-      if (phoneHeader) {
-        const colIdx = headers.indexOf(phoneHeader);
-        if (colIdx !== -1 && row[colIdx]) {
-          rowPhone = String(row[colIdx]).trim();
-        }
-      }
-
-      let existingRecordIndex = -1;
-      if (rowId) {
-        existingRecordIndex = existingList.findIndex(rec => String(rec.id) === rowId);
-      }
-      if (existingRecordIndex === -1 && rowPhone) {
-        existingRecordIndex = existingList.findIndex(rec => rec.phone && String(rec.phone).trim() === rowPhone);
-      }
-
-      if (rowErrors.length > 0) {
-        metrics.skipped++;
-        previewRows.push({ rowNumber: i + 1, status: 'ERROR', data: mappedRecord, errors: rowErrors });
-        continue;
-      }
-
-      if (moduleName === 'properties') {
-        handlePropertyDealerAssociation(mappedRecord, db, dryRun);
-      }
-
-      if (existingRecordIndex !== -1) {
-        if (!dryRun) {
-          const oldRecord = existingList[existingRecordIndex];
-          Object.keys(mappedRecord).forEach(k => {
-            if (k !== 'id') {
-              oldRecord[k] = mappedRecord[k];
-            }
-          });
-          oldRecord.last_updated = new Date().toLocaleString('en-IN');
-        }
-        metrics.updated++;
-        previewRows.push({ rowNumber: i + 1, status: 'UPDATE', data: { ...existingList[existingRecordIndex], ...mappedRecord } });
-      } else {
-        const generatedId = generateNextId(db, moduleName, prefix);
-        mappedRecord.id = generatedId;
-        mappedRecord.dateAdded = new Date().toISOString().split('T')[0];
-        mappedRecord.last_updated = new Date().toLocaleString('en-IN');
-
-        // Always push to in-memory list (cloned list if dryRun, db list if real)
-        existingList.push(mappedRecord);
-        
-        if (!dryRun && mapping.writeBackEnabled && idHeader) {
-          const idColIdx = headers.indexOf(idHeader);
-          if (idColIdx !== -1) {
-            sheetsWriteBacks.push({
-              range: `${sheetName}!${getColLetter(idColIdx + 1)}${i + 1}`,
-              values: [[generatedId]]
-            });
-          }
-        }
-        metrics.imported++;
-        previewRows.push({ rowNumber: i + 1, status: 'INSERT', data: mappedRecord });
-      }
-    }
-  });
-
-  if (!dryRun && sheetsWriteBacks.length > 0) {
-    try {
-      await sheets.spreadsheets.values.batchUpdate({
-        spreadsheetId,
-        resource: {
-          data: sheetsWriteBacks,
-          valueInputOption: 'USER_ENTERED'
-        }
-      });
-    } catch (writeErr) {
-      console.error('Failed to write generated IDs back to Google Sheets:', writeErr.message);
-    }
-  }
-
-  metrics.duration = ((Date.now() - startTime) / 1000).toFixed(2);
-
+  console.warn('executeImportWithMapping is deprecated. Sheets imports are disabled.');
   return {
-    success: true,
-    metrics,
-    previewRows
+    success: false,
+    message: 'Google Sheets import features are deprecated.'
   };
 }
 

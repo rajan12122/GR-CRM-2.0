@@ -7,8 +7,12 @@ services:
     plan: free
     rootDir: backend
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: node scripts/migrate_json_to_postgres.js && node server.js
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gr-crm-db
+          property: connectionString
       - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
@@ -19,6 +23,14 @@ services:
         value: "true"
       - key: JWT_SECRET
         generateValue: true
+
+databases:
+  - name: gr-crm-db
+    databaseName: gr_crm
+    user: gr_crm_user
+    region: singapore
+    plan: free
+
 
   # Frontend React Static Site
   - type: web
