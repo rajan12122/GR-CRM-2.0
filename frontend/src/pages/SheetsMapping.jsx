@@ -306,6 +306,10 @@ const SheetsMapping = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setTestingMapping(false);
+      if (res.data && res.data.success === false) {
+        showStatus('error', res.data.message || 'Simulation test failed.');
+        return;
+      }
       setTestResults(res.data);
       setOpenImportPreviewDialog(true);
     } catch (err) {

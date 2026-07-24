@@ -413,7 +413,13 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
   console.warn('executeImportWithMapping is deprecated. Sheets imports are disabled.');
   return {
     success: false,
-    message: 'Google Sheets import features are deprecated.'
+    message: 'Google Sheets import features are deprecated.',
+    data: {
+      totalRows: 0,
+      matchedRows: 0,
+      previewRows: [],
+      errors: []
+    }
   };
 }
 

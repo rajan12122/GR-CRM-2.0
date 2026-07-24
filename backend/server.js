@@ -383,12 +383,34 @@ app.get('/api/sync/sheets/:tabName/headers', authenticateToken, checkPermission(
 
 // POST test mapping validation dry-run
 app.post('/api/sync/mappings/test', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
-  return res.status(400).json({ success: false, message: 'Google Sheets import features are disabled. CRM is now the single source of truth.' });
+  try {
+    const mapping = req.body;
+    if (!mapping || !mapping.module || !mapping.sheetName || !mapping.headerMap) {
+      return res.status(400).json({ success: false, message: 'Invalid mapping configuration payload.' });
+    }
+    const config = getSheetsConfig();
+    const result = await executeImportWithMapping(config, mapping, true); // dryRun = true
+    res.json(result);
+  } catch (err) {
+    console.error('Mapping test failure:', err.message);
+    res.status(500).json({ success: false, message: 'Mapping test simulation failed: ' + err.message });
+  }
 });
 
 // POST run actual import using mapping configuration
 app.post('/api/sync/import-with-mapping', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
-  return res.status(400).json({ success: false, message: 'Google Sheets import features are disabled. CRM is now the single source of truth.' });
+  try {
+    const mapping = req.body;
+    if (!mapping || !mapping.module || !mapping.sheetName || !mapping.headerMap) {
+      return res.status(400).json({ success: false, message: 'Invalid mapping configuration payload.' });
+    }
+    const config = getSheetsConfig();
+    const result = await executeImportWithMapping(config, mapping, false); // dryRun = false
+    res.json(result);
+  } catch (err) {
+    console.error('Import mapping failure:', err.message);
+    res.status(500).json({ success: false, message: 'Import with mapping failed: ' + err.message });
+  }
 });
 
 // --- AUTOMATION TRIGGERS ---
