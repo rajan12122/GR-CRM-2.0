@@ -17,6 +17,10 @@ const pool = new Pool({
   }
 });
 
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle PostgreSQL pool client:', err.message);
+});
+
 async function migrate() {
   let client;
   try {
