@@ -1920,6 +1920,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
 
       // Sync changes back to Postgres
       await syncDbChangesToPostgres(dbBefore, db, client);
+      dbCache = db;
       return payload;
     });
 
@@ -2132,6 +2133,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
       // Sync changes back to Postgres
       await syncDbChangesToPostgres(dbBefore, db, client);
+      dbCache = db;
       return db[module][index];
     });
 
@@ -2265,6 +2267,7 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
       // Sync changes back to Postgres
       await syncDbChangesToPostgres(dbBefore, db, client);
+      dbCache = db;
       return true;
     });
 
@@ -2388,6 +2391,7 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
 
       // Sync changes back to Postgres
       await syncDbChangesToPostgres(dbBefore, db, client);
+      dbCache = db;
     });
 
     try { syncToSheets(module); } catch(e) {}
