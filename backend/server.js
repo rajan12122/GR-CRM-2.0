@@ -23,6 +23,7 @@ app.use('/uploads', express.static(uploadsDir));
 
 const {
   metadataPath,
+  initializeMetadata,
   readMetadata,
   writeMetadata,
   runTransaction,
@@ -313,10 +314,10 @@ app.get('/api/metadata', authenticateToken, (req, res) => {
   res.json(metadata);
 });
 
-app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit'), (req, res) => {
+app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
   try {
     const newMetadata = req.body;
-    writeMetadata(newMetadata);
+    await writeMetadata(newMetadata);
     res.json({ success: true, message: 'Metadata schema saved successfully.' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to write metadata: ' + error.message });
@@ -4299,8 +4300,11 @@ app.listen(PORT, async () => {
     } finally {
       client.release();
     }
+
+    // Initialize metadataCache from PostgreSQL app_metadata table
+    await initializeMetadata();
   } catch (err) {
-    console.error('Failed to initialize dbCache from PostgreSQL:', err);
+    console.error('Failed to initialize dbCache or metadata Cache from PostgreSQL:', err);
     process.exit(1);
   }
 

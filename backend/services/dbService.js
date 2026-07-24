@@ -36,16 +36,75 @@ pool.on('error', (err) => {
 
 let metadataCache = null;
 
+async function initializeMetadata() {
+  const client = await pool.connect();
+  try {
+    // 1. Create table app_metadata if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_metadata (
+        key TEXT PRIMARY KEY,
+        value JSONB
+      );
+    `);
+    
+    // 2. Fetch main_metadata
+    const res = await client.query(`SELECT value FROM app_metadata WHERE key = 'main_metadata';`);
+    if (res.rows.length > 0) {
+      metadataCache = res.rows[0].value;
+      console.log('Successfully loaded metadataCache from PostgreSQL app_metadata.');
+    } else {
+      // If missing in PG, read from local file as fallback, and write to PG!
+      let localMetadata = { modules: {}, chips: {} };
+      if (fs.existsSync(metadataPath)) {
+        try {
+          localMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+        } catch (e) {
+          console.error('Error reading local metadata file:', e.message);
+        }
+      }
+      metadataCache = localMetadata;
+      await client.query(`
+        INSERT INTO app_metadata (key, value)
+        VALUES ('main_metadata', $1)
+        ON CONFLICT (key) DO UPDATE SET value = $1;
+      `, [JSON.stringify(localMetadata)]);
+      console.log('Successfully initialized app_metadata table from local file.');
+    }
+  } finally {
+    client.release();
+  }
+}
+
 function readMetadata() {
   if (!metadataCache) {
-    metadataCache = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    if (fs.existsSync(metadataPath)) {
+      try {
+        metadataCache = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+      } catch (e) {
+        metadataCache = { modules: {}, chips: {} };
+      }
+    } else {
+      metadataCache = { modules: {}, chips: {} };
+    }
   }
   return metadataCache;
 }
 
-function writeMetadata(data) {
+async function writeMetadata(data) {
   metadataCache = data;
-  fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
+  // Write to PostgreSQL
+  await pool.query(`
+    INSERT INTO app_metadata (key, value)
+    VALUES ('main_metadata', $1)
+    ON CONFLICT (key) DO UPDATE SET value = $1;
+  `, [JSON.stringify(data)]);
+  
+  // Write to local file as fallback
+  try {
+    fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    // Ignore write failures to local disk on ephemeral systems
+  }
 }
 
 // PostgreSQL transaction wrapper
@@ -336,6 +395,7 @@ async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
 module.exports = {
   pool,
   metadataPath,
+  initializeMetadata,
   readMetadata,
   writeMetadata,
   runTransaction,

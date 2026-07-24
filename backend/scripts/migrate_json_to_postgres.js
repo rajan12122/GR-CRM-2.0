@@ -5,6 +5,11 @@ const { Pool } = require('pg');
 const dbPath = path.join(__dirname, '../config/db.json');
 const metadataPath = path.join(__dirname, '../config/metadata.json');
 
+if (process.env.RUN_MIGRATION !== 'true') {
+  console.warn('Migration Guard: RUN_MIGRATION environment variable is not set to "true". Refusing to run.');
+  process.exit(1);
+}
+
 if (!process.env.DATABASE_URL) {
   console.error('Error: DATABASE_URL environment variable is not defined.');
   process.exit(1);
@@ -26,6 +31,21 @@ async function migrate() {
   try {
     client = await pool.connect();
     console.log('Successfully connected to PostgreSQL.');
+
+    // Ensure migration completion marker table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS migrations_completed (
+        id TEXT PRIMARY KEY,
+        completed_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    // Check if initial migration has already been executed
+    const markerCheck = await client.query(`SELECT id FROM migrations_completed WHERE id = 'initial_json_import';`);
+    if (markerCheck.rows.length > 0) {
+      console.log('Migration Guard: Initial JSON data migration has already been executed. Exiting safely (NO-OP).');
+      return;
+    }
 
     if (!fs.existsSync(dbPath)) {
       console.error(`db.json not found at ${dbPath}`);
@@ -494,6 +514,14 @@ async function migrate() {
     } else {
       console.log('\nMigration completed successfully with zero errors.');
     }
+
+    // Insert completion marker row
+    await client.query(`
+      INSERT INTO migrations_completed (id)
+      VALUES ('initial_json_import')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+    console.log('Migration Guard: Successfully registered initial migration completion marker in database.');
 
   } catch (err) {
     console.error('Migration crashed:', err);

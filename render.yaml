@@ -7,7 +7,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: npm install
-    startCommand: node scripts/migrate_json_to_postgres.js && node server.js
+    startCommand: node server.js
     envVars:
       - key: DATABASE_URL
         fromDatabase:
