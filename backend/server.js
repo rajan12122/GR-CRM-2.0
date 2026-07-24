@@ -4303,6 +4303,7 @@ app.listen(PORT, async () => {
 
     // Initialize metadataCache from PostgreSQL app_metadata table
     await initializeMetadata();
+    console.log('CURRENT METADATA IN DATABASE:', JSON.stringify(readMetadata()));
   } catch (err) {
     console.error('Failed to initialize dbCache or metadata Cache from PostgreSQL:', err);
     process.exit(1);
