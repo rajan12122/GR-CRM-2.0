@@ -406,6 +406,18 @@ app.post('/api/sync/import-with-mapping', authenticateToken, checkPermission('se
     }
     const config = getSheetsConfig();
     const result = await executeImportWithMapping(config, mapping, false); // dryRun = false
+
+    // Synchronize the memory dbCache after successful imports
+    if (result.success) {
+      const client = await pool.connect();
+      try {
+        dbCache = await loadTransactionDb(client);
+        console.log('Successfully re-synchronized dbCache after mapping import.');
+      } finally {
+        client.release();
+      }
+    }
+
     res.json(result);
   } catch (err) {
     console.error('Import mapping failure:', err.message);

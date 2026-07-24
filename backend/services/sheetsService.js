@@ -410,17 +410,144 @@ async function getSheetHeaders(config, sheetName) {
  * DEPRECATED: Core Import & Preview Engine
  */
 async function executeImportWithMapping(config, mapping, dryRun = false) {
-  console.warn('executeImportWithMapping is deprecated. Sheets imports are disabled.');
-  return {
-    success: false,
-    message: 'Google Sheets import features are deprecated.',
-    data: {
-      totalRows: 0,
-      matchedRows: 0,
-      previewRows: [],
-      errors: []
+  const startTime = Date.now();
+  try {
+    const sheets = getSheetsClient(config);
+    if (!sheets) throw new Error('Failed to initialize Google Sheets client.');
+
+    const { module: moduleName, sheetName, headerMap } = mapping;
+    if (!moduleName || !sheetName || !headerMap) {
+      throw new Error('Invalid mapping parameters.');
     }
-  };
+
+    // 1. Fetch spreadsheet values
+    const getRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: config.spreadsheetId,
+      range: `${sheetName}!A1:Z5000` // read up to 5000 rows
+    });
+    const rows = getRes.data.values || [];
+    if (rows.length === 0) {
+      return {
+        success: true,
+        message: 'The sheet is empty.',
+        metrics: { totalRows: 0, imported: 0, updated: 0, skipped: 0, validationErrors: [], duration: '0.0s' },
+        previewRows: []
+      };
+    }
+
+    const sheetHeaders = (rows[0] || []).map(h => String(h).trim());
+    const dataRows = rows.slice(1);
+
+    // Build colIndexMap: map crmField to column index in sheet
+    const colIndexMap = {};
+    for (const [crmField, sheetColName] of Object.entries(headerMap)) {
+      const idx = sheetHeaders.findIndex(h => h.toLowerCase() === String(sheetColName).trim().toLowerCase());
+      if (idx !== -1) {
+        colIndexMap[crmField] = idx;
+      }
+    }
+
+    // Get existing records from DB to perform updates/deduping
+    const existingRecords = await dbService.getRecords(moduleName);
+
+    const mappedRecords = [];
+    const validationErrors = [];
+
+    for (let rowIndex = 0; rowIndex < dataRows.length; rowIndex++) {
+      const row = dataRows[rowIndex];
+      const recordData = {};
+
+      // Map columns
+      for (const [crmField, idx] of Object.entries(colIndexMap)) {
+        let val = row[idx];
+        if (val === undefined || val === null) {
+          val = null;
+        } else {
+          val = String(val).trim();
+          if (val === '') {
+            val = null;
+          }
+        }
+        recordData[crmField] = val;
+      }
+
+      // If all fields are null (empty row), skip it
+      const hasData = Object.values(recordData).some(v => v !== null);
+      if (!hasData) continue;
+
+      // Determine if insert or update
+      const idValue = recordData.id ? String(recordData.id).trim() : '';
+      const existing = idValue ? existingRecords.find(r => String(r.id).trim().toLowerCase() === idValue.toLowerCase()) : null;
+
+      mappedRecords.push({
+        isUpdate: !!existing,
+        data: recordData
+      });
+    }
+
+    const metrics = {
+      totalRows: mappedRecords.length,
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      validationErrors: validationErrors
+    };
+
+    const previewRows = [];
+
+    if (!dryRun) {
+      // Run actual database transactions
+      await dbService.runTransaction(async (client) => {
+        for (const rec of mappedRecords) {
+          if (rec.isUpdate) {
+            const { id, ...data } = rec.data;
+            await dbService.updateRecord(moduleName, id, data, client);
+            metrics.updated++;
+          } else {
+            if (!rec.data.id) {
+              rec.data.id = await dbService.generateNextId(client, moduleName);
+            }
+            await dbService.insertRecord(moduleName, rec.data, client);
+            metrics.imported++;
+          }
+        }
+      });
+    } else {
+      // In dry run, count preview metrics and populate preview list
+      let nextMockCounter = 1;
+      for (const rec of mappedRecords) {
+        if (rec.isUpdate) {
+          metrics.updated++;
+        } else {
+          metrics.imported++;
+          if (!rec.data.id) {
+            rec.data.id = `NEW-${nextMockCounter++}`;
+          }
+        }
+        previewRows.push(rec.data);
+      }
+    }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
+    metrics.duration = duration;
+
+    return {
+      success: true,
+      message: dryRun ? 'Mapping test simulation completed successfully.' : 'Google Sheets data imported successfully.',
+      metrics,
+      previewRows
+    };
+
+  } catch (err) {
+    console.error('executeImportWithMapping error:', err.message);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
+    return {
+      success: false,
+      message: 'Sheets import failed: ' + err.message,
+      metrics: { totalRows: 0, imported: 0, updated: 0, skipped: 0, validationErrors: [err.message], duration },
+      previewRows: []
+    };
+  }
 }
 
 // Background daemon interval polling
