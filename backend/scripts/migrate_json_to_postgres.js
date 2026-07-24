@@ -155,7 +155,7 @@ async function migrate() {
     const extraModulesInDb = dbKeys.filter(k => 
       Array.isArray(db[k]) && 
       !modulesToMigrate.includes(k) && 
-      !['remarks', 'documents', 'reminders', 'activity_logs', 'sync_jobs', 'project_history', 'property_history', 'location_logs'].includes(k)
+      !['remarks', 'documents', 'sync_jobs', 'project_history', 'property_history', 'location_logs'].includes(k)
     );
     console.log('Extra modules discovered in db.json:', extraModulesInDb);
     const allModules = [...modulesToMigrate, ...extraModulesInDb];
@@ -333,7 +333,7 @@ async function migrate() {
     }
 
     // 4. Migrate remarks & documents from db.json
-    const specialTables = ['remarks', 'documents', 'sync_jobs'];
+    const specialTables = ['remarks', 'documents', 'sync_jobs', 'project_history', 'property_history', 'location_logs'];
     for (const tbl of specialTables) {
       console.log(`\nMigrating special table: ${tbl}...`);
       const records = db[tbl] || [];
@@ -346,6 +346,12 @@ async function migrate() {
         cols = ['id', 'targetModule', 'targetId', 'name', 'fileUrl', 'uploadedBy', 'dateAdded'];
       } else if (tbl === 'sync_jobs') {
         cols = ['id', 'moduleName', 'crmRecordId', 'operationType', 'attemptCount', 'maxAttempts', 'lastError', 'idempotencyKey', 'status', 'createdAt', 'updatedAt', 'syncedAt', 'nextAttemptAt'];
+      } else if (tbl === 'project_history') {
+        cols = ['id', 'projectId', 'field', 'fieldName', 'oldValue', 'newValue', 'date', 'employeeName'];
+      } else if (tbl === 'property_history') {
+        cols = ['id', 'propertyId', 'field', 'fieldName', 'oldValue', 'newValue', 'date', 'employeeName'];
+      } else if (tbl === 'location_logs') {
+        cols = ['id', 'employeeId', 'employeeName', 'latitude', 'longitude', 'status', 'timestamp'];
       }
 
       let migratedCount = 0;
