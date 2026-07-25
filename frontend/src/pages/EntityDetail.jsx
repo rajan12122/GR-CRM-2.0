@@ -1112,7 +1112,7 @@ const EntityDetail = () => {
                       </Typography>
                       {matchedProps.length === 0 ? (
                         <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', py: 1 }}>
-                          No matching inventory found (need > 1 match).
+                          No matching inventory found (need more than 1 match).
                         </Typography>
                       ) : (
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
