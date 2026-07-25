@@ -23,6 +23,7 @@ import PublicIntake from './pages/PublicIntake';
 import QuickAdd from './pages/QuickAdd';
 import LeadNotificationListener from './components/LeadNotificationListener';
 import Salary from './pages/Salary';
+import Architecture from './pages/Architecture';
 import AppUpdater from './components/AppUpdater';
 import AIAssistantDrawer from './components/AIAssistantDrawer';
 import { Routes as DomRoutes, Route as DomRoute } from 'react-router-dom';
@@ -168,6 +169,7 @@ const MainLayout = () => {
               <Route path="/pipeline/:pipelineType" element={<PipelineViewWrapper />} />
               <Route path="/settings" element={user?.role === 'Admin' ? <Settings /> : <Navigate to="/" replace />} />
               <Route path="/sheets-mapping" element={user?.role === 'Admin' ? <SheetsMapping /> : <Navigate to="/" replace />} />
+              <Route path="/architecture" element={<Architecture />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </PullToRefresh>
