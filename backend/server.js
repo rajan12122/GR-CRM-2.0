@@ -39,6 +39,15 @@ const {
   pool
 } = require('./services/dbService');
 
+let uniqueSuffixCounter = 0;
+function generateUniqueId(prefix) {
+  uniqueSuffixCounter = (uniqueSuffixCounter + 1) % 10000;
+  const timePart = Date.now();
+  const randPart = Math.floor(Math.random() * 1000);
+  const counterPart = String(uniqueSuffixCounter).padStart(4, '0');
+  return `${prefix}-${timePart}-${randPart}-${counterPart}`;
+}
+
 function generateNextId(db, moduleName, prefix) {
   db.idCounters = db.idCounters || {};
   const prefixMap = {
@@ -275,7 +284,7 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
       );
 
       const auditLog = {
-        id: `LOG-AUD-${Date.now()}`,
+        id: generateUniqueId('LOG-AUD'),
         employeeName: req.user.name,
         action: `Reset password for employee: ${employee.name} (${employee.id})`,
         dateTime: new Date().toLocaleString()
@@ -481,7 +490,7 @@ function handleAutomatedPitchLogging(rec, db, req) {
     
     db.activity_logs = db.activity_logs || [];
     db.activity_logs.unshift({
-      id: `LOG-${Date.now()}`,
+      id: generateUniqueId('LOG'),
       employeeName: empName,
       action: `Automatically logged pitch ${pitchId} for Property ${rec.pitchedPropertyId} matching Client ${custId}`,
       dateTime: new Date().toLocaleString()
@@ -546,7 +555,7 @@ function handleQueryStageChange(q, db, req) {
       
       db.activity_logs = db.activity_logs || [];
       db.activity_logs.unshift({
-        id: `LOG-${Date.now()}`,
+        id: generateUniqueId('LOG'),
         employeeName: req.user ? req.user.name : 'System',
         action: `Automatically created Property ${propId} in inventory from Query ${q.id}`,
         dateTime: new Date().toLocaleString()
@@ -588,7 +597,7 @@ function handleDealerVisitAssignment(payload, db, req, oldPayload = null) {
       // Create an activity log
       db.activity_logs = db.activity_logs || [];
       db.activity_logs.unshift({
-        id: `LOG-${Date.now()}`,
+        id: generateUniqueId('LOG'),
         employeeName: req.user ? req.user.name : 'System',
         action: `Assigned Dealer ${payload.id} to Employee ${payload.assignedEmployeeId} for a visit`,
         dateTime: new Date().toLocaleString()
@@ -773,7 +782,7 @@ function handleDealStatusChange(d, db, req) {
     
     db.activity_logs = db.activity_logs || [];
     db.activity_logs.unshift({
-      id: `LOG-${Date.now()}`,
+      id: generateUniqueId('LOG'),
       employeeName: req.user ? req.user.name : 'System',
       action: `Deal ${d.id} closed. Ownership of Property ${d.propertyId} transferred to Customer ${d.customerId}.`,
       dateTime: new Date().toLocaleString()
@@ -936,7 +945,7 @@ function handlePitchStatusChange(p, db, req) {
     
     db.activity_logs = db.activity_logs || [];
     db.activity_logs.unshift({
-      id: `LOG-${Date.now()}`,
+      id: generateUniqueId('LOG'),
       employeeName: req.user ? req.user.name : 'System',
       action: `Pitch ${p.id} closed. Ownership of Property ${p.propertyId} transferred to Customer ${finalCustomerId}.`,
       dateTime: new Date().toLocaleString()
@@ -1777,7 +1786,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           }
           
           const log = {
-            id: `LOG-${Date.now()}`,
+            id: generateUniqueId('LOG'),
             employeeName: req.user.name,
             action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing customer ${existingCust.id}`,
             dateTime: new Date().toLocaleString()
@@ -1958,7 +1967,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       }
       
       const log = {
-        id: `LOG-${Date.now()}`,
+        id: generateUniqueId('LOG'),
         employeeName: req.user.name,
         action: `Created record ${payload.id} in ${module}`,
         dateTime: new Date().toLocaleString()
@@ -2049,7 +2058,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
           const newVal = payload[f];
           if (newVal !== undefined && String(oldVal || '').trim() !== String(newVal || '').trim()) {
             historyEntries.push({
-              id: `PRJH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              id: generateUniqueId('PRJH'),
               projectId: id,
               field: f,
               fieldName: metadata.modules.projects.fields.find(field => field.name === f)?.label || f,
@@ -2077,7 +2086,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
           const newVal = payload[f];
           if (newVal !== undefined && String(oldVal || '').trim() !== String(newVal || '').trim()) {
             historyEntries.push({
-              id: `PROPH-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              id: generateUniqueId('PROPH'),
               propertyId: id,
               field: f,
               fieldName: metadata.modules.properties.fields.find(field => field.name === f)?.label || f,
@@ -2171,7 +2180,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
       // Track Activity Log
       const log = {
-        id: `LOG-${Date.now()}`,
+        id: generateUniqueId('LOG'),
         employeeName: req.user.name,
         action: `Updated record ${id} in ${module}`,
         dateTime: new Date().toLocaleString()
@@ -2305,7 +2314,7 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
       // Track Activity Log
       const log = {
-        id: `LOG-${Date.now()}`,
+        id: generateUniqueId('LOG'),
         employeeName: req.user.name,
         action: `Deleted record ${id} in ${module}`,
         dateTime: new Date().toLocaleString()
@@ -2429,7 +2438,7 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
 
       // Track Activity Log
       const log = {
-        id: `LOG-${Date.now()}`,
+        id: generateUniqueId('LOG'),
         employeeName: req.user.name,
         action: `Bulk deleted ${ids.length} records in ${module}`,
         dateTime: new Date().toLocaleString()
@@ -2569,7 +2578,7 @@ app.post('/api/location/log', authenticateToken, (req, res) => {
   const encryptedCoords = encryptLocation(decLat, decLng);
 
   const logEntry = {
-    id: `LOC-${Date.now()}`,
+    id: generateUniqueId('LOC'),
     employeeId,
     employeeName,
     latitude: encryptedCoords, // Coordinates encrypted at rest
@@ -3127,7 +3136,7 @@ app.post('/api/remarks', authenticateToken, async (req, res) => {
 
   const db = readDb();
   const newRemark = {
-    id: `REM-${Date.now()}`,
+    id: generateUniqueId('REM'),
     targetModule,
     targetId,
     employeeName: req.user.name,
@@ -3179,7 +3188,7 @@ app.post('/api/documents', authenticateToken, (req, res) => {
 
   const db = readDb();
   const newDoc = {
-    id: `DOC-${Date.now()}`,
+    id: generateUniqueId('DOC'),
     targetModule,
     targetId,
     name,
@@ -3305,7 +3314,7 @@ const rotateLeadsTask = () => {
           // Append system audit remark noting the rotation
           if (!db.remarks) db.remarks = [];
           db.remarks.push({
-            id: `REM-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            id: generateUniqueId('REM'),
             targetModule: 'leads',
             targetId: lead.id,
             comment: `System: Lead rotated automatically from ${pool[currentIndex]?.name || 'unassigned'} to ${nextEmp.name} due to inactivity.`,
