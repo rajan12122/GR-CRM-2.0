@@ -516,20 +516,6 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
               recordData.id = existing.id;
             }
           }
-        } else if (moduleName === 'properties') {
-          const contactNumVal = recordData.contact_number ? String(recordData.contact_number).trim() : '';
-          const nameVal = recordData.propertyName ? String(recordData.propertyName).trim().toLowerCase() : '';
-          
-          if (contactNumVal || nameVal) {
-            existing = existingRecords.find(r => {
-              const rContact = r.contact_number ? String(r.contact_number).trim() : '';
-              const rName = r.propertyName ? String(r.propertyName).trim().toLowerCase() : '';
-              return (contactNumVal && rContact === contactNumVal) || (nameVal && rName === nameVal);
-            });
-            if (existing) {
-              recordData.id = existing.id;
-            }
-          }
         } else if (moduleName === 'dealers') {
           const contactNumVal = recordData.contact_num ? String(recordData.contact_num).trim() : '';
           const nameVal = recordData.firm_name ? String(recordData.firm_name).trim().toLowerCase() : '';

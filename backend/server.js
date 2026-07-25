@@ -4377,37 +4377,7 @@ app.listen(PORT, async () => {
       }
     });
 
-    // Self-correct duplicate properties (historical failed ID write-backs)
-    if (Array.isArray(db.properties)) {
-      const seen = new Map();
-      const idsToDelete = [];
-      
-      const sortedProperties = [...db.properties].sort((a, b) => {
-        const idA = parseInt(String(a.id).split('-')[1]) || 0;
-        const idB = parseInt(String(b.id).split('-')[1]) || 0;
-        return idA - idB;
-      });
 
-      sortedProperties.forEach(prop => {
-        const contactNum = prop.contact_number ? String(prop.contact_number).trim() : '';
-        const name = prop.propertyName ? String(prop.propertyName).trim().toLowerCase() : '';
-        
-        if (!contactNum && !name) return;
-
-        const key = `${contactNum}||${name}`;
-        if (!seen.has(key)) {
-          seen.set(key, prop.id);
-        } else {
-          idsToDelete.push(prop.id);
-        }
-      });
-
-      if (idsToDelete.length > 0) {
-        console.log(`Self-correction: found ${idsToDelete.length} duplicate properties. Deleting:`, idsToDelete);
-        db.properties = db.properties.filter(prop => !idsToDelete.includes(prop.id));
-        updated = true;
-      }
-    }
 
     // Self-correct duplicate leads
     if (Array.isArray(db.leads)) {
