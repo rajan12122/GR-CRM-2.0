@@ -409,13 +409,23 @@ async function getSheetHeaders(config, sheetName) {
 /**
  * DEPRECATED: Core Import & Preview Engine
  */
+function getColumnLetter(colIndex) {
+  let temp = colIndex;
+  let letter = '';
+  while (temp >= 0) {
+    letter = String.fromCharCode((temp % 26) + 65) + letter;
+    temp = Math.floor(temp / 26) - 1;
+  }
+  return letter;
+}
+
 async function executeImportWithMapping(config, mapping, dryRun = false) {
   const startTime = Date.now();
   try {
     const sheets = getSheetsClient(config);
     if (!sheets) throw new Error('Failed to initialize Google Sheets client.');
 
-    const { module: moduleName, sheetName, headerMap } = mapping;
+    const { module: moduleName, sheetName, headerMap, writeBackEnabled } = mapping;
     if (!moduleName || !sheetName || !headerMap) {
       throw new Error('Invalid mapping parameters.');
     }
@@ -439,8 +449,9 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
     const dataRows = rows.slice(1);
 
     // Build colIndexMap: map crmField to column index in sheet
+    // Note: headerMap is structured as { [sheetColName]: crmField }
     const colIndexMap = {};
-    for (const [crmField, sheetColName] of Object.entries(headerMap)) {
+    for (const [sheetColName, crmField] of Object.entries(headerMap)) {
       const idx = sheetHeaders.findIndex(h => h.toLowerCase() === String(sheetColName).trim().toLowerCase());
       if (idx !== -1) {
         colIndexMap[crmField] = idx;
@@ -477,7 +488,54 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
 
       // Determine if insert or update
       const idValue = recordData.id ? String(recordData.id).trim() : '';
-      const existing = idValue ? existingRecords.find(r => String(r.id).trim().toLowerCase() === idValue.toLowerCase()) : null;
+      let existing = idValue ? existingRecords.find(r => String(r.id).trim().toLowerCase() === idValue.toLowerCase()) : null;
+
+      // Deduplication fallback if ID is missing in sheet
+      if (!existing) {
+        if (moduleName === 'customers' || moduleName === 'leads' || moduleName === 'employees') {
+          const phoneVal = recordData.phone ? String(recordData.phone).trim() : '';
+          const emailVal = recordData.email ? String(recordData.email).trim().toLowerCase() : '';
+          
+          if (phoneVal || emailVal) {
+            existing = existingRecords.find(r => {
+              const rPhone = r.phone ? String(r.phone).trim() : '';
+              const rEmail = r.email ? String(r.email).trim().toLowerCase() : '';
+              return (phoneVal && rPhone === phoneVal) || (emailVal && rEmail === emailVal);
+            });
+            if (existing) {
+              recordData.id = existing.id;
+            }
+          }
+        } else if (moduleName === 'properties') {
+          const contactNumVal = recordData.contact_number ? String(recordData.contact_number).trim() : '';
+          const nameVal = recordData.propertyName ? String(recordData.propertyName).trim().toLowerCase() : '';
+          
+          if (contactNumVal || nameVal) {
+            existing = existingRecords.find(r => {
+              const rContact = r.contact_number ? String(r.contact_number).trim() : '';
+              const rName = r.propertyName ? String(r.propertyName).trim().toLowerCase() : '';
+              return (contactNumVal && rContact === contactNumVal) || (nameVal && rName === nameVal);
+            });
+            if (existing) {
+              recordData.id = existing.id;
+            }
+          }
+        } else if (moduleName === 'dealers') {
+          const contactNumVal = recordData.contact_num ? String(recordData.contact_num).trim() : '';
+          const nameVal = recordData.firm_name ? String(recordData.firm_name).trim().toLowerCase() : '';
+          
+          if (contactNumVal || nameVal) {
+            existing = existingRecords.find(r => {
+              const rContact = r.contact_num ? String(r.contact_num).trim() : '';
+              const rName = r.firm_name ? String(r.firm_name).trim().toLowerCase() : '';
+              return (contactNumVal && rContact === contactNumVal) || (nameVal && rName === nameVal);
+            });
+            if (existing) {
+              recordData.id = existing.id;
+            }
+          }
+        }
+      }
 
       mappedRecords.push({
         isUpdate: !!existing,
@@ -527,6 +585,42 @@ async function executeImportWithMapping(config, mapping, dryRun = false) {
           }
         }
       });
+
+      // Write-back IDs to Google Sheets if enabled
+      const writeBackActive = writeBackEnabled === true || writeBackEnabled === 'true';
+      if (writeBackActive && colIndexMap['id'] !== undefined) {
+        const idColLetter = getColumnLetter(colIndexMap['id']);
+        const dataToBatchUpdate = [];
+
+        for (let i = 0; i < mappedRecords.length; i++) {
+          const rec = mappedRecords[i];
+          const rowNum = i + 2; // header is row 1
+          const originalRow = dataRows[i];
+          const originalId = originalRow && originalRow[colIndexMap['id']] ? String(originalRow[colIndexMap['id']]).trim() : '';
+          
+          if (!originalId && rec.data.id) {
+            dataToBatchUpdate.push({
+              range: `${sheetName}!${idColLetter}${rowNum}`,
+              values: [[rec.data.id]]
+            });
+          }
+        }
+
+        if (dataToBatchUpdate.length > 0) {
+          try {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId: config.spreadsheetId,
+              requestBody: {
+                valueInputOption: 'USER_ENTERED',
+                data: dataToBatchUpdate
+              }
+            });
+            console.log(`Successfully wrote back ${dataToBatchUpdate.length} IDs to Google Sheet tab "${sheetName}"`);
+          } catch (writeBackErr) {
+            console.error('Failed to write back generated IDs to Google Sheet:', writeBackErr.message);
+          }
+        }
+      }
     } else {
       // In dry run, count preview metrics and populate preview list
       let nextMockCounter = 1;
