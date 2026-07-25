@@ -881,6 +881,9 @@ function handlePitchStatusChange(p, db, req) {
     const buyerCust = (db.customers || []).find(c => String(c.id) === String(finalCustomerId));
     const buyerName = buyerCust ? buyerCust.name : (finalCustomerId || 'Unknown');
     
+    const emp = (db.employees || []).find(e => String(e.id) === String(p.employeeId));
+    const empName = emp ? emp.name : 'Unknown Employee';
+    
     prop.owner_history = prop.owner_history || [];
     if (prevOwnerId || prevOwnerName) {
       const hasHistory = prop.owner_history.some(h => String(h.dealId) === String(p.id));
@@ -892,7 +895,9 @@ function handlePitchStatusChange(p, db, req) {
           purchaseDate: prop.date || '',
           purchasePrice: prop.demand || '',
           saleDate: new Date().toISOString().split('T')[0],
-          salePrice: p.quotedPrice || ''
+          salePrice: p.quotedPrice || '',
+          soldByEmployeeId: p.employeeId || '',
+          soldByEmployeeName: empName
         });
       }
     }
@@ -915,7 +920,7 @@ function handlePitchStatusChange(p, db, req) {
     prop.timeline.push({
       date: new Date().toLocaleDateString('en-IN'),
       event: 'Ownership Changed (Pitch Closed)',
-      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${p.quotedPrice} via Pitch ${p.id}`
+      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${p.quotedPrice} (Closed by Employee: ${empName}) via Pitch ${p.id}`
     });
     
     db.properties[propIndex] = prop;
