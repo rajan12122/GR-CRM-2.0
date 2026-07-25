@@ -507,7 +507,7 @@ function handleQueryStageChange(q, db, req) {
         date: new Date().toISOString().split('T')[0],
         contact_person_name: ownerName,
         contact_number: ownerPhone,
-        dealer_owner_booked: 'Owner',
+        dealer_owner_booked: 'Direct',
         r_c_i: q.r_c_i || 'Residential',
         propertyType: q.propertyType || 'Villa',
         locality: q.locality || '',
@@ -1001,7 +1001,7 @@ function handleLeadStatusChange(lead, db, req) {
         date: new Date().toLocaleDateString('en-IN'),
         contact_person_name: lead.name,
         contact_number: lead.phone,
-        dealer_owner_booked: 'Owner',
+        dealer_owner_booked: 'Direct',
         booked_by_customer_id: existingCust.id,
         current_owner_id: existingCust.id,
         r_c_i: lead.r_c_i || 'Residential',
@@ -1672,10 +1672,6 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         payload.id = generateNextId(db, module, prefix);
       }
 
-      if (module === 'properties') {
-        await handlePropertyDealerAssociation(payload, client);
-      }
-
       // Populate basic date tracker if applicable
       const metadata = readMetadata();
       const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
@@ -1790,6 +1786,10 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         }
       }
 
+      if (module === 'properties') {
+        await handlePropertyDealerAssociation(payload, client);
+      }
+
       // Prevent duplicate dealers by returning existing matching record
       if (module === 'dealers' && payload.contact_num) {
         const cleanContact = String(payload.contact_num).trim();
@@ -1839,9 +1839,16 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       }
 
       if (module === 'leads') {
-        payload.assignmentStatus = 'accepted';
-        payload.assignmentTime = null;
-        payload.droppedBy = [];
+        if (payload.leadType === 'Seller') {
+          payload.status = 'Converted';
+          payload.assignmentStatus = 'accepted';
+          payload.assignmentTime = null;
+          payload.droppedBy = [];
+        } else {
+          payload.assignmentStatus = 'pending';
+          payload.assignmentTime = new Date().toISOString();
+          payload.droppedBy = [];
+        }
         if (payload.assignedEmployeeId) {
           setTimeout(() => {
             notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
@@ -1877,7 +1884,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (module === 'property_pitch_history') handlePitchStatusChange(payload, db, req);
       if (module === 'leads') {
         handleLeadStatusChange(payload, db, req);
-        if (payload.assignmentStatus === 'accepted') {
+        if (payload.assignmentStatus === 'accepted' && payload.leadType !== 'Seller') {
           createFollowUpForLead(payload, db);
         }
         if (payload.assignedEmployeeId) {
@@ -1970,10 +1977,6 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       }
       const oldPayload = { ...db[module][index] };
 
-      if (module === 'properties') {
-        await handlePropertyDealerAssociation(payload, client);
-      }
-
       // Enforce unique phone number on update
       if (payload.phone) {
         const cleanPhone = String(payload.phone).trim();
@@ -1981,6 +1984,10 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         if (isDuplicate) {
           throw new Error(`Phone number '${payload.phone}' is already registered in this module.`);
         }
+      }
+
+      if (module === 'properties') {
+        await handlePropertyDealerAssociation(payload, client);
       }
 
       // Auto-update last_updated date on edits
@@ -2087,7 +2094,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       if (module === 'property_pitch_history') handlePitchStatusChange(db[module][index], db, req);
       if (module === 'leads') {
         handleLeadStatusChange(db[module][index], db, req);
-        if (db[module][index].assignmentStatus === 'accepted') {
+        if (db[module][index].assignmentStatus === 'accepted' && db[module][index].leadType !== 'Seller') {
           createFollowUpForLead(db[module][index], db);
         }
         if (db[module][index].assignedEmployeeId) {
@@ -3562,7 +3569,10 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
   }
 
   try {
-    const result = await runTransaction(async (db) => {
+    const result = await runTransaction(async (client) => {
+      const dbBefore = await loadTransactionDb(client);
+      const db = JSON.parse(JSON.stringify(dbBefore));
+      
       if (!db[module]) db[module] = [];
 
       // ID generation using shared helper
@@ -3574,7 +3584,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
       };
       const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
-      payload.id = generateNextId(db, module, prefix);
+      payload.id = await generateNextId(client, module, prefix);
 
       // Enforce unique phone number / Master Customer record duplicate prevention
       if (payload.phone && (module === 'customers' || module === 'leads')) {
@@ -3584,7 +3594,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         
         if (existingCust || existingLead) {
           const matchedId = existingCust ? existingCust.id : existingLead.id;
-          const queryId = generateNextId(db, 'queries', 'QRY');
+          const queryId = await generateNextId(client, 'queries', 'QRY');
           const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
           
           const newQuery = {
@@ -3610,7 +3620,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
 
           // Automatically schedule a follow up task for the new query
           db.follow_ups = db.follow_ups || [];
-          const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+          const followUpId = await generateNextId(client, 'follow_ups', 'FOLLOW');
           const newFollowUp = {
             id: followUpId,
             customerId: matchedId,
@@ -3623,8 +3633,11 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
             remarks: `Auto-scheduled follow up for Quick-Add Query ${queryId}.`
           };
           db.follow_ups.push(newFollowUp);
-          try { syncToSheets('follow_ups'); } catch(e) {}
           
+          await syncDbChangesToPostgres(dbBefore, db, client);
+          dbCache = db;
+          
+          try { syncToSheets('follow_ups'); } catch(e) {}
           try { syncToSheets('queries'); } catch(e) {}
           
           return {
@@ -3640,8 +3653,25 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
       }
 
       // Normalize default date added keys if not present
-      if (module === 'leads' && !payload.dateAdded) {
-        payload.dateAdded = new Date().toISOString().split('T')[0];
+      if (module === 'leads') {
+        if (!payload.dateAdded) {
+          payload.dateAdded = new Date().toISOString().split('T')[0];
+        }
+        if (payload.leadType === 'Seller') {
+          payload.status = 'Converted';
+          payload.assignmentStatus = 'accepted';
+          payload.assignmentTime = null;
+          payload.droppedBy = [];
+        } else {
+          payload.assignmentStatus = 'pending';
+          payload.assignmentTime = new Date().toISOString();
+          payload.droppedBy = [];
+        }
+        if (payload.assignedEmployeeId) {
+          setTimeout(() => {
+            notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
+          }, 500);
+        }
       }
 
       db[module].push(payload);
@@ -3649,14 +3679,27 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         handleFollowUpPipelineAction(payload, db, req);
       } else if (module === 'queries') {
         handleQueryStageChange(payload, db, req);
+      } else if (module === 'leads') {
+        handleLeadStatusChange(payload, db, req);
+        if (payload.assignmentStatus === 'accepted' && payload.leadType !== 'Seller') {
+          createFollowUpForLead(payload, db);
+        }
+        if (payload.assignedEmployeeId) {
+          syncAssignedEmployeeUniversally('leads', payload.id, payload.assignedEmployeeId, db);
+        }
       }
+
+      await syncDbChangesToPostgres(dbBefore, db, client);
+      dbCache = db;
 
       return { record: payload };
     });
 
-    syncToSheets(module);
-    if (module === 'properties') {
-      try { syncToSheets('dealers'); } catch (e) {}
+    if (result && !result.__is_redirected_query) {
+      syncToSheets(module);
+      if (module === 'properties') {
+        try { syncToSheets('dealers'); } catch (e) {}
+      }
     }
     res.json({ success: true, ...result });
   } catch (err) {
@@ -3720,11 +3763,8 @@ app.get('/api/leads/pending', authenticateToken, (req, res) => {
 });
 
 function createFollowUpForLead(lead, db) {
+  if (lead.leadType === 'Seller') return;
   db.follow_ups = db.follow_ups || [];
-  
-  if (lead.leadType === 'Seller') {
-    handleLeadStatusChange(lead, db, { user: { name: 'System' } });
-  }
 
   const cleanPhone = String(lead.phone).trim();
   const cust = (db.customers || []).find(c => String(c.leadId) === String(lead.id) || (c.phone && String(c.phone).trim() === cleanPhone));

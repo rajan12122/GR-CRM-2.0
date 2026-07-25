@@ -160,6 +160,35 @@ async function getRecord(moduleName, id, dbOrClient) {
   return res.rows[0] || null;
 }
 
+function coerceRecordValues(moduleName, data, columns) {
+  const metadata = readMetadata();
+  const fields = (metadata.modules[moduleName] && metadata.modules[moduleName].fields) || [];
+  
+  return columns.map(col => {
+    let val = data[col];
+    const fieldDef = fields.find(f => f.name === col);
+    if (fieldDef) {
+      if (fieldDef.type === 'boolean' || fieldDef.type === 'checkbox') {
+        if (val === '' || val === null || val === undefined) {
+          return false;
+        }
+        return !!val;
+      }
+      if (fieldDef.type === 'number') {
+        if (val === '' || val === null || val === undefined) {
+          return null;
+        }
+        const numVal = Number(val);
+        return isNaN(numVal) ? null : numVal;
+      }
+    }
+    if (val && (typeof val === 'object' || Array.isArray(val))) {
+      return JSON.stringify(val);
+    }
+    return val === undefined ? null : val;
+  });
+}
+
 async function insertRecord(moduleName, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
   const columns = Object.keys(data).filter(col => col !== 'created_at' && col !== 'updated_at');
@@ -171,13 +200,7 @@ async function insertRecord(moduleName, data, dbOrClient) {
     VALUES (${placeholders}, now())
     RETURNING *;
   `;
-  const values = columns.map(col => {
-    let val = data[col];
-    if (val && (typeof val === 'object' || Array.isArray(val))) {
-      return JSON.stringify(val);
-    }
-    return val === undefined ? null : val;
-  });
+  const values = coerceRecordValues(moduleName, data, columns);
 
   const res = await executor.query(sql, values);
   return res.rows[0];
@@ -195,13 +218,7 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
     WHERE id = $1
     RETURNING *;
   `;
-  const values = [id, ...columns.map(col => {
-    let val = data[col];
-    if (val && (typeof val === 'object' || Array.isArray(val))) {
-      return JSON.stringify(val);
-    }
-    return val === undefined ? null : val;
-  })];
+  const values = [id, ...coerceRecordValues(moduleName, data, columns)];
 
   const res = await executor.query(sql, values);
   return res.rows[0];
