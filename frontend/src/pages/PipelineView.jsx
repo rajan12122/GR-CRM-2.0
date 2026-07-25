@@ -22,7 +22,7 @@ const PipelineView = () => {
 
   useEffect(() => {
     if (metadata) {
-      const moduleToFetch = (pipelineType === 'buyer_query' || pipelineType === 'customers') ? 'follow_ups' : (pipelineType === 'seller_query' ? 'queries' : (pipelineType === 'property_pitches' ? 'property_pitch_history' : pipelineType));
+      const moduleToFetch = (pipelineType === 'buyer_query' || pipelineType === 'seller_query') ? 'queries' : (pipelineType === 'customers' ? 'follow_ups' : (pipelineType === 'property_pitches' ? 'property_pitch_history' : pipelineType));
       fetchModuleData(moduleToFetch);
     }
   }, [pipelineType, metadata]);
@@ -58,12 +58,9 @@ const PipelineView = () => {
     title = 'Client Deal Nurturing Pipeline';
     subtitle = 'Track customer pathways from fresh leads to negotiation and booking closeouts.';
   } else if (pipelineType === 'buyer_query') {
-    targetModule = 'follow_ups';
-    stageField = 'pipelineAction';
-    stages = [
-      { value: 'None', label: 'New Query / Scheduled', color: '#3B82F6' },
-      ...(metadata?.chips?.customerStages || [])
-    ];
+    targetModule = 'queries';
+    stageField = 'stage';
+    stages = metadata.chips.buyerQueryStages || [];
     title = 'Buyer Query Pipeline';
     subtitle = 'Track prospective buyer query progression from Verified to Closed.';
   } else if (pipelineType === 'seller_query') {
@@ -104,12 +101,7 @@ const PipelineView = () => {
         pipelineAction: f.pipelineAction || 'None'
       }));
   } else if (pipelineType === 'buyer_query') {
-    records = (moduleData.follow_ups || [])
-      .filter(f => !!f.queryId || String(f.remarks).toLowerCase().includes('query'))
-      .map(f => ({
-        ...f,
-        pipelineAction: f.pipelineAction || 'None'
-      }));
+    records = (moduleData.queries || []).filter(rec => rec.queryType === 'Buy Property');
   } else if (pipelineType === 'seller_query') {
     records = (moduleData.queries || []).filter(rec => rec.queryType === 'Sell Property');
   } else {

@@ -137,6 +137,13 @@ const LeadNotificationListener = () => {
         } catch (err) { console.error(err); }
       });
 
+      es.addEventListener('query-assigned', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          showToast(`📋 QUERY ASSIGNED: ${data.message}`);
+        } catch (err) { console.error(err); }
+      });
+
       es.addEventListener('pending-docs-alert', (e) => {
         try {
           const data = JSON.parse(e.data);

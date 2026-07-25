@@ -113,7 +113,6 @@ const DynamicForm = ({
       }
       if (type === 'Seller') {
         if (f.name === 'budget') return false;
-        if (['r_c_i', 'propertyType', 'locality', 'sector_block', 'size', 'demand'].includes(f.name)) return false;
       }
     }
     if (moduleKey === 'queries') {
@@ -126,7 +125,6 @@ const DynamicForm = ({
       }
       if (type === 'Sell Property') {
         if (f.name === 'budget') return false;
-        if (['r_c_i', 'propertyType', 'locality', 'sector_block', 'size', 'demand'].includes(f.name)) return false;
       }
     }
     if (moduleKey === 'properties') {

@@ -971,9 +971,10 @@ const EntityDetail = () => {
             </Card>
           )}
 
-          {/* Intelligent Property Matcher Engine */}
-          {(moduleName === 'leads' || moduleName === 'follow_ups') && (() => {
+          {/* Intelligent Property & Query Matcher Engine */}
+          {(moduleName === 'leads' || moduleName === 'follow_ups' || moduleName === 'queries') && (() => {
             const propertiesList = moduleData.properties || [];
+            const queriesList = moduleData.queries || [];
             
             // Resolve target client record for demands
             let clientRec = record;
@@ -987,14 +988,15 @@ const EntityDetail = () => {
             
             if (!clientRec) return null;
 
-            // Get lead demands
+            // Get lead/query demands
             const leadRCI = clientRec.r_c_i;
             const leadType = clientRec.propertyType;
             const leadLocality = clientRec.locality;
             const leadSector = clientRec.sector_block;
 
-            // Score properties based on keyword matching
-            const matchedProps = propertiesList
+            // Score properties based on keyword matching (only for buyer leads/queries/followups)
+            const showPropMatching = moduleName !== 'queries' || clientRec.queryType === 'Buy Property';
+            const matchedProps = !showPropMatching ? [] : propertiesList
               .map(p => {
                 let matchCount = 0;
                 const matches = [];
@@ -1008,11 +1010,11 @@ const EntityDetail = () => {
                   matchCount++;
                   matches.push(p.propertyType);
                 }
-                if (leadLocality && p.locality && String(leadLocality).toLowerCase().includes(String(leadLocality).toLowerCase())) {
+                if (leadLocality && p.locality && String(p.locality).toLowerCase().includes(String(leadLocality).toLowerCase())) {
                   matchCount++;
                   matches.push(p.locality);
                 }
-                if (leadSector && p.sector_block && String(leadSector).toLowerCase().includes(String(leadSector).toLowerCase())) {
+                if (leadSector && p.sector_block && String(p.sector_block).toLowerCase().includes(String(leadSector).toLowerCase())) {
                   matchCount++;
                   matches.push(p.sector_block);
                 }
@@ -1036,19 +1038,51 @@ const EntityDetail = () => {
               .sort((a, b) => b.matchCount - a.matchCount)
               .slice(0, 5); // Show top 5 matches
 
+            // Match against other queries (interconnection of buy/sell requests)
+            const showQueryMatching = moduleName === 'queries';
+            const targetQueryType = clientRec.queryType === 'Buy Property' ? 'Sell Property' : 'Buy Property';
+            const matchedQueries = !showQueryMatching ? [] : queriesList
+              .filter(q => q.id !== clientRec.id && q.queryType === targetQueryType)
+              .map(q => {
+                let matchCount = 0;
+                const matches = [];
+
+                if (leadRCI && q.r_c_i && String(leadRCI).toLowerCase() === String(q.r_c_i).toLowerCase()) {
+                  matchCount++;
+                  matches.push(q.r_c_i);
+                }
+                if (leadType && q.propertyType && String(leadType).toLowerCase() === String(q.propertyType).toLowerCase()) {
+                  matchCount++;
+                  matches.push(q.propertyType);
+                }
+                if (leadLocality && q.locality && String(q.locality).toLowerCase().includes(String(leadLocality).toLowerCase())) {
+                  matchCount++;
+                  matches.push(q.locality);
+                }
+                if (leadSector && q.sector_block && String(q.sector_block).toLowerCase().includes(String(leadSector).toLowerCase())) {
+                  matchCount++;
+                  matches.push(q.sector_block);
+                }
+
+                return { ...q, matchCount, matches: [...new Set(matches)] };
+              })
+              .filter(q => q.matchCount > 1)
+              .sort((a, b) => b.matchCount - a.matchCount)
+              .slice(0, 5);
+
             return (
               <Card sx={{ mt: 3, border: '1px solid #E2E8F0', borderRadius: '16px', backgroundColor: 'rgba(34, 197, 94, 0.01)' }}>
                 <CardContent sx={{ p: 3 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 0.5, mb: 2 }}>
                     <Icons.Target size={16} />
-                    Property Matcher
+                    {moduleName === 'queries' ? 'Intelligent Query Matcher' : 'Property Matcher'}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
 
-                  {/* Lead Demand Summary Rows */}
+                  {/* Lead/Query Demand Summary Rows */}
                   <Box sx={{ mb: 2, p: 1.5, backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
                     <Typography variant="caption" sx={{ fontWeight: 800, color: '#475569', display: 'block', mb: 1, textTransform: 'uppercase', fontSize: '9px' }}>
-                      Client Demand Profile:
+                      {clientRec.queryType === 'Sell Property' ? 'Listing Property Profile:' : 'Client Demand Profile:'}
                     </Typography>
                     <Grid container spacing={1}>
                       <Grid item xs={6}>
@@ -1069,50 +1103,99 @@ const EntityDetail = () => {
                       </Grid>
                     </Grid>
                   </Box>
-                  
-                  {matchedProps.length === 0 ? (
-                    <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', textAlign: 'center', py: 2 }}>
-                      No matching properties found in database with more than 1 matching keyword.
-                    </Typography>
-                  ) : (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                      {matchedProps.map(p => {
-                        const propName = p.name || `${p.propertyType || 'Property'} - ${p.locality || ''} ${p.sector_block || ''} (${p.size || ''})`;
-                        const propPrice = p.demand || 'Price on Ask';
-                        return (
-                          <Paper key={p.id} sx={{ p: 1.5, border: '1px solid #E2E8F0', borderRadius: '10px', boxShadow: 'none', '&:hover': { borderColor: '#16A34A' } }}>
-                            <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={0.5}>
-                              <Typography variant="body2" sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => navigate(`/module/properties/${p.id}`)}>
-                                {propName}
-                              </Typography>
-                              <Chip label={`${p.matchCount} Matches`} size="small" color="success" sx={{ fontSize: '9px', height: 18, fontWeight: 700 }} />
-                            </Box>
-                            <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1 }}>
-                              Price: {propPrice} • {p.city || 'Local'}
-                            </Typography>
-                            
-                            {p.matches && p.matches.length > 0 && (
-                              <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                {p.matches.map((m, mIdx) => (
-                                  <Chip key={mIdx} label={m} size="small" variant="outlined" sx={{ fontSize: '8px', height: 14 }} />
-                                ))}
-                              </Box>
-                            )}
 
-                            <Button 
-                              size="small" 
-                              variant="outlined" 
-                              color="success" 
-                              startIcon={<Icons.Share2 size={12} />}
-                              href={`https://wa.me/91${clientRec.phone || ''}?text=${encodeURIComponent(compileTemplate(templates.whatsapp, clientRec.name, propName, propPrice, p.locality, p.sector_block))}`}
-                              target="_blank"
-                              sx={{ textTransform: 'none', py: 0.2, fontSize: '10px', fontWeight: 700, borderRadius: '6px' }}
-                            >
-                              Share on WhatsApp
-                            </Button>
-                          </Paper>
-                        );
-                      })}
+                  {/* Matching Section for Properties */}
+                  {showPropMatching && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '12px', mb: 1, color: '#475569' }}>
+                        Matching Inventory Listings:
+                      </Typography>
+                      {matchedProps.length === 0 ? (
+                        <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', py: 1 }}>
+                          No matching inventory found (need > 1 match).
+                        </Typography>
+                      ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                          {matchedProps.map(p => {
+                            const propName = p.propertyName || `${p.propertyType || 'Property'} - ${p.locality || ''} ${p.sector_block || ''} (${p.size || ''})`;
+                            const propPrice = p.demand || 'Price on Ask';
+                            return (
+                              <Paper key={p.id} sx={{ p: 1.5, border: '1px solid #E2E8F0', borderRadius: '10px', boxShadow: 'none', '&:hover': { borderColor: '#16A34A' } }}>
+                                <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={0.5}>
+                                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => navigate(`/module/properties/${p.id}`)}>
+                                    {propName}
+                                  </Typography>
+                                  <Chip label={`${p.matchCount} Matches`} size="small" color="success" sx={{ fontSize: '9px', height: 18, fontWeight: 700 }} />
+                                </Box>
+                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1 }}>
+                                  Price: {propPrice}
+                                </Typography>
+                                {p.matches && p.matches.length > 0 && (
+                                  <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {p.matches.map((m, mIdx) => (
+                                      <Chip key={mIdx} label={m} size="small" variant="outlined" sx={{ fontSize: '8px', height: 14 }} />
+                                    ))}
+                                  </Box>
+                                )}
+                                <Button 
+                                  size="small" 
+                                  variant="outlined" 
+                                  color="success" 
+                                  startIcon={<Icons.Share2 size={12} />}
+                                  href={`https://wa.me/91${clientRec.phone || ''}?text=${encodeURIComponent(compileTemplate(templates.whatsapp, clientRec.name, propName, propPrice, p.locality, p.sector_block))}`}
+                                  target="_blank"
+                                  sx={{ textTransform: 'none', py: 0.2, fontSize: '10px', fontWeight: 700, borderRadius: '6px' }}
+                                >
+                                  Share on WhatsApp
+                                </Button>
+                              </Paper>
+                            );
+                          })}
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Matching Section for Interconnected Queries */}
+                  {showQueryMatching && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '12px', mb: 1, color: '#475569' }}>
+                        {clientRec.queryType === 'Buy Property' ? 'Matching Sell Queries (Sellers):' : 'Matching Buy Queries (Buyers):'}
+                      </Typography>
+                      {matchedQueries.length === 0 ? (
+                        <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', py: 1 }}>
+                          No matching counter-queries found in database.
+                        </Typography>
+                      ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                          {matchedQueries.map(q => {
+                            const cust = (moduleData.customers || []).find(c => String(c.id) === String(q.customerId));
+                            const custName = cust ? cust.name : 'Unknown Customer';
+                            const priceText = q.queryType === 'Sell Property' ? `Demand: ${q.demand || 'N/A'}` : `Budget: ${q.budget || 'N/A'}`;
+                            const titleText = `${q.propertyType || 'Property'} in ${q.locality || ''} ${q.sector_block || ''} (${custName})`;
+                            return (
+                              <Paper key={q.id} sx={{ p: 1.5, border: '1px solid #E2E8F0', borderRadius: '10px', boxShadow: 'none', '&:hover': { borderColor: '#16A34A' } }}>
+                                <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={0.5}>
+                                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => navigate(`/module/queries/${q.id}`)}>
+                                    {titleText}
+                                  </Typography>
+                                  <Chip label={`${q.matchCount} Matches`} size="small" color="info" sx={{ fontSize: '9px', height: 18, fontWeight: 700 }} />
+                                </Box>
+                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1 }}>
+                                  {priceText} • Status: {q.status || 'Pending'}
+                                </Typography>
+                                {q.matches && q.matches.length > 0 && (
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {q.matches.map((m, mIdx) => (
+                                      <Chip key={mIdx} label={m} size="small" variant="outlined" sx={{ fontSize: '8px', height: 14 }} />
+                                    ))}
+                                  </Box>
+                                )}
+                              </Paper>
+                            );
+                          })}
+                        </Box>
+                      )}
                     </Box>
                   )}
                 </CardContent>

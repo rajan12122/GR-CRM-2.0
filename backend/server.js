@@ -493,6 +493,9 @@ function handleQueryStageChange(q, db, req) {
   if (!q.id) return;
   const isInventoryAdded = q.queryType === 'Sell Property' && (q.status === 'Approved' || q.stage === 'Inventory Added' || q.stage === 'Available For Sale');
   if (isInventoryAdded) {
+    if (q.status === 'Approved' && q.stage !== 'Inventory Added' && q.stage !== 'Available For Sale') {
+      q.stage = 'Inventory Added';
+    }
     db.properties = db.properties || [];
     const propExists = db.properties.some(p => p.linkedQueryId === q.id);
     if (!propExists) {
@@ -533,6 +536,10 @@ function handleQueryStageChange(q, db, req) {
           notifyUser(q.assignedEmployeeId, 'new-property-matched', {
             propertyId: propId,
             message: `Property ${propId} added automatically from Sell Query ${q.id}`
+          });
+          notifyUser(q.assignedEmployeeId, 'query-approved', {
+            queryId: q.id,
+            message: `Query ${q.id} has been Approved and Property ${propId} added to Direct inventory.`
           });
         }, 500);
       }
@@ -705,6 +712,9 @@ function handleDealStatusChange(d, db, req) {
     const buyerCust = (db.customers || []).find(c => String(c.id) === String(d.customerId));
     const buyerName = buyerCust ? buyerCust.name : (d.customerId || 'Unknown');
     
+    const emp = (db.employees || []).find(e => String(e.id) === String(d.employeeId));
+    const empName = emp ? emp.name : 'Unknown Employee';
+    
     prop.owner_history = prop.owner_history || [];
     if (prevOwnerId || prevOwnerName) {
       const hasHistory = prop.owner_history.some(h => String(h.dealId) === String(d.id));
@@ -716,7 +726,9 @@ function handleDealStatusChange(d, db, req) {
           purchaseDate: prop.date || '',
           purchasePrice: prop.demand || '',
           saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
-          salePrice: d.salePrice || ''
+          salePrice: d.salePrice || '',
+          soldByEmployeeId: d.employeeId || '',
+          soldByEmployeeName: empName
         });
       }
     }
@@ -745,7 +757,7 @@ function handleDealStatusChange(d, db, req) {
     prop.timeline.push({
       date: new Date().toLocaleDateString('en-IN'),
       event: 'Ownership Changed (Deal Closed)',
-      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${d.salePrice}`
+      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${d.salePrice} (Closed by Employee: ${empName})`
     });
     
     db.properties[propIndex] = prop;
@@ -1852,6 +1864,17 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         if (payload.assignedEmployeeId) {
           setTimeout(() => {
             notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
+          }, 500);
+        }
+      }
+
+      if (module === 'queries') {
+        if (!payload.status) {
+          payload.status = 'Pending Approval';
+        }
+        if (payload.assignedEmployeeId) {
+          setTimeout(() => {
+            notifyUser(payload.assignedEmployeeId, 'query-assigned', { queryId: payload.id, message: `New Query ${payload.id} assigned to you for approval.` });
           }, 500);
         }
       }
@@ -3670,6 +3693,16 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         if (payload.assignedEmployeeId) {
           setTimeout(() => {
             notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
+          }, 500);
+        }
+      }
+      if (module === 'queries') {
+        if (!payload.status) {
+          payload.status = 'Pending Approval';
+        }
+        if (payload.assignedEmployeeId) {
+          setTimeout(() => {
+            notifyUser(payload.assignedEmployeeId, 'query-assigned', { queryId: payload.id, message: `New Query ${payload.id} assigned to you for approval.` });
           }, 500);
         }
       }
