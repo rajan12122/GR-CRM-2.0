@@ -1885,7 +1885,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (module === 'queries') {
         handleQueryStageChange(payload, db, req);
         
-        if (module === 'queries' && payload.queryType !== 'Sell Property') {
+        if (module === 'queries') {
           db.follow_ups = db.follow_ups || [];
           const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
           const newFollowUp = {
@@ -3712,6 +3712,21 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         handleFollowUpPipelineAction(payload, db, req);
       } else if (module === 'queries') {
         handleQueryStageChange(payload, db, req);
+        db.follow_ups = db.follow_ups || [];
+        const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+        const newFollowUp = {
+          id: followUpId,
+          customerId: payload.customerId,
+          queryId: payload.id,
+          employeeId: payload.assignedEmployeeId || 'EMP-001',
+          date: new Date().toLocaleDateString('en-IN'),
+          time: '12:00 PM',
+          status: 'Pending Call',
+          pipelineAction: 'Fresh Lead',
+          remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
+        };
+        db.follow_ups.push(newFollowUp);
+        try { syncToSheets('follow_ups'); } catch(e) {}
       } else if (module === 'leads') {
         handleLeadStatusChange(payload, db, req);
         if (payload.assignmentStatus === 'accepted' && payload.leadType !== 'Seller') {
