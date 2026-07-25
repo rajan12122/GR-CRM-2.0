@@ -70,6 +70,12 @@ async function initializeMetadata() {
       `, [JSON.stringify(localMetadata)]);
       console.log('Successfully initialized app_metadata table from local file.');
     }
+
+    // 3. Ensure assignmentStatus column exists in leads table
+    await client.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS "assignmentStatus" TEXT DEFAULT 'accepted';
+    `);
+
   } finally {
     client.release();
   }

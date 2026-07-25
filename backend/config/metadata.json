@@ -358,6 +358,14 @@
           "required": true,
           "showInTable": true,
           "editable": false
+        },
+        {
+          "name": "assignmentStatus",
+          "label": "Assignment Status",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
         }
       ]
     },
