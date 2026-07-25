@@ -25,148 +25,148 @@ const modulesData = [
   {
     name: "Employees",
     icon: "Users",
-    role: "Staff profiles, role authorizations, and login access control.",
+    role: "staff profiles, roles, and login access.",
     relations: "Connected to every module. Whichever employee is assigned handles that Lead, Customer, Deal, Task, Attendance, Leave, Salary, and Location entry.",
     color: "#EF4444"
   },
   {
     name: "Customers",
     icon: "UserCheck",
-    role: "Master directory of confirmed clients and their buying/selling journey stages.",
-    relations: "Related to Leads (converts from Lead), Follow-ups, Queries, Site Visits, Deals, and Sales. Reassigning an employee updates Lead, Follow-up, Query, and Site Visit records automatically.",
+    role: "master record of confirmed clients and their buying/selling stage.",
+    relations: "Related to Leads (a Lead becomes a Customer), Follow-ups, Queries, Site Visits, Deals, and Sales. Changing the assigned employee here updates the same client's Lead, Follow-up, Query, and Site Visit too.",
     color: "#3B82F6"
   },
   {
     name: "Leads",
     icon: "UserPlus",
-    role: "Prospective client enquiries before conversion to permanent customers.",
-    relations: "Converts into Customer. Automatically creates a Follow-up on acceptance, schedules a Query if the phone number already exists, and Seller-type leads auto-create Properties.",
+    role: "new enquiries before they become confirmed customers.",
+    relations: "Related to Customers (converts into one), Follow-ups (auto-created on acceptance), Queries (auto-created if phone number already exists), and Properties (a Seller lead auto-creates a Property).",
     color: "#10B981"
   },
   {
     name: "Properties",
     icon: "Home",
-    role: "Inventory listings directory with owner details, characteristics, and listing states.",
-    relations: "Related to Leads, Customers, Queries, and Follow-ups. Core updates (price, locality, size) auto-sync to all linked records. Ownership transfers on closed Deal or Pitch.",
+    role: "inventory of listings with owner and status details.",
+    relations: "Related to Leads, Customers, Queries, and Follow-ups. Any change in property details (price, size, locality) updates all these linked records automatically. Ownership changes when a Deal or Pitch is closed.",
     color: "#F59E0B"
   },
   {
     name: "Projects",
     icon: "Building2",
-    role: "Groups properties/plots under parent real-estate developments.",
-    relations: "Feeds exclusively into Properties as parent metadata.",
+    role: "real-estate projects/developments the properties belong to.",
+    relations: "Related to Properties only — groups properties under one project/development.",
     color: "#8B5CF6"
   },
   {
     name: "Site Visits",
     icon: "Map",
-    role: "Logs scheduled and completed property showing visits with clients.",
-    relations: "Auto-created when Follow-up stage transitions to 'Site Visit'. Links clients (Customer/Lead), employees, and property listings.",
+    role: "scheduled and completed property visits with clients.",
+    relations: "Related to Follow-ups (auto-created when stage = \"Site Visit\"), Customers/Leads (who is visiting), Employees (who is conducting it), and Properties (which property is being shown).",
     color: "#EC4899"
   },
   {
     name: "Follow-ups",
     icon: "PhoneCall",
-    role: "Central task and call nurturing pipeline driving downstream operations.",
-    relations: "The core CRM workflow driver. Changing stages automatically schedules Site Visits, triggers Deal creation, or transfers property ownership, updating linked Queries/Leads.",
+    role: "call/task pipeline tracking a client's next action and stage.",
+    relations: "Related to almost everything — Site Visits, Deals, Queries, Leads, and Customers. This is the central module; changing its stage can trigger a Site Visit, close a Deal, or transfer property ownership.",
     color: "#6366F1"
   },
   {
     name: "Attendance",
     icon: "Clock",
-    role: "Logs daily check-in/out stamps and lateness thresholds (late after 9:30 AM).",
-    relations: "Linked to Employees (owner) and feeds directly into Salaries for payroll calculation.",
+    role: "daily punch-in/out and presence status of employees.",
+    relations: "Related to Employees (whose attendance is recorded) and Salaries (feeds directly into salary calculation).",
     color: "#14B8A6"
   },
   {
     name: "Leaves",
     icon: "CalendarX",
-    role: "Manages employee leave requests, approvals, and paid leaf limits.",
-    relations: "Affects Attendance sheets and drives Salary deductions (first 4 leaves per month are paid).",
+    role: "leave requests and approvals for employees.",
+    relations: "Related to Employees, Attendance (counted there), and Salaries (first 4 leaves/month paid, rest deducted).",
     color: "#F43F5E"
   },
   {
     name: "Sales",
     icon: "CircleDollarSign",
-    role: "Records client property bookings and cash flow receipts.",
-    relations: "Connects buyer (Customer), item sold (Property), and salesperson (Employee).",
+    role: "recorded bookings and sales transactions.",
+    relations: "Related to Customers (buyer), Properties (item sold), and Employees (salesperson).",
     color: "#10B981"
   },
   {
     name: "Tasks",
     icon: "CheckSquare",
-    role: "Assigned employee to-do checklist and daily operational items.",
-    relations: "Assigned directly to Employees.",
+    role: "general to-do items assigned to staff.",
+    relations: "Related to Employees only — general to-dos assigned to staff.",
     color: "#6B7280"
   },
   {
     name: "Daily Prices",
     icon: "TrendingUp",
-    role: "Maintains records of day-wise market rate updates for projects and listings.",
-    relations: "Tied directly to Properties to track asset valuation over time.",
+    role: "day-wise property/market price updates.",
+    relations: "Related to Properties — tracks daily price changes for listings.",
     color: "#059669"
   },
   {
     name: "Dealers",
     icon: "Network",
-    role: "Directory of external brokers, channel partners, and realtors.",
-    relations: "Links to Dealer Calls (outcome tracking) and Dealer Meetings (assigned to Employees).",
+    role: "external property dealers/agents and their details.",
+    relations: "Related to Dealer Calls (updates dealer remarks) and Dealer Meetings (visit assigned to an Employee).",
     color: "#D97706"
   },
   {
     name: "Location Tracker",
     icon: "Navigation",
-    role: "GPS logger tracking coordinates (>10m increments) and employee travel distance.",
-    relations: "Encrypted logging tied to Employees. Aggregated mileage saves on employee profiles.",
+    role: "live GPS tracking of field employees.",
+    relations: "Related to Employees — GPS path and distance are saved on the employee's profile.",
     color: "#2563EB"
   },
   {
     name: "Notices",
     icon: "Megaphone",
-    role: "Internal board for announcements, circulars, and system notices.",
-    relations: "Assigned by admins, viewable by Employees.",
+    role: "internal announcements and notes for staff.",
+    relations: "Related to Employees — announcements shown to staff.",
     color: "#7C3AED"
   },
   {
     name: "Salaries",
     icon: "Wallet",
-    role: "Wallet payment payroll calculation module.",
-    relations: "Pulls present/late/absent counts from Attendance and unpaid counts from Leaves for final employee payouts.",
+    role: "monthly payroll calculation and payslip records.",
+    relations: "Related to Employees, Attendance, and Leaves — pulls present/absent/leave data to calculate final pay.",
     color: "#059669"
   },
   {
     name: "Queries",
     icon: "HelpCircle",
-    role: "Specific buy/sell requirements raised by leads or customers.",
-    relations: "Tied to client (Customer/Lead). Approved Sell queries create new Property listings. Every query schedules a Follow-up.",
+    role: "specific buy/sell requirements raised by a customer or lead.",
+    relations: "Related to Customers/Leads (who raised it), Properties (a Sell query can create a listing), and Follow-ups (auto-schedules a call).",
     color: "#3B82F6"
   },
   {
     name: "Deals",
     icon: "Handshake",
-    role: "Master registry of finalized booking closures and deeds.",
-    relations: "Converts Lead to Customer, updates property ownership to buyer, and tracks RM closer details.",
+    role: "finalized, closed transactions.",
+    relations: "Related to Properties (ownership transfer), Customers (buyer), Leads (converted if needed), and Employees (deal owner).",
     color: "#16A34A"
   },
   {
     name: "Property Pitch History",
     icon: "Send",
-    role: "Tracks which properties were presented or pitched to which clients.",
-    relations: "Auto-completes call tasks, updates follow-up/query stages, and triggers ownership transfer on closing.",
+    role: "log of which properties were pitched to which clients.",
+    relations: "Related to Follow-ups (auto-completes a call task), Queries and Customers (updates their stage), and Properties (transfers ownership if deal closes).",
     color: "#8B5CF6"
   },
   {
     name: "Dealer Calls",
     icon: "PhoneForwarded",
-    role: "Call logs and outcomes tracked with external dealers.",
-    relations: "Automatically updates dealer remarks on the main Dealers file.",
+    role: "call logs with external dealers.",
+    relations: "Related to Dealers — each call updates the dealer's main record.",
     color: "#F59E0B"
   },
   {
     name: "Dealer Meetings",
     icon: "Users2",
-    role: "Logs schedules and assignments for partner dealer meetings.",
-    relations: "Assigning meetings triggers instant notifications to Employees.",
+    role: "scheduled meetings with external dealers.",
+    relations: "Related to Dealers and Employees — assigning a meeting notifies the employee.",
     color: "#EC4899"
   }
 ];
