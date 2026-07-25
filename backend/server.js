@@ -4474,6 +4474,9 @@ app.listen(PORT, async () => {
     if (updated) {
       writeDb(db);
       console.log('Database self-correction: synced property status & ownership logs for closed deals and removed duplicates.');
+      try { syncToSheets('properties'); } catch(e) {}
+      try { syncToSheets('leads'); } catch(e) {}
+      try { syncToSheets('customers'); } catch(e) {}
     }
   } catch (err) {
     console.error('Database self-correction failed:', err);
