@@ -244,6 +244,9 @@ async function migrate() {
         fieldsMap['pitchPrice'] = 'text';
         fieldsMap['pitchRemarks'] = 'text';
       }
+      if (mod === 'property_pitch_history') {
+        fieldsMap['employeeId'] = 'text';
+      }
 
       // Scan db.json records to discover any additional fields
       records.forEach(rec => {

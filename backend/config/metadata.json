@@ -1960,6 +1960,15 @@
           "editable": true
         },
         {
+          "name": "employeeId",
+          "label": "Employee ID",
+          "type": "ref",
+          "refModule": "employees",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
           "name": "employeeName",
           "label": "Employee Name",
           "type": "text",
