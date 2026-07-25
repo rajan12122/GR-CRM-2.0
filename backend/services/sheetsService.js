@@ -272,25 +272,35 @@ async function syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbR
     sheetRows.push(headers);
   }
 
+  const sheetHeaders = sheetRows[0];
+  const idColIndex = sheetHeaders.findIndex(h => {
+    const clean = String(h).trim().toLowerCase();
+    return clean === 'crm_id' || clean === 'id';
+  });
+  const actualIdIndex = idColIndex !== -1 ? idColIndex : 0;
+
   // 1. Scan DB records and determine what to write or update
   for (const record of dbRecords) {
     let matchedRowIndex = -1;
     let isIdentical = false;
 
-    const rowValues = headers.map(h => {
-      if (h === 'crm_id') return String(record.id);
-      const val = record[h];
+    const rowValues = sheetHeaders.map(h => {
+      const cleanHeader = String(h).trim();
+      if (cleanHeader === 'crm_id' || cleanHeader === 'id') {
+        return String(record.id);
+      }
+      const val = record[cleanHeader];
       if (val === undefined || val === null) return '';
       return typeof val === 'object' ? JSON.stringify(val) : String(val);
     });
 
     for (let i = 1; i < sheetRows.length; i++) {
-      if (sheetRows[i][0] === String(record.id)) {
+      if (sheetRows[i][actualIdIndex] === String(record.id)) {
         matchedRowIndex = i + 1; // 1-indexed
 
         // Compare values
         isIdentical = true;
-        for (let j = 0; j < headers.length; j++) {
+        for (let j = 0; j < sheetHeaders.length; j++) {
           const sheetVal = sheetRows[i][j] !== undefined ? String(sheetRows[i][j]) : '';
           const recordVal = rowValues[j];
           if (sheetVal !== recordVal) {
@@ -327,7 +337,7 @@ async function syncModuleRowLevel(sheets, spreadsheetId, sheetName, sheetId, dbR
   // 2. Scan Sheet rows and physically delete any missing keys (Soft-delete / Sync delete)
   const deleteRowIndices = [];
   for (let i = 1; i < sheetRows.length; i++) {
-    const crmId = sheetRows[i][0];
+    const crmId = sheetRows[i][actualIdIndex];
     if (crmId && !dbRecords.some(r => String(r.id) === String(crmId))) {
       deleteRowIndices.push(i + 1);
     }
