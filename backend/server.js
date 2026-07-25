@@ -1804,6 +1804,8 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         }
       }
 
+      // Duplicate phone check bypassed to allow duplicates across modules
+      /*
       if (payload.phone) {
         const cleanPhone = String(payload.phone).trim();
         const isDuplicate = (db[module] || []).some(r => r.phone && String(r.phone).trim() === cleanPhone);
@@ -1811,6 +1813,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           throw new Error(`Phone number '${payload.phone}' is already registered in this module.`);
         }
       }
+      */
 
       if (module === 'properties') {
         await handlePropertyDealerAssociation(payload, client);
@@ -2015,6 +2018,8 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       const oldPayload = { ...db[module][index] };
 
       // Enforce unique phone number on update
+      // Duplicate phone check bypassed to allow updates with duplicate phones
+      /*
       if (payload.phone) {
         const cleanPhone = String(payload.phone).trim();
         const isDuplicate = db[module].some(r => r.phone && String(r.phone).trim() === cleanPhone && String(r.id) !== String(id));
@@ -2022,6 +2027,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
           throw new Error(`Phone number '${payload.phone}' is already registered in this module.`);
         }
       }
+      */
 
       if (module === 'properties') {
         await handlePropertyDealerAssociation(payload, client);
