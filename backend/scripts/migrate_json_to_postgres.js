@@ -234,6 +234,15 @@ async function migrate() {
       if (mod === 'properties') {
         fieldsMap['ownership_documents'] = 'jsonb';
         fieldsMap['owner_history'] = 'jsonb';
+        fieldsMap['timeline'] = 'jsonb';
+        fieldsMap['linkedQueryId'] = 'text';
+        fieldsMap['current_owner_id'] = 'text';
+      }
+      if (mod === 'follow_ups') {
+        fieldsMap['remarks'] = 'text';
+        fieldsMap['pitchedPropertyId'] = 'text';
+        fieldsMap['pitchPrice'] = 'text';
+        fieldsMap['pitchRemarks'] = 'text';
       }
 
       // Scan db.json records to discover any additional fields
