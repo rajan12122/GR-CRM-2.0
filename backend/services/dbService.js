@@ -76,6 +76,16 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "assignmentStatus" TEXT DEFAULT 'accepted';
     `);
 
+    // Ensure assignmentTime column exists in leads table
+    await client.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS "assignmentTime" TEXT;
+    `);
+
+    // Ensure droppedBy column exists in leads table
+    await client.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS "droppedBy" JSONB DEFAULT '[]';
+    `);
+
   } finally {
     client.release();
   }

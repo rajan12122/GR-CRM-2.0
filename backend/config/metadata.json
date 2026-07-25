@@ -366,6 +366,22 @@
           "required": false,
           "showInTable": false,
           "editable": true
+        },
+        {
+          "name": "assignmentTime",
+          "label": "Assignment Time",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "droppedBy",
+          "label": "Dropped By Employees",
+          "type": "json",
+          "required": false,
+          "showInTable": false,
+          "editable": true
         }
       ]
     },
