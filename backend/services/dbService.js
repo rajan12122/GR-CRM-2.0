@@ -274,44 +274,35 @@ async function getIdCounters(dbOrClient) {
 
 // Pre-load relevant tables for write transactions
 async function loadTransactionDb(client) {
-  return {
-    employees: await getRecords('employees', client),
-    customers: await getRecords('customers', client),
-    leads: await getRecords('leads', client),
-    properties: await getRecords('properties', client),
-    projects: await getRecords('projects', client),
-    site_visits: await getRecords('site_visits', client),
-    follow_ups: await getRecords('follow_ups', client),
-    remarks: await getRecords('remarks', client),
-    documents: await getRecords('documents', client),
-    dealers: await getRecords('dealers', client),
-    queries: await getRecords('queries', client),
-    deals: await getRecords('deals', client),
-    property_pitch_history: await getRecords('property_pitch_history', client),
-    dealer_calls: await getRecords('dealer_calls', client),
-    dealer_meetings: await getRecords('dealer_meetings', client),
-    activity_logs: await getRecords('activity_logs', client),
-    attendance: await getRecords('attendance', client),
-    leaves: await getRecords('leaves', client),
-    sales: await getRecords('sales', client),
-    tasks: await getRecords('tasks', client),
-    daily_prices: await getRecords('daily_prices', client),
-    notices: await getRecords('notices', client),
-    salaries: await getRecords('salaries', client),
-    reminders: await getRecords('reminders', client),
-    location_logs: await getRecords('location_logs', client),
-    project_history: await getRecords('project_history', client),
-    property_history: await getRecords('property_history', client),
-    active_paths: await (async () => {
-      const res = await client.query('SELECT * FROM active_paths');
-      const paths = {};
-      res.rows.forEach(r => {
-        paths[r.employee_id] = r.path;
-      });
-      return paths;
-    })(),
-    idCounters: await getIdCounters(client)
-  };
+  const tables = [
+    'employees', 'customers', 'leads', 'properties', 'projects', 'site_visits',
+    'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals',
+    'property_pitch_history', 'dealer_calls', 'dealer_meetings', 'activity_logs',
+    'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
+    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history'
+  ];
+
+  const results = await Promise.all([
+    ...tables.map(tbl => getRecords(tbl, client)),
+    client.query('SELECT * FROM active_paths'),
+    getIdCounters(client)
+  ]);
+
+  const db = {};
+  tables.forEach((tbl, idx) => {
+    db[tbl] = results[idx];
+  });
+
+  const activePathsRes = results[results.length - 2];
+  const paths = {};
+  activePathsRes.rows.forEach(r => {
+    paths[r.employee_id] = r.path;
+  });
+  db.active_paths = paths;
+
+  db.idCounters = results[results.length - 1];
+
+  return db;
 }
 
 // Sync in-memory changes inside transaction back to PostgreSQL

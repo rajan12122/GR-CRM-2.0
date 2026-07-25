@@ -44,31 +44,34 @@ export const AppProvider = ({ children }) => {
       // Set Axios auth header
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-      // Fetch user profile
-      const userRes = await axios.get(`${API_BASE_URL}/auth/me`);
-      setUser(userRes.data);
+      const modulesToPreload = ['employees', 'customers', 'properties'];
 
-      // Fetch metadata config
-      const metaRes = await axios.get(`${API_BASE_URL}/metadata`);
+      // Fetch all required data in parallel
+      const [userRes, metaRes, preloadResults, logsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/auth/me`),
+        axios.get(`${API_BASE_URL}/metadata`),
+        Promise.all(
+          modulesToPreload.map(async (m) => {
+            try {
+              const res = await axios.get(`${API_BASE_URL}/data/${m}`);
+              return { module: m, data: res.data };
+            } catch (e) {
+              console.error(`Failed to preload lookup module ${m}:`, e);
+              return { module: m, data: [] };
+            }
+          })
+        ),
+        axios.get(`${API_BASE_URL}/data/activity_logs`).catch(() => ({ data: [] }))
+      ]);
+
+      setUser(userRes.data);
       setMetadata(metaRes.data);
 
-      // Pre-load reference lists to resolve ID names globally
-      const modulesToPreload = ['employees', 'customers', 'properties'];
       const loaded = {};
-      await Promise.all(
-        modulesToPreload.map(async (m) => {
-          try {
-            const res = await axios.get(`${API_BASE_URL}/data/${m}`);
-            loaded[m] = res.data;
-          } catch (e) {
-            console.error(`Failed to preload lookup module ${m}:`, e);
-          }
-        })
-      );
+      preloadResults.forEach(({ module, data }) => {
+        loaded[module] = data;
+      });
       setModuleData(prev => ({ ...prev, ...loaded }));
-
-      // Fetch activity logs
-      const logsRes = await axios.get(`${API_BASE_URL}/data/activity_logs`).catch(() => ({ data: [] }));
       setActivityLogs(logsRes.data || []);
 
     } catch (err) {
