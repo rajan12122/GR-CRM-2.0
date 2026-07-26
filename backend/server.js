@@ -55,7 +55,7 @@ function generateNextId(db, moduleName, prefix) {
     projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
     tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
     daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET',
+    property_pitch_history: 'PITCH', dealer_calls: 'CALL',
     dealers: 'DEAL'
   };
   const effPrefix = prefix || prefixMap[moduleName] || String(moduleName).substring(0, 4).toUpperCase();
@@ -1674,7 +1674,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
           tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
           daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-          property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
+          property_pitch_history: 'PITCH', dealer_calls: 'CALL'
         };
         const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
         payload.id = generateNextId(db, module, prefix);
@@ -3607,7 +3607,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
         tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
         daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-        property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET'
+        property_pitch_history: 'PITCH', dealer_calls: 'CALL'
       };
       const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
       payload.id = await generateNextId(client, module, prefix);

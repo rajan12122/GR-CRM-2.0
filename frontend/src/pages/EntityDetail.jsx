@@ -2581,18 +2581,7 @@ const EntityDetail = () => {
                         ))
                       )}
 
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, mt: 3 }}>Meetings History ({connections?.meetings?.length || 0})</Typography>
-                      {connections?.meetings?.length === 0 ? (
-                        <Typography variant="body2" sx={{ color: '#94A3B8' }}>No meetings scheduled.</Typography>
-                      ) : (
-                        connections.meetings.map(m => (
-                          <Paper key={m.id} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: 'none', backgroundColor: 'white' }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Meeting ID: {m.id} • RM: {m.assignedEmployeeName}</Typography>
-                            <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>Date: {m.date} • Time: {m.time} • Status: {m.status}</Typography>
-                            <Typography variant="body2" sx={{ color: '#475569', mt: 1 }}>Remarks: {m.outcome || '---'}</Typography>
-                          </Paper>
-                        ))
-                      )}
+
                     </Box>
                   )}
                   {activeTab === 3 && (

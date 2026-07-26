@@ -310,7 +310,7 @@ async function loadTransactionDb(client) {
   const tables = [
     'employees', 'customers', 'leads', 'properties', 'projects', 'site_visits',
     'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals',
-    'property_pitch_history', 'dealer_calls', 'dealer_meetings', 'activity_logs',
+    'property_pitch_history', 'dealer_calls', 'activity_logs',
     'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
     'salaries', 'reminders', 'location_logs', 'project_history', 'property_history'
   ];
@@ -382,7 +382,7 @@ async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
   const tables = [
     'employees', 'customers', 'leads', 'properties', 'projects', 'site_visits', 
     'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals', 
-    'property_pitch_history', 'dealer_calls', 'dealer_meetings', 'activity_logs',
+    'property_pitch_history', 'dealer_calls', 'activity_logs',
     'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
     'salaries', 'reminders', 'location_logs', 'project_history', 'property_history'
   ];

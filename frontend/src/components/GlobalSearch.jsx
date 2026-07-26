@@ -106,7 +106,7 @@ const GlobalSearch = ({ open, onClose }) => {
     setActiveRecordType(type);
     setActiveTab(0);
     
-    if (['customers', 'employees', 'properties', 'dealers', 'projects', 'leads', 'follow_ups', 'queries', 'dealer_meetings'].includes(type)) {
+    if (['customers', 'employees', 'properties', 'dealers', 'projects', 'leads', 'follow_ups', 'queries'].includes(type)) {
       setLoading(true);
       const relations = await fetchEntity360(type, record.id);
       setConnections(relations);
@@ -341,7 +341,7 @@ const GlobalSearch = ({ open, onClose }) => {
                 </Box>
 
                 {/* Tab layout connections */}
-                {['customers', 'employees', 'properties', 'dealers', 'projects', 'leads', 'follow_ups', 'queries', 'dealer_meetings'].includes(activeRecordType) && connections ? (
+                {['customers', 'employees', 'properties', 'dealers', 'projects', 'leads', 'follow_ups', 'queries'].includes(activeRecordType) && connections ? (
                   <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <Tabs 
                       value={activeTab} 
