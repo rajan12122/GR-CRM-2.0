@@ -1909,6 +1909,14 @@
           "required": false,
           "showInTable": false,
           "editable": true
+        },
+        {
+          "name": "associatedPitchId",
+          "label": "Associated Pitch ID",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": false
         }
       ]
     },
