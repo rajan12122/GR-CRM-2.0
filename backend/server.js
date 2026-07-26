@@ -509,8 +509,9 @@ function handleQueryStageChange(q, db, req) {
     const propExists = db.properties.some(p => p.linkedQueryId === q.id);
     if (!propExists) {
       const propId = generateNextId(db, 'properties', 'PROP');
-      const cust = (db.customers || []).find(c => String(c.id) === String(q.customerId));
-      const ownerName = cust ? cust.name : 'Unknown Owner';
+      const cust = (db.customers || []).find(c => String(c.id) === String(q.customerId)) ||
+                   (db.leads || []).find(l => String(l.id) === String(q.customerId));
+      const ownerName = cust ? (cust.name || cust.person_name) : 'Unknown Owner';
       const ownerPhone = cust ? cust.phone : '';
       
       const newProperty = {
@@ -534,7 +535,7 @@ function handleQueryStageChange(q, db, req) {
           {
             date: new Date().toLocaleDateString('en-IN'),
             event: 'Property Added to Inventory',
-            details: `Automatically created from Sell Property Query ${q.id} by ${ownerName}`
+            details: `Property Added to Inventory — Automatically created from Sell Property Query ${q.id}.`
           }
         ]
       };
@@ -544,11 +545,7 @@ function handleQueryStageChange(q, db, req) {
         setTimeout(() => {
           notifyUser(q.assignedEmployeeId, 'new-property-matched', {
             propertyId: propId,
-            message: `Property ${propId} added automatically from Sell Query ${q.id}`
-          });
-          notifyUser(q.assignedEmployeeId, 'query-approved', {
-            queryId: q.id,
-            message: `Query ${q.id} has been Approved and Property ${propId} added to Direct inventory.`
+            message: `Property ${propId} added automatically from Sell Query ${q.id}.`
           });
         }, 500);
       }
@@ -1723,14 +1720,16 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (payload.phone && (module === 'customers' || module === 'leads')) {
         const cleanPhone = String(payload.phone).trim();
         const existingCust = (db.customers || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
-        if (existingCust) {
+        const existingLead = (db.leads || []).find(r => r.phone && String(r.phone).trim() === cleanPhone);
+        if (existingCust || existingLead) {
+          const existingPerson = existingCust || existingLead;
           const queryId = generateNextId(db, 'queries', 'QRY');
           const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
           
           const newQuery = {
             id: queryId,
-            customerId: existingCust.id,
-            assignedEmployeeId: payload.assignedEmployeeId || existingCust.assignedEmployeeId || 'EMP-001',
+            customerId: existingPerson.id,
+            assignedEmployeeId: payload.assignedEmployeeId || existingPerson.assignedEmployeeId || 'EMP-001',
             date: new Date().toLocaleDateString('en-IN'),
             status: 'Pending Approval',
             queryType: queryType,
@@ -1748,15 +1747,15 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           if (!db.queries) db.queries = [];
           db.queries.push(newQuery);
 
-          if (newQuery.queryType !== 'Sell Property') {
+          if (newQuery.queryType === 'Buy Property') {
             // Automatically schedule a follow up task for the auto-created query
             db.follow_ups = db.follow_ups || [];
             const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
             const newFollowUp = {
               id: followUpId,
-              customerId: existingCust.id,
+              customerId: existingPerson.id,
               queryId: queryId,
-              employeeId: payload.assignedEmployeeId || existingCust.assignedEmployeeId || 'EMP-001',
+              employeeId: payload.assignedEmployeeId || existingPerson.assignedEmployeeId || 'EMP-001',
               date: new Date().toLocaleDateString('en-IN'),
               time: '12:00 PM',
               status: 'Pending Call',
@@ -1769,8 +1768,8 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           
           const log = {
             id: generateUniqueId('LOG'),
-            employeeName: req.user.name,
-            action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing customer ${existingCust.id}`,
+            employeeName: req.user ? req.user.name : 'System',
+            action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing ${existingPerson.id.startsWith('LEAD') ? 'lead' : 'customer'} ${existingPerson.id}`,
             dateTime: new Date().toLocaleString()
           };
           if (!db.activity_logs) db.activity_logs = [];
@@ -1778,9 +1777,12 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           
           try { syncToSheets('queries'); } catch(e) {}
           
+          await syncDbChangesToPostgres(dbBefore, db, client);
+          dbCache = db;
+
           return {
             __is_redirected_query: true,
-            message: `Customer already exists. Created Query (${queryId}) linked to customer ${existingCust.name} (${existingCust.id}) instead.`,
+            message: `Customer/Lead already exists. Created Query (${queryId}) linked to customer profile instead.`,
             data: newQuery
           };
         }
@@ -1873,7 +1875,17 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         }
         if (payload.assignedEmployeeId) {
           setTimeout(() => {
-            notifyUser(payload.assignedEmployeeId, 'query-assigned', { queryId: payload.id, message: `New Query ${payload.id} assigned to you for approval.` });
+            if (payload.status === 'Approved') {
+              notifyUser(payload.assignedEmployeeId, 'query-approved', {
+                queryId: payload.id,
+                message: `Your Property Query ${payload.id} has been Approved.`
+              });
+            } else {
+              notifyUser(payload.assignedEmployeeId, 'query-assigned', {
+                queryId: payload.id,
+                message: `New Query ${payload.id} assigned to you for approval.`
+              });
+            }
           }, 500);
         }
       }
@@ -1884,7 +1896,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (module === 'queries') {
         handleQueryStageChange(payload, db, req);
         
-        if (module === 'queries') {
+        if (payload.queryType === 'Buy Property') {
           db.follow_ups = db.follow_ups || [];
           const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
           const newFollowUp = {
