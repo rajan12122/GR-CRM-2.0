@@ -2384,71 +2384,7 @@ const EntityDetail = () => {
                     )}
                   </Paper>
 
-                  {/* Associated Properties & Listings */}
-                  <Paper sx={{ p: 3, mb: 4, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Icons.Home size={22} color="#3B82F6" />
-                      Associated Properties & Listings
-                    </Typography>
-                    
-                    {!(connections?.properties && connections.properties.length > 0) ? (
-                      <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' }}>
-                        <Typography variant="body2" sx={{ color: '#94A3B8' }}>
-                          No properties associated with this dealer yet.
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <TableContainer component={Box} sx={{ maxHeight: 350, overflowY: 'auto' }}>
-                        <Table size="small" stickyHeader>
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ fontWeight: 800, color: '#475569', fontSize: '12px', backgroundColor: '#F8FAFC' }}>Property ID</TableCell>
-                              <TableCell sx={{ fontWeight: 800, color: '#475569', fontSize: '12px', backgroundColor: '#F8FAFC' }}>Type</TableCell>
-                              <TableCell sx={{ fontWeight: 800, color: '#475569', fontSize: '12px', backgroundColor: '#F8FAFC' }}>Size</TableCell>
-                              <TableCell sx={{ fontWeight: 800, color: '#475569', fontSize: '12px', backgroundColor: '#F8FAFC' }}>Demand / Price</TableCell>
-                              <TableCell sx={{ fontWeight: 800, color: '#475569', fontSize: '12px', backgroundColor: '#F8FAFC' }}>Sector / Block</TableCell>
-                              <TableCell sx={{ fontWeight: 800, color: '#475569', fontSize: '12px', backgroundColor: '#F8FAFC' }}>Status</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {connections.properties.map(p => (
-                              <TableRow key={p.id} hover>
-                                <TableCell>
-                                  <Typography 
-                                    variant="body2" 
-                                    sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-                                    onClick={() => navigate(`/module/properties/${p.id}`)}
-                                  >
-                                    {p.id}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 600 }}>{p.propertyType || p.r_c_i}</TableCell>
-                                <TableCell>{p.size || 'N/A'}</TableCell>
-                                <TableCell sx={{ fontWeight: 700, color: '#16A34A' }}>
-                                  {p.demand ? (() => {
-                                    const str = String(p.demand).trim();
-                                    if (/[a-zA-Z]/.test(str)) return str;
-                                    const num = Number(str.replace(/,/g, ''));
-                                    if (isNaN(num)) return str;
-                                    return `₹${num.toLocaleString('en-IN')}`;
-                                  })() : 'N/A'}
-                                </TableCell>
-                                <TableCell>{p.sector_block || 'N/A'}</TableCell>
-                                <TableCell>
-                                  <Chip 
-                                    label={p.status || 'Available'} 
-                                    color={p.status === 'Available' ? 'success' : p.status === 'Sold' ? 'error' : 'default'} 
-                                    size="small" 
-                                    sx={{ fontWeight: 800, fontSize: '9px', borderRadius: '4px', height: '18px' }} 
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    )}
-                  </Paper>
+
 
                   {/* 3. General Remarks & Comments Log */}
                   <Paper sx={{ p: 3, mb: 4, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
