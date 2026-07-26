@@ -195,6 +195,9 @@ const EntityDetail = () => {
   const [querySector, setQuerySector] = useState('');
   const [querySize, setQuerySize] = useState('');
   const [queryRemarks, setQueryRemarks] = useState('');
+  const [queryPitchItemType, setQueryPitchItemType] = useState('Property');
+  const [queryPitchPropertyId, setQueryPitchPropertyId] = useState('');
+  const [queryPitchMethod, setQueryPitchMethod] = useState('Call');
 
   useEffect(() => {
     if (queryDialogOpen && queryType === 'Sell Property' && record) {
@@ -3629,37 +3632,95 @@ const EntityDetail = () => {
               </Select>
             </FormControl>
             
-            {queryType !== 'Sell Property' && (
+            {queryType === 'Buy Property' && (
               <>
                 <FormControl fullWidth>
-                  <InputLabel>R/C/I Segment</InputLabel>
-                  <Select value={queryRCI} onChange={(e) => setQueryRCI(e.target.value)} label="R/C/I Segment">
-                    <MenuItem value="Residential">Residential</MenuItem>
-                    <MenuItem value="Commercial">Commercial</MenuItem>
-                    <MenuItem value="Industrial">Industrial</MenuItem>
+                  <InputLabel>Pitch Item Type</InputLabel>
+                  <Select
+                    value={queryPitchItemType}
+                    onChange={(e) => {
+                      setQueryPitchItemType(e.target.value);
+                      setQueryPitchPropertyId('');
+                    }}
+                    label="Pitch Item Type"
+                  >
+                    <MenuItem value="Property">Property Listing</MenuItem>
+                    <MenuItem value="Project">Builder Project</MenuItem>
                   </Select>
                 </FormControl>
+                
                 <FormControl fullWidth>
-                  <InputLabel>Property Type Category</InputLabel>
-                  <Select value={queryPropType} onChange={(e) => setQueryPropType(e.target.value)} label="Property Type Category">
-                    <MenuItem value="Villa">Villa Listing</MenuItem>
-                    <MenuItem value="Plot">Residential Plot</MenuItem>
-                    <MenuItem value="Apartment">Apartment Flat</MenuItem>
-                    <MenuItem value="Commercial">Retail Office Space</MenuItem>
+                  <InputLabel>{queryPitchItemType === 'Property' ? 'Select Property' : 'Select Project'}</InputLabel>
+                  <Select
+                    value={queryPitchPropertyId}
+                    onChange={(e) => setQueryPitchPropertyId(e.target.value)}
+                    label={queryPitchItemType === 'Property' ? 'Select Property' : 'Select Project'}
+                  >
+                    <MenuItem
+                      disableRipple
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      sx={{ 
+                        backgroundColor: 'transparent !important', 
+                        cursor: 'default',
+                        p: '4px 16px',
+                        '&:hover': { backgroundColor: 'transparent' }
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        placeholder={queryPitchItemType === 'Property' ? "Search properties..." : "Search projects..."}
+                        fullWidth
+                        value={propSearch}
+                        onChange={(e) => setPropSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </MenuItem>
+                    <MenuItem value="">-- None --</MenuItem>
+                    {queryPitchItemType === 'Property' ? (
+                      (moduleData.properties || []).filter(p => {
+                        if (!propSearch) return true;
+                        const searchStr = `${p.propertyName || ''} ${p.locality} ${p.sector_block ? `Sector ${p.sector_block}` : ''} ${p.id}`.toLowerCase();
+                        return searchStr.includes(propSearch.toLowerCase());
+                      }).map(p => (
+                        <MenuItem key={p.id} value={p.id}>
+                          {p.propertyName ? `${p.propertyName} (${p.locality})` : p.locality} {p.sector_block ? `(Sector ${p.sector_block})` : ''} - ₹{p.demand} ({p.id})
+                        </MenuItem>
+                      ))
+                    ) : (
+                      (moduleData.projects || []).filter(p => {
+                        if (!propSearch) return true;
+                        const searchStr = `${p.name} ${p.locality} ${p.id}`.toLowerCase();
+                        return searchStr.includes(propSearch.toLowerCase());
+                      }).map(p => (
+                        <MenuItem key={p.id} value={p.id}>
+                          {p.name} - {p.locality} ({p.id})
+                        </MenuItem>
+                      ))
+                    )}
                   </Select>
                 </FormControl>
-              </>
-            )}
 
-            {queryType === 'Buy Property' ? (
-              <TextField label="Client Budget Cap (INR)" type="number" fullWidth value={queryBudget} onChange={(e) => setQueryBudget(e.target.value)} />
-            ) : null}
+                <FormControl fullWidth>
+                  <InputLabel>Pitch Method</InputLabel>
+                  <Select value={queryPitchMethod} onChange={(e) => setQueryPitchMethod(e.target.value)} label="Pitch Method">
+                    <MenuItem value="Call">Phone Call</MenuItem>
+                    <MenuItem value="Site Visit">Site Visit showing</MenuItem>
+                    <MenuItem value="SMS">Mobile SMS</MenuItem>
+                    <MenuItem value="WhatsApp">WhatsApp Message</MenuItem>
+                    <MenuItem value="Email">Email Pitch</MenuItem>
+                    <MenuItem value="In-Person Meeting">In-Person Meeting</MenuItem>
+                  </Select>
+                </FormControl>
 
-            {queryType !== 'Sell Property' && (
-              <>
-                <TextField label="Target Size/Dimensions (e.g. 250 Sq.Yds)" fullWidth value={querySize} onChange={(e) => setQuerySize(e.target.value)} />
-                <TextField label="Preferred Localities" fullWidth value={queryLocality} onChange={(e) => setQueryLocality(e.target.value)} />
-                <TextField label="Sector/Block Details" fullWidth value={querySector} onChange={(e) => setQuerySector(e.target.value)} />
+                <TextField 
+                  label="Client Budget Cap (INR)" 
+                  type="text" 
+                  fullWidth 
+                  value={queryBudget} 
+                  onChange={(e) => setQueryBudget(e.target.value)} 
+                />
               </>
             )}
 
@@ -3823,6 +3884,16 @@ const EntityDetail = () => {
               }
             }
 
+            let selectedProp = null;
+            let selectedProj = null;
+            if (queryType === 'Buy Property' && queryPitchPropertyId) {
+              if (queryPitchItemType === 'Property') {
+                selectedProp = (moduleData.properties || []).find(p => String(p.id) === String(queryPitchPropertyId));
+              } else {
+                selectedProj = (moduleData.projects || []).find(p => String(p.id) === String(queryPitchPropertyId));
+              }
+            }
+
             const payload = {
               customerId: id,
               assignedEmployeeId: queryEmployeeId || 'EMP-001',
@@ -3830,18 +3901,33 @@ const EntityDetail = () => {
               status: 'Pending Approval',
               queryType,
               stage: 'New Query',
-              budget: queryType === 'Buy Property' ? Number(queryBudget) : 0,
-              demand: queryType === 'Sell Property' ? Number(nestedPropertyData.demand || 0) : 0,
-              r_c_i: queryType === 'Sell Property' ? (nestedPropertyData.r_c_i || '') : queryRCI,
-              propertyType: queryType === 'Sell Property' ? (nestedPropertyData.propertyType || '') : queryPropType,
-              locality: queryType === 'Sell Property' ? (nestedPropertyData.locality || '') : queryLocality,
-              sector_block: queryType === 'Sell Property' ? (nestedPropertyData.sector_block || '') : querySector,
-              size: queryType === 'Sell Property' ? (nestedPropertyData.size || '') : querySize,
-              remarks: queryRemarks,
-              propertyId: finalPropertyId
+              budget: queryType === 'Buy Property' ? queryBudget : '',
+              demand: queryType === 'Sell Property' ? (nestedPropertyData.demand || '') : '',
+              r_c_i: queryType === 'Sell Property' ? (nestedPropertyData.r_c_i || '') : (selectedProp ? (selectedProp.r_c_i || 'Residential') : (selectedProj ? (selectedProj.type || 'Residential') : 'Residential')),
+              propertyType: queryType === 'Sell Property' ? (nestedPropertyData.propertyType || '') : (selectedProp ? (selectedProp.propertyType || 'Villa') : (selectedProj ? (selectedProj.property_category || 'Plot') : 'Villa')),
+              locality: queryType === 'Sell Property' ? (nestedPropertyData.locality || '') : (selectedProp ? (selectedProp.locality || '') : (selectedProj ? (selectedProj.locality || '') : '')),
+              sector_block: queryType === 'Sell Property' ? (nestedPropertyData.sector_block || '') : (selectedProp ? (selectedProp.sector_block || '') : (selectedProj ? (selectedProj.sector_block || '') : '')),
+              size: queryType === 'Sell Property' ? (nestedPropertyData.size || '') : (selectedProp ? (selectedProp.size || '') : ''),
+              remarks: queryRemarks
             };
+            
             const res = await createRecord('queries', payload);
             if (res.success) {
+              if (queryType === 'Buy Property' && queryPitchPropertyId) {
+                const pitchPayload = {
+                  customerId: id,
+                  propertyId: queryPitchPropertyId,
+                  employeeId: queryEmployeeId || 'EMP-001',
+                  pitchDate: new Date().toLocaleDateString('en-IN'),
+                  pitchMethod: queryPitchMethod,
+                  quotedPrice: queryBudget,
+                  interestLevel: 'Interested',
+                  status: 'Pitched / Offered',
+                  remarks: queryRemarks || 'Pitched automatically during Query registration.'
+                };
+                await createRecord('property_pitch_history', pitchPayload);
+                fetchModuleData('property_pitch_history');
+              }
               setQueryDialogOpen(false);
               loadData();
             } else {
