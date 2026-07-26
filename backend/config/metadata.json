@@ -86,14 +86,6 @@
           "required": true,
           "showInTable": true,
           "editable": true
-        },
-        {
-          "name": "password",
-          "label": "Login Password",
-          "type": "text",
-          "required": true,
-          "showInTable": false,
-          "editable": true
         }
       ]
     },
