@@ -152,7 +152,7 @@ function authenticateToken(req, res, next) {
     
     // Check session validity & token version from PostgreSQL
     getRecord('employees', decodedUser.id).then(employee => {
-      if (!employee || employee.status !== 'Active' || (employee.tokenVersion !== undefined && employee.tokenVersion !== decodedUser.tokenVersion)) {
+      if (!employee || employee.status !== 'Active' || (employee.tokenVersion !== undefined && String(employee.tokenVersion) !== String(decodedUser.tokenVersion))) {
         return res.status(403).json({ message: 'Session has expired or been revoked. Please log in again.' });
       }
       req.user = decodedUser;
@@ -215,7 +215,7 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
-    const tokenVersion = employee.tokenVersion || 1;
+    const tokenVersion = parseInt(employee.tokenVersion, 10) || 1;
     const token = jwt.sign(
       { id: employee.id, name: employee.name, email: employee.email, role: employee.role, tokenVersion },
       JWT_SECRET,
@@ -275,7 +275,7 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
 
     const salt = bcrypt.genSaltSync(12);
     const hash = bcrypt.hashSync(password, salt);
-    const newTokenVersion = (employee.tokenVersion || 1) + 1;
+    const newTokenVersion = (parseInt(employee.tokenVersion, 10) || 1) + 1;
 
     await runTransaction(async (client) => {
       await client.query(
@@ -793,6 +793,29 @@ function handleDealStatusChange(d, db, req) {
   }
 }
 
+function parsePriceToNumeric(priceStr) {
+  if (!priceStr) return 0;
+  if (typeof priceStr === 'number') return priceStr;
+  let clean = String(priceStr).toLowerCase().replace(/,/g, '').trim();
+  
+  let multiplier = 1;
+  if (clean.includes('cr') || clean.includes('crore')) {
+    multiplier = 10000000;
+    clean = clean.replace(/(cr|crore)/g, '');
+  } else if (clean.includes('lakh') || clean.includes('lac') || clean.includes('l')) {
+    multiplier = 100000;
+    clean = clean.replace(/(lakh|lac|l)/g, '');
+  } else if (clean.includes('k')) {
+    multiplier = 1000;
+    clean = clean.replace(/k/g, '');
+  }
+  
+  const match = clean.match(/[0-9.]+/);
+  if (!match) return 0;
+  const parsed = parseFloat(match[0]);
+  return isNaN(parsed) ? 0 : parsed * multiplier;
+}
+
 function handlePitchStatusChange(p, db, req) {
   if (!p.id) return;
 
@@ -878,82 +901,41 @@ function handlePitchStatusChange(p, db, req) {
     }
   }
 
-  // Update property ownership details
-  db.properties = db.properties || [];
-  const propIndex = db.properties.findIndex(pr => String(pr.id) === String(p.propertyId));
-  if (propIndex !== -1) {
-    const prop = db.properties[propIndex];
-    
-    const prevOwnerId = prop.current_owner_id || '';
-    const prevOwnerName = prop.contact_person_name || '';
-    
-    const buyerCust = (db.customers || []).find(c => String(c.id) === String(finalCustomerId));
-    const buyerName = buyerCust ? buyerCust.name : (finalCustomerId || 'Unknown');
-    
-    const emp = (db.employees || []).find(e => String(e.id) === String(p.employeeId));
-    const empName = emp ? emp.name : 'Unknown Employee';
-    
-    prop.owner_history = prop.owner_history || [];
-    if (prevOwnerId || prevOwnerName) {
-      const hasHistory = prop.owner_history.some(h => String(h.dealId) === String(p.id));
-      if (!hasHistory) {
-        prop.owner_history.push({
-          dealId: p.id,
-          ownerId: prevOwnerId || 'N/A',
-          ownerName: prevOwnerName || 'Previous Owner',
-          purchaseDate: prop.date || '',
-          purchasePrice: prop.demand || '',
-          saleDate: new Date().toISOString().split('T')[0],
-          salePrice: p.quotedPrice || '',
-          soldByEmployeeId: p.employeeId || '',
-          soldByEmployeeName: empName
-        });
-      }
-    }
-    
-    prop.current_owner_id = finalCustomerId;
-    prop.contact_person_name = buyerName;
-    prop.contact_number = buyerCust ? buyerCust.phone : (prop.contact_number || '');
-    prop.status = 'Property Registered/Sold Out';
-    
-    prop.ownership_documents = prop.ownership_documents || { old_owner: [], new_owner: [] };
-    if (prop.ownership_documents.new_owner && prop.ownership_documents.new_owner.length > 0) {
-      prop.ownership_documents.old_owner = [
-        ...(prop.ownership_documents.old_owner || []),
-        ...prop.ownership_documents.new_owner
-      ];
-    }
-    prop.ownership_documents.new_owner = [];
-    
-    prop.timeline = prop.timeline || [];
-    prop.timeline.push({
-      date: new Date().toLocaleDateString('en-IN'),
-      event: 'Ownership Changed (Pitch Closed)',
-      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${p.quotedPrice} (Closed by Employee: ${empName}) via Pitch ${p.id}`
-    });
-    
-    db.properties[propIndex] = prop;
-    
-    if (p.employeeId) {
-      setTimeout(() => {
-        notifyUser(p.employeeId, 'pitch-closed-notif', {
-          pitchId: p.id,
-          message: `Pitch ${p.id} for Property ${p.propertyId} has been closed and ownership updated.`
-        });
-      }, 500);
-    }
-    
-    db.activity_logs = db.activity_logs || [];
-    db.activity_logs.unshift({
-      id: generateUniqueId('LOG'),
-      employeeName: req.user ? req.user.name : 'System',
-      action: `Pitch ${p.id} closed. Ownership of Property ${p.propertyId} transferred to Customer ${finalCustomerId}.`,
-      dateTime: new Date().toLocaleString()
-    });
-    
-    writeDb(db);
-    try { syncToSheets('properties'); } catch(e) {}
+  // Create or retrieve corresponding Deal record to preserve Deal ID tracking and Deals page details
+  db.deals = db.deals || [];
+  let existingDeal = db.deals.find(d => 
+    String(d.propertyId) === String(p.propertyId) && 
+    String(d.customerId) === String(finalCustomerId) &&
+    String(d.associatedPitchId) === String(p.id)
+  );
+
+  if (!existingDeal) {
+    const dealId = generateNextId(db, 'deals', 'DEAL');
+    const prop = (db.properties || []).find(pr => String(pr.id) === String(p.propertyId));
+    const sellerId = prop ? (prop.current_owner_id || '') : '';
+    const salePrice = p.quotedPrice || '';
+    const purchasePrice = prop ? (prop.demand || '') : '';
+
+    existingDeal = {
+      id: dealId,
+      customerId: finalCustomerId,
+      sellerCustomerId: sellerId || finalCustomerId,
+      propertyId: p.propertyId,
+      employeeId: p.employeeId || (req.user ? req.user.id : 'EMP-001'),
+      registrationDate: new Date().toISOString().split('T')[0],
+      salePrice: salePrice,
+      purchasePrice: purchasePrice,
+      brokerage: '',
+      commission: '',
+      status: 'Closed',
+      associatedPitchId: p.id
+    };
+    db.deals.push(existingDeal);
+    try { syncToSheets('deals'); } catch(e) {}
   }
+
+  // Invoke the master deal status change helper to update property registry details & timeline
+  handleDealStatusChange(existingDeal, db, req);
 
   // Auto convert follow-ups for this client to Call Done / Closed
   db.follow_ups = db.follow_ups || [];

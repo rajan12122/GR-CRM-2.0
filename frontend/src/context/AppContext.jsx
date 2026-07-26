@@ -46,9 +46,11 @@ export const AppProvider = ({ children }) => {
 
       const modulesToPreload = ['employees', 'customers', 'properties'];
 
-      // Fetch all required data in parallel
-      const [userRes, metaRes, preloadResults, logsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/auth/me`),
+      // 1. Verify token validity by fetching user profile first
+      const userRes = await axios.get(`${API_BASE_URL}/auth/me`);
+
+      // 2. Fetch the rest of the metadata and lookup modules in parallel
+      const [metaRes, preloadResults, logsRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/metadata`),
         Promise.all(
           modulesToPreload.map(async (m) => {
@@ -137,6 +139,15 @@ export const AppProvider = ({ children }) => {
       }));
       // Refresh logs
       axios.get(`${API_BASE_URL}/data/activity_logs`).then(r => setActivityLogs(r.data)).catch(() => {});
+
+      // Auto-refresh related modules when pitch or deal changes to keep UI consistent
+      if (moduleName === 'property_pitch_history' || moduleName === 'deals') {
+        fetchModuleData('properties');
+        fetchModuleData('deals');
+        fetchModuleData('customers');
+        fetchModuleData('leads');
+      }
+
       return { success: true, data: res.data };
     } catch (err) {
       console.error(`Error creating ${moduleName}:`, err);
@@ -154,6 +165,15 @@ export const AppProvider = ({ children }) => {
         [moduleName]: (prev[moduleName] || []).map(rec => String(rec.id) === String(id) ? res.data : rec)
       }));
       axios.get(`${API_BASE_URL}/data/activity_logs`).then(r => setActivityLogs(r.data)).catch(() => {});
+
+      // Auto-refresh related modules when pitch or deal changes to keep UI consistent
+      if (moduleName === 'property_pitch_history' || moduleName === 'deals') {
+        fetchModuleData('properties');
+        fetchModuleData('deals');
+        fetchModuleData('customers');
+        fetchModuleData('leads');
+      }
+
       return { success: true, data: res.data };
     } catch (err) {
       console.error(`Error updating ${moduleName}:`, err);

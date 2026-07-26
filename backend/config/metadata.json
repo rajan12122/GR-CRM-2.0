@@ -1864,7 +1864,7 @@
         {
           "name": "salePrice",
           "label": "Sale Price (INR)",
-          "type": "number",
+          "type": "text",
           "required": true,
           "showInTable": true,
           "editable": true
@@ -1872,7 +1872,7 @@
         {
           "name": "purchasePrice",
           "label": "Purchase Price (INR)",
-          "type": "number",
+          "type": "text",
           "required": false,
           "showInTable": true,
           "editable": true
@@ -1880,7 +1880,7 @@
         {
           "name": "brokerage",
           "label": "Brokerage Earned (INR)",
-          "type": "number",
+          "type": "text",
           "required": false,
           "showInTable": true,
           "editable": true
@@ -1888,7 +1888,7 @@
         {
           "name": "commission",
           "label": "Employee Commission (INR)",
-          "type": "number",
+          "type": "text",
           "required": false,
           "showInTable": true,
           "editable": true
