@@ -46,7 +46,8 @@ const Settings = () => {
     moduleData,
     fetchModuleData,
     updateRecord,
-    triggerAppReload
+    triggerAppReload,
+    logout
   } = useApp();
 
   useEffect(() => {
@@ -762,11 +763,25 @@ const Settings = () => {
                    <Icons.RefreshCw size={18} style={{ marginRight: 10 }} />
                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Lead Rotation Engine</Typography>
                  </ListItem>
-                 <ListItem button onClick={() => setActiveTab('templates')} selected={activeTab === 'templates'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'templates' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'templates' ? '#2563EB' : '#4B5563' }}>
-                   <Icons.MessageSquare size={18} style={{ marginRight: 10 }} />
-                   <Typography variant="body2" sx={{ fontWeight: 600 }}>Notification Templates</Typography>
-                 </ListItem>
-               </List>
+                  <ListItem button onClick={() => setActiveTab('templates')} selected={activeTab === 'templates'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'templates' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'templates' ? '#2563EB' : '#4B5563' }}>
+                    <Icons.MessageSquare size={18} style={{ marginRight: 10 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Notification Templates</Typography>
+                  </ListItem>
+                  <Divider sx={{ my: 1 }} />
+                  <ListItem 
+                    button 
+                    onClick={logout} 
+                    sx={{ 
+                      borderRadius: '8px', 
+                      py: 1.5, 
+                      color: '#EF4444', 
+                      '&:hover': { backgroundColor: 'rgba(239, 68, 68, 0.08)' } 
+                    }}
+                  >
+                    <Icons.LogOut size={18} style={{ marginRight: 10 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>Log Out</Typography>
+                  </ListItem>
+                </List>
             </CardContent>
           </Card>
         </Grid>

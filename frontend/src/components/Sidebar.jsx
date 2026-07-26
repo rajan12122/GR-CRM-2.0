@@ -323,34 +323,7 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           </List>
         )}
 
-        {/* System Architecture Guide Link */}
-        <List sx={{ px: 1.5, py: 0, mt: 1 }}>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => handleNavClick('/architecture')}
-              selected={activePath === '/architecture'}
-              sx={{
-                borderRadius: '8px',
-                py: 1.2,
-                px: 2,
-                backgroundColor: activePath === '/architecture' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                color: activePath === '/architecture' ? '#3B82F6' : '#94A3B8',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  color: '#FFFFFF'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <Icons.Compass size={20} />
-              </ListItemIcon>
-              <ListItemText 
-                primary="System Architecture" 
-                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-              />
-            </ListItemButton>
-          </ListItem>
-        </List>
+
       </Box>
 
       {/* User Session Footer */}
