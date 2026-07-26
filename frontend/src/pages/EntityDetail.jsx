@@ -4609,9 +4609,16 @@ const EntityDetail = () => {
               <InputLabel>Property Pipeline Stage</InputLabel>
               <Select value={pitchPropertyStatus} onChange={(e) => setPitchPropertyStatus(e.target.value)} label="Property Pipeline Stage">
                 <MenuItem value="">-- Keep Current / None --</MenuItem>
-                {(metadata?.chips?.propertyStatus || []).map(chip => (
-                  <MenuItem key={chip.value} value={chip.value}>{chip.label}</MenuItem>
-                ))}
+                {(metadata?.chips?.propertyStatus || [])
+                  .filter(chip => 
+                    chip.value !== 'Available for Purchase' && 
+                    chip.value !== 'IN active listings' && 
+                    chip.value !== 'Sold By Someone/Deal Lost'
+                  )
+                  .map(chip => (
+                    <MenuItem key={chip.value} value={chip.value}>{chip.label}</MenuItem>
+                  ))
+                }
               </Select>
             </FormControl>
             <TextField label="Quoted Pitch Price Offer" type="text" fullWidth value={pitchPrice} onChange={(e) => setPitchPrice(e.target.value)} />
