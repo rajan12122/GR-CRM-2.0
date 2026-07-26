@@ -853,7 +853,7 @@ function handlePitchStatusChange(p, db, req) {
   const mappedStage = mapPitchStatusToPipelineAction(p.status) || mapPitchStatusToPipelineAction(p.propertyStatus);
   if (mappedStage) {
     db.follow_ups = (db.follow_ups || []).map(f => {
-      if (String(f.customerId) === String(p.customerId)) {
+      if (String(f.customerId) === String(p.customerId) && f.status !== 'Completed' && f.status !== 'Call Done') {
         f.pipelineAction = mappedStage;
         f.pitchedPropertyId = p.propertyId || f.pitchedPropertyId;
         f.pitchPrice = p.quotedPrice || f.pitchPrice;
