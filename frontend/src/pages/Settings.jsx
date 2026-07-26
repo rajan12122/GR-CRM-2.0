@@ -1571,7 +1571,7 @@ const Settings = () => {
                   Quickly set or reset the secure login password for any employee account.
                 </Typography>
                 
-                <Box component="form" onSubmit={handleResetPassword}>
+                <Box component="form" onSubmit={handleUpdatePassword}>
                   <Grid container spacing={3}>
                     <Grid item xs={12} sm={6}>
                       <FormControl fullWidth size="small">
