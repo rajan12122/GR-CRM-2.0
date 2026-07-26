@@ -759,6 +759,10 @@ const Settings = () => {
                   <Icons.Lock size={18} style={{ marginRight: 10 }} />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>Reset Passwords</Typography>
                 </ListItem>
+                <ListItem button onClick={() => setActiveTab('sheets')} selected={activeTab === 'sheets'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'sheets' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'sheets' ? '#2563EB' : '#4B5563' }}>
+                  <Icons.FileSpreadsheet size={18} style={{ marginRight: 10 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Google Sheets Config</Typography>
+                </ListItem>
                  <ListItem button onClick={() => setActiveTab('rotation')} selected={activeTab === 'rotation'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'rotation' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'rotation' ? '#2563EB' : '#4B5563' }}>
                    <Icons.RefreshCw size={18} style={{ marginRight: 10 }} />
                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Lead Rotation Engine</Typography>
@@ -1560,68 +1564,59 @@ const Settings = () => {
           {activeTab === 'passwords' && (
             <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
               <CardContent sx={{ p: 3 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', mb: 1, fontFamily: 'Poppins' }}>
-                  Employee Password Management
+                <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '20px', fontFamily: 'Poppins', mb: 1 }}>
+                  Reset Password Profile
                 </Typography>
                 <Typography variant="body2" sx={{ color: '#64748B', mb: 3 }}>
                   Quickly set or reset the secure login password for any employee account.
                 </Typography>
-
-                <Divider sx={{ mb: 3 }} />
-
-                <Box component="form" onSubmit={handleUpdatePassword} sx={{ maxWidth: 500 }}>
+                
+                <Box component="form" onSubmit={handleResetPassword}>
                   <Grid container spacing={3}>
-                    <Grid item xs={12}>
-                      <FormControl size="medium" fullWidth>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
                         <InputLabel>Select Employee</InputLabel>
                         <Select
-                          label="Select Employee"
                           value={passwordSelectedEmp}
                           onChange={(e) => setPasswordSelectedEmp(e.target.value)}
+                          label="Select Employee"
                         >
                           {(moduleData.employees || []).map(emp => (
-                            <MenuItem key={emp.id} value={emp.id}>
-                              {emp.name} ({emp.email} - {emp.role})
-                            </MenuItem>
+                            <MenuItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</MenuItem>
                           ))}
                         </Select>
                       </FormControl>
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid item xs={12} sm={6}>
                       <TextField
-                        label="New Login Password"
+                        size="small"
                         type="password"
-                        fullWidth
-                        size="medium"
+                        label="New Login Password"
                         value={newPasswordVal}
                         onChange={(e) => setNewPasswordVal(e.target.value)}
-                        placeholder="Enter secure new password"
-                        required
+                        fullWidth
                       />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid item xs={12} sm={6}>
                       <TextField
-                        label="Confirm New Password"
+                        size="small"
                         type="password"
-                        fullWidth
-                        size="medium"
+                        label="Confirm Password"
                         value={confirmPasswordVal}
                         onChange={(e) => setConfirmPasswordVal(e.target.value)}
-                        placeholder="Confirm secure new password"
-                        required
+                        fullWidth
                       />
                     </Grid>
-                    <Grid item xs={12}>
-                      <Box sx={{ p: 2, bgcolor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', display: 'block', mb: 1 }}>
-                          Password Complexity Requirements:
+                    <Grid item xs={12} sm={6}>
+                      <Box sx={{ p: 1, border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F8FAFC' }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5, color: '#475569' }}>
+                          Password Requirements:
                         </Typography>
-                        <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '11px', color: '#64748B' }}>
-                          <li style={{ color: newPasswordVal.length >= 8 ? '#16A34A' : '#64748B', fontWeight: newPasswordVal.length >= 8 ? 700 : 400 }}>Minimum 8 characters</li>
-                          <li style={{ color: /[A-Z]/.test(newPasswordVal) ? '#16A34A' : '#64748B', fontWeight: /[A-Z]/.test(newPasswordVal) ? 700 : 400 }}>At least one uppercase letter (A-Z)</li>
-                          <li style={{ color: /[a-z]/.test(newPasswordVal) ? '#16A34A' : '#64748B', fontWeight: /[a-z]/.test(newPasswordVal) ? 700 : 400 }}>At least one lowercase letter (a-z)</li>
-                          <li style={{ color: /\d/.test(newPasswordVal) ? '#16A34A' : '#64748B', fontWeight: /\d/.test(newPasswordVal) ? 700 : 400 }}>At least one number (0-9)</li>
-                          <li style={{ color: /[^A-Za-z0-9]/.test(newPasswordVal) ? '#16A34A' : '#64748B', fontWeight: /[^A-Za-z0-9]/.test(newPasswordVal) ? 700 : 400 }}>At least one special character (e.g. @, #, $, !)</li>
+                        <ul style={{ margin: 0, paddingLeft: 16, fontSize: '11px', color: '#64748B' }}>
+                          <li>At least 8 characters long</li>
+                          <li>Contains uppercase & lowercase letter</li>
+                          <li>Contains at least one number</li>
+                          <li>Contains one special character</li>
                         </ul>
                       </Box>
                     </Grid>
@@ -1636,6 +1631,113 @@ const Settings = () => {
                     </Grid>
                   </Grid>
                 </Box>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TAB 5: GOOGLE SHEETS CONFIG */}
+          {activeTab === 'sheets' && (
+            <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '20px', fontFamily: 'Poppins', mb: 1 }}>
+                  Google Sheets Integration Config
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mb: 3 }}>
+                  Configure synchronization between your CRM database and Google Sheets.
+                </Typography>
+
+                <form onSubmit={handleSaveSheetsConfig}>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={sheetsActive}
+                            onChange={(e) => setSheetsActive(e.target.checked)}
+                            color="primary"
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              Enable Active Sheets Synchronization
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#64748B' }}>
+                              Automatically push database updates to Google Sheets in real time.
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Google Spreadsheet ID"
+                        value={sheetsId}
+                        onChange={(e) => setSheetsId(e.target.value)}
+                        fullWidth
+                        helperText="The unique ID from your Google Sheets URL: docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Google Service Account Email Address"
+                        value={sheetsEmail}
+                        onChange={(e) => setSheetsEmail(e.target.value)}
+                        fullWidth
+                        helperText="The client email address of your Google Cloud service account."
+                      />
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Google Service Account Private Key (PEM format)"
+                        value={sheetsKey}
+                        onChange={(e) => setSheetsKey(e.target.value)}
+                        multiline
+                        rows={6}
+                        fullWidth
+                        helperText="The complete private key string, including the BEGIN and END PRIVATE KEY markers."
+                      />
+                    </Grid>
+                  </Grid>
+
+                  <Divider sx={{ my: 3 }} />
+
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 1.5 }}>
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        onClick={handleTestSheets}
+                        disabled={syncLoading}
+                        startIcon={syncLoading ? <CircularProgress size={16} /> : <Icons.Zap size={16} />}
+                        sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+                      >
+                        Test Connection
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        onClick={handleSyncNow}
+                        disabled={syncLoading}
+                        startIcon={syncLoading ? <CircularProgress size={16} /> : <Icons.RefreshCw size={16} />}
+                        sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+                      >
+                        Force Sync Now
+                      </Button>
+                    </Box>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      color="primary"
+                      sx={{ backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' }, borderRadius: '8px', px: 4, py: 1, textTransform: 'none', fontWeight: 700 }}
+                    >
+                      Save Configuration
+                    </Button>
+                  </Box>
+                </form>
               </CardContent>
             </Card>
           )}
