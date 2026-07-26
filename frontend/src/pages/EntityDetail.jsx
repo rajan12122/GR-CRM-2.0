@@ -190,7 +190,7 @@ const EntityDetail = () => {
   const [queryBudget, setQueryBudget] = useState('');
   const [queryDemand, setQueryDemand] = useState('');
   const [queryRCI, setQueryRCI] = useState('Residential');
-  const [queryPropType, setQueryPropType] = useState('Villa');
+  const [queryPropType, setQueryPropType] = useState('Plots');
   const [queryLocality, setQueryLocality] = useState('');
   const [querySector, setQuerySector] = useState('');
   const [querySize, setQuerySize] = useState('');
@@ -3641,10 +3641,25 @@ const EntityDetail = () => {
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth size="small">
                     <InputLabel>R/C/I Segment</InputLabel>
-                    <Select value={queryRCI} onChange={(e) => setQueryRCI(e.target.value)} label="R/C/I Segment">
-                      {(metadata?.chips?.rci || []).map(opt => (
-                        <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                      ))}
+                    <Select 
+                      value={queryRCI} 
+                      onChange={(e) => {
+                        const newRCI = e.target.value;
+                        setQueryRCI(newRCI);
+                        const mapping = {
+                          Residential: 'Plots',
+                          Commercial: 'Bay Shop',
+                          Industrial: 'Built up',
+                          Land: 'Other'
+                        };
+                        setQueryPropType(mapping[newRCI] || 'Plots');
+                      }} 
+                      label="R/C/I Segment"
+                    >
+                      <MenuItem value="Residential">Residential</MenuItem>
+                      <MenuItem value="Commercial">Commercial</MenuItem>
+                      <MenuItem value="Industrial">Industrial</MenuItem>
+                      <MenuItem value="Land">Land</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -3652,9 +3667,19 @@ const EntityDetail = () => {
                   <FormControl fullWidth size="small">
                     <InputLabel>Property Type</InputLabel>
                     <Select value={queryPropType} onChange={(e) => setQueryPropType(e.target.value)} label="Property Type">
-                      {(metadata?.chips?.propertyTypes || []).map(opt => (
-                        <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                      ))}
+                      {(() => {
+                        const mapping = {
+                          Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
+                          Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot'],
+                          Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
+                          Land: []
+                        };
+                        const allowed = mapping[queryRCI] || [];
+                        return [
+                          ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
+                          <MenuItem key="Other" value="Other">Other</MenuItem>
+                        ];
+                      })()}
                     </Select>
                   </FormControl>
                 </Grid>
