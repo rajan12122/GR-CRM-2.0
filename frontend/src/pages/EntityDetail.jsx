@@ -4626,14 +4626,14 @@ const EntityDetail = () => {
             const isDealer = moduleName === 'dealers';
             let finalPropId = isCustomerLead || isFollowUpQuery || isDealer ? pitchPropertyId : id;
             let finalCustomerId = isCustomerLead ? id : (isFollowUpQuery ? (record.customerId || record.id) : pitchCustomerId);
-            let finalDealerId = isDealer ? id : '';
+            let finalDealerIdVal = '';
             let finalCustomerName = '';
 
             if (isCustomerLead || isFollowUpQuery || isDealer) {
               const matchedRecord = isCustomerLead ? record : ((moduleData.customers || []).find(c => c.id === finalCustomerId) || (moduleData.leads || []).find(l => l.id === finalCustomerId));
               finalCustomerName = matchedRecord ? (matchedRecord.name || matchedRecord.person_name) : finalCustomerId;
               if (pitchPropertyId === 'Other_Property') {
-                let finalDealerIdVal = isDealer ? id : nestedPropertyData.dealerId;
+                finalDealerIdVal = isDealer ? id : nestedPropertyData.dealerId;
                 if (!isDealer && nestedPropertyData.dealer_owner_booked === 'Dealer' && nestedPropertyData.dealerId === 'Other_Dealer') {
                   const dealerRes = await createRecord('dealers', {
                     ...nestedDealerData
@@ -4697,6 +4697,18 @@ const EntityDetail = () => {
               finalCustomerName = selectedCust ? (selectedCust.name || selectedCust.person_name) : pitchCustomerId;
               if (!finalCustomerId) {
                 return alert("Please select a customer or lead to log the pitch against.");
+              }
+            }
+
+            let finalDealerId = isDealer ? id : '';
+            if (!isDealer) {
+              if (pitchPropertyId === 'Other_Property') {
+                finalDealerId = finalDealerIdVal;
+              } else {
+                const prop = (moduleData.properties || []).find(pr => String(pr.id) === String(finalPropId));
+                if (prop && prop.dealerId) {
+                  finalDealerId = prop.dealerId;
+                }
               }
             }
 

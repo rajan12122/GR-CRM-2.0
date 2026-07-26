@@ -3052,13 +3052,14 @@ app.get('/api/360/:module/:id', authenticateToken, (req, res) => {
   } else if (module === 'dealers') {
     data.remarks = allRemarks.filter(r => r.targetModule === 'dealers' && String(r.targetId) === String(id));
     data.documents = allDocs.filter(d => d.targetModule === 'dealers' && String(d.targetId) === String(id));
-    data.calls = allDealerCalls.filter(c => String(c.dealerId) === String(id));
+    data.calls = allDealerCalls.filter(c => String(c.dealerId) === String(id)).reverse();
     data.meetings = allDealerMeetings.filter(m => String(m.dealerId) === String(id)).map(m => ({
       ...m,
       assignedEmployeeName: allEmployees.find(e => String(e.id) === String(m.assignedEmployeeId))?.name || m.assignedEmployeeId
     }));
     data.properties = allProperties.filter(p => String(p.dealerId) === String(id));
     data.referrals = (db.leads || []).filter(l => l.referrer_type === 'dealers' && String(l.referrer_id) === String(id));
+    data.pitches = allPitches.filter(p => String(p.dealerId) === String(id));
   } else if (module === 'dealer_meetings') {
     const meeting = allDealerMeetings.find(m => String(m.id) === String(id));
     data.meeting = meeting;
