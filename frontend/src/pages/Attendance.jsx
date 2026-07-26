@@ -1032,157 +1032,159 @@ const Attendance = () => {
         </Grid>
       </Grid>
 
-      <Grid container spacing={3}>
-        {/* Manual Log Entry Form */}
-        <Grid item xs={12} md={4}>
-          <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', mb: 2, fontFamily: 'Poppins' }}>
-                Add Timings Entry
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
+      {(user?.role === 'Admin' || user?.role === 'Manager') && (
+        <Grid container spacing={3}>
+          {/* Manual Log Entry Form */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', mb: 2, fontFamily: 'Poppins' }}>
+                  Add Timings Entry
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
 
-              {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
+                {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
 
-              <form onSubmit={handleLogSubmit}>
-                <Box mb={2.5}>
-                  <FormControl fullWidth size="medium">
-                    <InputLabel>Select Employee</InputLabel>
-                    <Select
-                      label="Select Employee"
-                      value={empId}
-                      onChange={(e) => setEmpId(e.target.value)}
-                    >
-                      {employees.map(emp => (
-                        <MenuItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
+                <form onSubmit={handleLogSubmit}>
+                  <Box mb={2.5}>
+                    <FormControl fullWidth size="medium">
+                      <InputLabel>Select Employee</InputLabel>
+                      <Select
+                        label="Select Employee"
+                        value={empId}
+                        onChange={(e) => setEmpId(e.target.value)}
+                      >
+                        {employees.map(emp => (
+                          <MenuItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
 
-                <Box mb={2.5}>
-                  <TextField 
-                    type="date"
-                    label="Logging Date"
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
-                </Box>
-
-                <Grid container spacing={1.5} mb={2.5}>
-                  <Grid item xs={6}>
+                  <Box mb={2.5}>
                     <TextField 
-                      label="Punch In (e.g. 09:15 AM)"
+                      type="date"
+                      label="Logging Date"
                       fullWidth
-                      value={inTime}
-                      onChange={(e) => setInTime(e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
                     />
+                  </Box>
+
+                  <Grid container spacing={1.5} mb={2.5}>
+                    <Grid item xs={6}>
+                      <TextField 
+                        label="Punch In (e.g. 09:15 AM)"
+                        fullWidth
+                        value={inTime}
+                        onChange={(e) => setInTime(e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField 
+                        label="Punch Out"
+                        fullWidth
+                        value={outTime}
+                        onChange={(e) => setOutTime(e.target.value)}
+                      />
+                    </Grid>
                   </Grid>
-                  <Grid item xs={6}>
-                    <TextField 
-                      label="Punch Out"
-                      fullWidth
-                      value={outTime}
-                      onChange={(e) => setOutTime(e.target.value)}
-                    />
-                  </Grid>
-                </Grid>
 
-                <Box mb={3.5}>
-                  <FormControl fullWidth>
-                    <InputLabel>Duty Status</InputLabel>
-                    <Select
-                      label="Duty Status"
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
-                    >
-                      <MenuItem value="Present">Present On-Duty</MenuItem>
-                      <MenuItem value="Late">Late Punch-In</MenuItem>
-                      <MenuItem value="Absent">Absent</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
+                  <Box mb={3.5}>
+                    <FormControl fullWidth>
+                      <InputLabel>Duty Status</InputLabel>
+                      <Select
+                        label="Duty Status"
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                      >
+                        <MenuItem value="Present">Present On-Duty</MenuItem>
+                        <MenuItem value="Late">Late Punch-In</MenuItem>
+                        <MenuItem value="Absent">Absent</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
 
-                <Button 
-                  type="submit" 
-                  variant="contained" 
-                  fullWidth 
-                  startIcon={<Icons.CheckSquare size={18} />}
-                  sx={{ py: 1.2, backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' } }}
-                >
-                  Confirm Log details
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </Grid>
+                  <Button 
+                    type="submit" 
+                    variant="contained" 
+                    fullWidth 
+                    startIcon={<Icons.CheckSquare size={18} />}
+                    sx={{ py: 1.2, backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' } }}
+                  >
+                    Confirm Log details
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </Grid>
 
-        {/* Attendance Listing Table */}
-        <Grid item xs={12} md={8}>
-          <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
-            <CardContent sx={{ p: 0 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', p: 3, pb: 2, fontFamily: 'Poppins' }}>
-                Today's Timing Records
-              </Typography>
-              <Divider />
-              <TableContainer sx={{ maxHeight: 420 }}>
-                <Table stickyHeader size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Employee</TableCell>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Punch In</TableCell>
-                      <TableCell>Punch Out</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Action</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {attendanceList.filter(a => a.date === todayStr).length === 0 ? (
+          {/* Attendance Listing Table */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              <CardContent sx={{ p: 0 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', p: 3, pb: 2, fontFamily: 'Poppins' }}>
+                  Today's Timing Records
+                </Typography>
+                <Divider />
+                <TableContainer sx={{ maxHeight: 420 }}>
+                  <Table stickyHeader size="small">
+                    <TableHead>
                       <TableRow>
-                        <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94A3B8' }}>
-                          No timing records registered for today.
-                        </TableCell>
+                        <TableCell>Employee</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Punch In</TableCell>
+                        <TableCell>Punch Out</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Action</TableCell>
                       </TableRow>
-                    ) : (
-                      attendanceList.filter(a => a.date === todayStr).map(a => {
-                        const empName = employees.find(e => e.id === a.employeeId)?.name || a.employeeId;
-                        return (
-                          <TableRow key={a.id} hover>
-                            <TableCell sx={{ fontWeight: 600 }}>{empName}</TableCell>
-                            <TableCell>{a.date}</TableCell>
-                            <TableCell>{a.inTime}</TableCell>
-                            <TableCell>{a.outTime || '---'}</TableCell>
-                            <TableCell>
-                              <Chip 
-                                label={a.status} 
-                                size="small" 
-                                sx={{ 
-                                  backgroundColor: a.status === 'Present' ? 'rgba(34,197,94,0.1)' : a.status === 'Late' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                                  color: a.status === 'Present' ? '#22C55E' : a.status === 'Late' ? '#F59E0B' : '#EF4444',
-                                  fontWeight: 700,
-                                  fontSize: '10px'
-                                }} 
-                              />
-                            </TableCell>
-                            <TableCell align="right">
-                              <IconButton size="small" color="error" onClick={() => handleDelete(a.id)}>
-                                <Icons.Trash2 size={14} />
-                              </IconButton>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </CardContent>
-          </Card>
+                    </TableHead>
+                    <TableBody>
+                      {attendanceList.filter(a => a.date === todayStr).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94A3B8' }}>
+                            No timing records registered for today.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        attendanceList.filter(a => a.date === todayStr).map(a => {
+                          const empName = employees.find(e => e.id === a.employeeId)?.name || a.employeeId;
+                          return (
+                            <TableRow key={a.id} hover>
+                              <TableCell sx={{ fontWeight: 600 }}>{empName}</TableCell>
+                              <TableCell>{a.date}</TableCell>
+                              <TableCell>{a.inTime}</TableCell>
+                              <TableCell>{a.outTime || '---'}</TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={a.status} 
+                                  size="small" 
+                                  sx={{ 
+                                    backgroundColor: a.status === 'Present' ? 'rgba(34,197,94,0.1)' : a.status === 'Late' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                                    color: a.status === 'Present' ? '#22C55E' : a.status === 'Late' ? '#F59E0B' : '#EF4444',
+                                    fontWeight: 700,
+                                    fontSize: '10px'
+                                  }} 
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <IconButton size="small" color="error" onClick={() => handleDelete(a.id)}>
+                                  <Icons.Trash2 size={14} />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
-      </Grid>
+      )}
 
       {/* My Attendance & Travel Logs for Employees */}
       <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mt: 4, mb: 4 }}>
