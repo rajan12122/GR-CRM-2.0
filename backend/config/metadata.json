@@ -2209,6 +2209,178 @@
           "editable": false
         }
       ]
+    },
+    "dealer_meetings": {
+      "id": "dealer_meetings",
+      "label": "Dealer Meetings",
+      "icon": "Calendar",
+      "fields": [
+        {
+          "name": "id",
+          "label": "Meeting ID",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": false
+        },
+        {
+          "name": "dealerId",
+          "label": "Dealer",
+          "type": "ref",
+          "refModule": "dealers",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "assignedEmployeeId",
+          "label": "Assigned Exec",
+          "type": "ref",
+          "refModule": "employees",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "meetingDate",
+          "label": "Meeting Date",
+          "type": "date",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "meetingTime",
+          "label": "Meeting Time",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "priority",
+          "label": "Priority",
+          "type": "select",
+          "chipGroup": "meetingPriorities",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "purpose",
+          "label": "Purpose",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "instructions",
+          "label": "Admin Instructions",
+          "type": "textarea",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "status",
+          "label": "Meeting Status",
+          "type": "select",
+          "chipGroup": "meetingStatus",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "start_time",
+          "label": "Actual Start Time",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "end_time",
+          "label": "Actual End Time",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "outcome",
+          "label": "Meeting Outcome",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "interest_level",
+          "label": "Interest Level",
+          "type": "select",
+          "chipGroup": "priorities",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "properties_discussed",
+          "label": "Properties Discussed",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "new_buyer_leads",
+          "label": "New Buyer Leads Obtained",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "new_seller_leads",
+          "label": "New Seller Leads Obtained",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "documents_collected",
+          "label": "Documents Collected",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "next_action",
+          "label": "Next Action Plan",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "followUpDate",
+          "label": "Next Follow-up Date",
+          "type": "date",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "remarks",
+          "label": "Detailed Meeting Remarks",
+          "type": "textarea",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        }
+      ]
     }
   },
   "chips": {
@@ -3291,6 +3463,14 @@
         "delete",
         "export",
         "print"
+      ],
+      "dealer_meetings": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "export",
+        "print"
       ]
     },
     "Manager": {
@@ -3417,6 +3597,13 @@
         "edit",
         "delete",
         "export"
+      ],
+      "dealer_meetings": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "export"
       ]
     },
     "Sales": {
@@ -3501,6 +3688,10 @@
         "view",
         "create",
         "edit"
+      ],
+      "dealer_meetings": [
+        "view",
+        "edit"
       ]
     },
     "Employee": {
@@ -3545,6 +3736,10 @@
       ],
       "dealer_calls": [
         "view"
+      ],
+      "dealer_meetings": [
+        "view",
+        "edit"
       ]
     }
   },
