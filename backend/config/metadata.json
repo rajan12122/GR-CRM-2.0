@@ -1801,6 +1801,40 @@
           "required": false,
           "showInTable": true,
           "editable": true
+        },
+        {
+          "name": "bhk_and_washrooms",
+          "label": "BHK / Washrooms",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "location_type",
+          "label": "Location Type",
+          "type": "select",
+          "chipGroup": "locationTypes",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "facing",
+          "label": "Facing",
+          "type": "select",
+          "chipGroup": "facings",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "white",
+          "label": "White",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
         }
       ]
     },
