@@ -2475,31 +2475,18 @@ const EntityDetail = () => {
                           return (
                             <Grid item xs={12} sm={6} md={4} key={p.id}>
                               <Paper sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', '&:hover': { borderColor: '#2563EB' } }} onClick={() => navigate(`/module/properties/${p.id}`)}>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#2563EB' }}>{p.id}</Typography>
+                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#2563EB' }}>{p.id}</Typography>
+                                  <Chip 
+                                    label={pitch?.propertyStatus || p.status || 'Available'} 
+                                    color={(pitch?.propertyStatus || p.status) === 'Property Registered/Sold Out' ? 'error' : 'primary'}
+                                    size="small"
+                                    sx={{ fontWeight: 800, fontSize: '9px', height: '18px', borderRadius: '4px' }}
+                                  />
+                                </Box>
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{p.locality} {p.sector_block ? `(Sector ${p.sector_block})` : ''}</Typography>
                                 <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>Type: {p.propertyType} • Size: {p.size}</Typography>
                                 <Typography variant="caption" sx={{ color: '#16A34A', fontWeight: 700, display: 'block', mt: 0.5 }}>Price: {p.demand ? `₹${p.demand}` : 'N/A'}</Typography>
-                                
-                                <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed #E2E8F0', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                  <Typography variant="caption" sx={{ color: '#475569', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>Pipeline Stage:</span>
-                                    <Chip 
-                                      label={pitch?.propertyStatus || p.status || 'Available'} 
-                                      color={(pitch?.propertyStatus || p.status) === 'Property Registered/Sold Out' ? 'error' : 'primary'}
-                                      size="small"
-                                      sx={{ fontWeight: 800, fontSize: '9px', height: '18px', borderRadius: '4px' }}
-                                    />
-                                  </Typography>
-                                  <Typography variant="caption" sx={{ color: '#475569', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>Interest Stage:</span>
-                                    <Chip 
-                                      label={pitch?.status || 'Not Pitched'} 
-                                      color={pitch?.status === 'Deal Closed' ? 'success' : 'default'}
-                                      size="small"
-                                      sx={{ fontWeight: 800, fontSize: '9px', height: '18px', borderRadius: '4px' }}
-                                    />
-                                  </Typography>
-                                </Box>
                               </Paper>
                             </Grid>
                           );
