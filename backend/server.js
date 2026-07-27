@@ -2090,7 +2090,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
             (!payload.linkedPitchId && String(p.customerId) === String(payload.customerId) && String(p.propertyId) === String(payload.propertyId) && p.status === 'Site Visit Scheduled')
           );
           targetPitches.forEach(pitch => {
-            if (pitch.status === 'Site Visit Scheduled') {
+            if (pitch.status === 'Site Visit Scheduled' || pitch.interestLevel === 'Site Visit Scheduled') {
               pitch.status = 'Site Visit Completed';
               pitch.interestLevel = 'Site Visit Completed';
               handlePitchStatusChange(pitch, db, req);
@@ -2293,7 +2293,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
               (!sv.linkedPitchId && String(p.customerId) === String(sv.customerId) && String(p.propertyId) === String(sv.propertyId) && p.status === 'Site Visit Scheduled')
             );
             targetPitches.forEach(pitch => {
-              if (pitch.status === 'Site Visit Scheduled') {
+              if (pitch.status === 'Site Visit Scheduled' || pitch.interestLevel === 'Site Visit Scheduled') {
                 pitch.status = 'Site Visit Completed';
                 pitch.interestLevel = 'Site Visit Completed';
                 handlePitchStatusChange(pitch, db, req);
