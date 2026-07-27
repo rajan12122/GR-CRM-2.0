@@ -879,12 +879,28 @@ const EntityDetail = () => {
                       <EntityTooltip moduleName={f.refModule} id={val}>
                         <Chip 
                           label={(() => {
+                            if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
+                              const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
+                              if (prop && prop.dealerId) {
+                                const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
+                                if (dealer) return dealer.firm_name || dealer.name || dealer.id;
+                              }
+                            }
                             const refArray = moduleData[f.refModule] || [];
                             const referencedRecord = refArray.find(r => String(r.id) === String(val));
                             return referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || val) : val;
                           })()} 
                           size="small" 
-                          onClick={() => navigate(`/module/${f.refModule}/${val}`)}
+                          onClick={() => {
+                            if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
+                              const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
+                              if (prop && prop.dealerId) {
+                                navigate(`/module/dealers/${prop.dealerId}`);
+                                return;
+                              }
+                            }
+                            navigate(`/module/${f.refModule}/${val}`);
+                          }}
                           sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
                         />
                       </EntityTooltip>
@@ -2166,8 +2182,49 @@ const EntityDetail = () => {
                               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Deal: {d.id}</Typography>
                               <Chip label={d.status} color={d.status === 'Closed' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 700 }} />
                             </Box>
-                            <Typography variant="body2">Seller Customer: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/customers/${d.sellerCustomerId}`)}>{d.sellerCustomerId}</span></Typography>
-                            <Typography variant="body2">Buyer Customer: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/customers/${d.customerId}`)}>{d.customerId}</span></Typography>
+                            {(() => {
+                              const prop = record;
+                              let resolvedSellerName = d.sellerCustomerId;
+                              let clickPath = `/module/customers/${d.sellerCustomerId}`;
+                              if (prop && prop.dealerId) {
+                                const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
+                                if (dealer) {
+                                  resolvedSellerName = dealer.firm_name || dealer.name || dealer.id;
+                                  clickPath = `/module/dealers/${prop.dealerId}`;
+                                }
+                              } else {
+                                const cust = (moduleData.customers || []).find(c => String(c.id) === String(d.sellerCustomerId));
+                                if (cust) {
+                                  resolvedSellerName = cust.name || d.sellerCustomerId;
+                                }
+                              }
+                              return (
+                                <Typography variant="body2">
+                                  Seller Customer:{' '}
+                                  <span 
+                                    style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} 
+                                    onClick={() => navigate(clickPath)}
+                                  >
+                                    {resolvedSellerName}
+                                  </span>
+                                </Typography>
+                              );
+                            })()}
+                            {(() => {
+                              const cust = (moduleData.customers || []).find(c => String(c.id) === String(d.customerId));
+                              const buyerName = cust ? cust.name : d.customerId;
+                              return (
+                                <Typography variant="body2">
+                                  Buyer Customer:{' '}
+                                  <span 
+                                    style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} 
+                                    onClick={() => navigate(`/module/customers/${d.customerId}`)}
+                                  >
+                                    {buyerName}
+                                  </span>
+                                </Typography>
+                              );
+                            })()}
                             <Typography variant="body2" sx={{ mt: 1, fontWeight: 700 }}>Price Sold: ₹{formatCurrency(d.salePrice)}</Typography>
                           </Paper>
                         ))

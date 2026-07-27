@@ -43,7 +43,7 @@ const getSingularLabel = (label) => {
   return label;
 };
 
-const EntityChip = ({ moduleName, id, onClick }) => {
+const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
   const { moduleData } = useApp();
   
   let resolvedModule = moduleName;
@@ -53,16 +53,35 @@ const EntityChip = ({ moduleName, id, onClick }) => {
     resolvedModule = 'customers';
   }
   
-  const list = moduleData[resolvedModule] || [];
-  const record = list.find(r => String(r.id) === String(id));
-  const resolvedName = record ? (record.propertyName || record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed') : id;
+  let resolvedName = '';
+  let finalClickModule = resolvedModule;
+  let finalClickId = id;
+  
+  // Custom logic for Deals: resolve to Dealer Firm Name if Dealer Associated Property
+  if (field && field.name === 'sellerCustomerId' && rowRecord && rowRecord.propertyId) {
+    const prop = (moduleData.properties || []).find(p => String(p.id) === String(rowRecord.propertyId));
+    if (prop && prop.dealerId) {
+      const dealer = (moduleData.dealers || []).find(d => String(d.id) === String(prop.dealerId));
+      if (dealer) {
+        resolvedName = dealer.firm_name || dealer.name || dealer.id;
+        finalClickModule = 'dealers';
+        finalClickId = prop.dealerId;
+      }
+    }
+  }
+  
+  if (!resolvedName) {
+    const list = moduleData[resolvedModule] || [];
+    const record = list.find(r => String(r.id) === String(id));
+    resolvedName = record ? (record.propertyName || record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed') : id;
+  }
   
   return (
-    <Tooltip title={`${getSingularLabel(resolvedModule).toUpperCase()}: ${resolvedName}`} arrow placement="top">
+    <Tooltip title={`${getSingularLabel(finalClickModule).toUpperCase()}: ${resolvedName}`} arrow placement="top">
       <Chip 
         label={resolvedName} 
         size="small"
-        onClick={(e) => { e.stopPropagation(); onClick(resolvedModule, id); }}
+        onClick={(e) => { e.stopPropagation(); onClick(finalClickModule, finalClickId); }}
         sx={{ 
           cursor: 'pointer', 
           borderRadius: '6px', 
@@ -270,6 +289,8 @@ const DynamicTable = ({
         <EntityChip 
           moduleName={resolvedModule} 
           id={val} 
+          field={field}
+          rowRecord={rec}
           onClick={(actualModule, actualId) => onInspectClick(actualModule || resolvedModule, actualId || val)} 
         />
       );
@@ -284,6 +305,8 @@ const DynamicTable = ({
               key={itemId}
               moduleName={field.refModule} 
               id={itemId} 
+              field={field}
+              rowRecord={rec}
               onClick={(actualModule, actualId) => onInspectClick(actualModule || field.refModule, actualId || itemId)} 
             />
           ))}
