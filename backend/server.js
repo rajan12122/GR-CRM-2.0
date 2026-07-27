@@ -2083,6 +2083,22 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         handleAutomatedPitchLogging(payload, db, req);
       }
 
+      if (module === 'site_visits') {
+        if (payload.result === 'Completed') {
+          const targetPitches = (db.property_pitch_history || []).filter(p => 
+            (payload.linkedPitchId && String(p.id) === String(payload.linkedPitchId)) ||
+            (!payload.linkedPitchId && String(p.customerId) === String(payload.customerId) && String(p.propertyId) === String(payload.propertyId) && p.status === 'Site Visit Scheduled')
+          );
+          targetPitches.forEach(pitch => {
+            if (pitch.status === 'Site Visit Scheduled') {
+              pitch.status = 'Site Visit Completed';
+              handlePitchStatusChange(pitch, db, req);
+              try { syncToSheets('property_pitch_history'); } catch(e) {}
+            }
+          });
+        }
+      }
+
       if (module === 'site_visits' && payload.employeeId) {
         notifyUser(payload.employeeId, 'visit-assigned', {
           visitId: payload.id,
@@ -2262,11 +2278,26 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
       if (module === 'site_visits') {
         const sv = db[module][index];
-        if (sv && sv.linkedFollowUpId) {
-          const fup = (db.follow_ups || []).find(f => f.id === sv.linkedFollowUpId);
-          if (fup && fup.date !== sv.date) {
-            fup.date = sv.date;
-            try { syncToSheets('follow_ups'); } catch(e) {}
+        if (sv) {
+          if (sv.linkedFollowUpId) {
+            const fup = (db.follow_ups || []).find(f => f.id === sv.linkedFollowUpId);
+            if (fup && fup.date !== sv.date) {
+              fup.date = sv.date;
+              try { syncToSheets('follow_ups'); } catch(e) {}
+            }
+          }
+          if (payload.result === 'Completed') {
+            const targetPitches = (db.property_pitch_history || []).filter(p => 
+              (sv.linkedPitchId && String(p.id) === String(sv.linkedPitchId)) ||
+              (!sv.linkedPitchId && String(p.customerId) === String(sv.customerId) && String(p.propertyId) === String(sv.propertyId) && p.status === 'Site Visit Scheduled')
+            );
+            targetPitches.forEach(pitch => {
+              if (pitch.status === 'Site Visit Scheduled') {
+                pitch.status = 'Site Visit Completed';
+                handlePitchStatusChange(pitch, db, req);
+                try { syncToSheets('property_pitch_history'); } catch(e) {}
+              }
+            });
           }
         }
       }
