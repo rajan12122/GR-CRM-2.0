@@ -1974,7 +1974,7 @@ const EntityDetail = () => {
                               <Paper key={idx} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', boxShadow: 'none' }}>
                                 <Typography variant="body2" sx={{ fontWeight: 700 }}>Client: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/customers/${sv.customerId}`)}>{sv.customer?.name || sv.customerId}</span></Typography>
                                 <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
-                                  Showed on: {sv.date} • Showed by: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/employees/${sv.employeeId}`)}>{sv.employeeId}</span> • Outcome: <strong>{sv.result}</strong>
+                                  Showed on: {sv.date} • Showed by: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/employees/${sv.employeeId}`)}>{sv.employeeId}</span> • Outcome: <strong>{(metadata?.chips?.visitResults || []).find(c => c.value === sv.result)?.label || sv.result}</strong>
                                 </Typography>
                               </Paper>
                             ))
@@ -2837,7 +2837,7 @@ const EntityDetail = () => {
                                         <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(sv.propertyId?.startsWith('PROJ-') ? `/module/projects/${sv.propertyId}` : `/module/properties/${sv.propertyId}`)}>{getPropertyName(sv.propertyId)}</span>
                                       </Typography>
                                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>
-                                        Visited on: {sv.date} • Conducted by: {sv.employeeId} • Outcome: <strong>{sv.result}</strong>
+                                        Visited on: {sv.date} • Conducted by: {sv.employeeId} • Outcome: <strong>{(metadata?.chips?.visitResults || []).find(c => c.value === sv.result)?.label || sv.result}</strong>
                                       </Typography>
                                     </Paper>
                                   ))

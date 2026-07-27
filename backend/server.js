@@ -2092,6 +2092,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           targetPitches.forEach(pitch => {
             if (pitch.status === 'Site Visit Scheduled') {
               pitch.status = 'Site Visit Completed';
+              pitch.interestLevel = 'Site Visit Completed';
               handlePitchStatusChange(pitch, db, req);
               try { syncToSheets('property_pitch_history'); } catch(e) {}
             }
@@ -2294,6 +2295,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
             targetPitches.forEach(pitch => {
               if (pitch.status === 'Site Visit Scheduled') {
                 pitch.status = 'Site Visit Completed';
+                pitch.interestLevel = 'Site Visit Completed';
                 handlePitchStatusChange(pitch, db, req);
                 try { syncToSheets('property_pitch_history'); } catch(e) {}
               }
