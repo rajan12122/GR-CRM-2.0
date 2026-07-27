@@ -189,9 +189,35 @@ function coerceRecordValues(moduleName, data, columns) {
   });
 }
 
+const tableColumnsCache = {};
+
+async function getTableColumns(moduleName, executor) {
+  if (tableColumnsCache[moduleName]) {
+    return tableColumnsCache[moduleName];
+  }
+  try {
+    const res = await executor.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = $1
+    `, [moduleName]);
+    const cols = res.rows.map(r => r.column_name);
+    tableColumnsCache[moduleName] = cols;
+    return cols;
+  } catch (err) {
+    console.error(`Failed to load columns for table ${moduleName}:`, err);
+    return [];
+  }
+}
+
 async function insertRecord(moduleName, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
-  const columns = Object.keys(data).filter(col => col !== 'created_at' && col !== 'updated_at');
+  const tableCols = await getTableColumns(moduleName, executor);
+  const columns = Object.keys(data).filter(col => 
+    col !== 'created_at' && 
+    col !== 'updated_at' && 
+    tableCols.includes(col)
+  );
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
   const colNames = columns.map(c => `"${c}"`).join(', ');
 
@@ -208,7 +234,12 @@ async function insertRecord(moduleName, data, dbOrClient) {
 
 async function updateRecord(moduleName, id, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
-  const columns = Object.keys(data).filter(col => col !== 'created_at' && col !== 'updated_at');
+  const tableCols = await getTableColumns(moduleName, executor);
+  const columns = Object.keys(data).filter(col => 
+    col !== 'created_at' && 
+    col !== 'updated_at' && 
+    tableCols.includes(col)
+  );
   if (columns.length === 0) return getRecord(moduleName, id, executor);
 
   const setClauses = columns.map((col, i) => `"${col}" = $${i + 2}`).join(', ');
