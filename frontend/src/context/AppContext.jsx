@@ -44,7 +44,7 @@ export const AppProvider = ({ children }) => {
       // Set Axios auth header
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-      const modulesToPreload = ['employees', 'customers', 'properties'];
+      const modulesToPreload = ['employees', 'customers', 'properties', 'dealers'];
 
       // 1. Verify token validity by fetching user profile first
       const userRes = await axios.get(`${API_BASE_URL}/auth/me`);
@@ -140,12 +140,17 @@ export const AppProvider = ({ children }) => {
       // Refresh logs
       axios.get(`${API_BASE_URL}/data/activity_logs`).then(r => setActivityLogs(r.data)).catch(() => {});
 
-      // Auto-refresh related modules when pitch or deal changes to keep UI consistent
-      if (moduleName === 'property_pitch_history' || moduleName === 'deals') {
+      // Auto-refresh related modules when pitch, deal, site_visit, query, or follow_up changes to keep UI consistent
+      const relatedModules = ['property_pitch_history', 'deals', 'site_visits', 'queries', 'follow_ups'];
+      if (relatedModules.includes(moduleName)) {
         fetchModuleData('properties');
         fetchModuleData('deals');
         fetchModuleData('customers');
         fetchModuleData('leads');
+        fetchModuleData('dealers');
+        fetchModuleData('site_visits');
+        fetchModuleData('queries');
+        fetchModuleData('follow_ups');
       }
 
       return { success: true, data: res.data };
@@ -166,12 +171,17 @@ export const AppProvider = ({ children }) => {
       }));
       axios.get(`${API_BASE_URL}/data/activity_logs`).then(r => setActivityLogs(r.data)).catch(() => {});
 
-      // Auto-refresh related modules when pitch or deal changes to keep UI consistent
-      if (moduleName === 'property_pitch_history' || moduleName === 'deals') {
+      // Auto-refresh related modules when pitch, deal, site_visit, query, or follow_up changes to keep UI consistent
+      const relatedModules = ['property_pitch_history', 'deals', 'site_visits', 'queries', 'follow_ups'];
+      if (relatedModules.includes(moduleName)) {
         fetchModuleData('properties');
         fetchModuleData('deals');
         fetchModuleData('customers');
         fetchModuleData('leads');
+        fetchModuleData('dealers');
+        fetchModuleData('site_visits');
+        fetchModuleData('queries');
+        fetchModuleData('follow_ups');
       }
 
       return { success: true, data: res.data };
@@ -191,6 +201,19 @@ export const AppProvider = ({ children }) => {
         [moduleName]: (prev[moduleName] || []).filter(rec => rec.id !== id)
       }));
       axios.get(`${API_BASE_URL}/data/activity_logs`).then(r => setActivityLogs(r.data)).catch(() => {});
+      
+      const relatedModules = ['property_pitch_history', 'deals', 'site_visits', 'queries', 'follow_ups'];
+      if (relatedModules.includes(moduleName)) {
+        fetchModuleData('properties');
+        fetchModuleData('deals');
+        fetchModuleData('customers');
+        fetchModuleData('leads');
+        fetchModuleData('dealers');
+        fetchModuleData('site_visits');
+        fetchModuleData('queries');
+        fetchModuleData('follow_ups');
+      }
+
       return { success: true };
     } catch (err) {
       console.error(`Error deleting ${moduleName}:`, err);
