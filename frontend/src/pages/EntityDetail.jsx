@@ -4622,13 +4622,36 @@ const EntityDetail = () => {
               </Select>
             </FormControl>
             <TextField label="Quoted Pitch Price Offer" type="text" fullWidth value={pitchPrice} onChange={(e) => setPitchPrice(e.target.value)} />
-            <TextField label="Next Followup Date" type="date" InputLabelProps={{ shrink: true }} fullWidth value={pitchFollowUp} onChange={(e) => setPitchFollowUp(e.target.value)} />
+            {pitchStatus === 'Site Visit Scheduled' ? (
+              <TextField 
+                label="Scheduled Site Visit Date" 
+                type="date" 
+                InputLabelProps={{ shrink: true }} 
+                fullWidth 
+                required
+                value={pitchFollowUp} 
+                onChange={(e) => setPitchFollowUp(e.target.value)} 
+              />
+            ) : (
+              <TextField 
+                label="Next Followup Date" 
+                type="date" 
+                InputLabelProps={{ shrink: true }} 
+                fullWidth 
+                value={pitchFollowUp} 
+                onChange={(e) => setPitchFollowUp(e.target.value)} 
+              />
+            )}
             <TextField label="Meeting Remarks" multiline rows={3} fullWidth value={pitchRemarks} onChange={(e) => setPitchRemarks(e.target.value)} />
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
           <Button onClick={() => setPitchDialogOpen(false)} sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600 }}>Cancel</Button>
           <Button variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }} onClick={async () => {
+            if (pitchStatus === 'Site Visit Scheduled' && !pitchFollowUp) {
+              alert('Please select the Scheduled Site Visit Date.');
+              return;
+            }
             const isCustomerLead = moduleName === 'customers' || moduleName === 'leads';
             const isFollowUpQuery = moduleName === 'follow_ups' || moduleName === 'queries';
             const isDealer = moduleName === 'dealers';
@@ -4734,7 +4757,9 @@ const EntityDetail = () => {
               quotedPrice: pitchPrice || '',
               followUpDate: pitchFollowUp,
               remarks: pitchRemarks,
-              pitchDate: editingPitch ? (editingPitch.pitchDate || new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN')) : new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN')
+              pitchDate: editingPitch ? (editingPitch.pitchDate || new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN')) : new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN'),
+              linkedFollowUpId: moduleName === 'follow_ups' ? id : undefined,
+              linkedQueryId: moduleName === 'queries' ? id : (moduleName === 'follow_ups' ? record.queryId : undefined)
             };
             const res = editingPitch 
               ? await updateRecord('property_pitch_history', editingPitch.id, payload)

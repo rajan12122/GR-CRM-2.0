@@ -183,6 +183,16 @@ const DynamicForm = ({
         const initialCustom = {};
         fields.forEach(f => {
           let val = initialData[f.name];
+          if (f.type === 'date' && val) {
+            // Convert d/m/yyyy to yyyy-MM-dd for HTML5 input
+            const parts = String(val).split('/');
+            if (parts.length === 3) {
+              const d = parts[0].padStart(2, '0');
+              const m = parts[1].padStart(2, '0');
+              const y = parts[2];
+              val = `${y}-${m}-${d}`;
+            }
+          }
           if ((val === undefined || val === null || String(val).trim() === '') && f.required && f.editable === false) {
             if (f.name === 'pitchDate') {
               val = new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN');
@@ -579,6 +589,19 @@ const DynamicForm = ({
           if ((f.type === 'select' || f.type === 'ref') && formData[f.name] === 'Other') {
             payload[f.name] = customValues[f.name] || '';
           }
+          if (f.type === 'date' && payload[f.name]) {
+            const isSlashFormat = f.name === 'date' || (initialData && String(initialData[f.name]).includes('/'));
+            if (isSlashFormat) {
+              const dateVal = payload[f.name];
+              if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+                const parts = dateVal.split('-');
+                const y = parts[0];
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                payload[f.name] = `${d}/${m}/${y}`;
+              }
+            }
+          }
         });
         payload = compileSize(payload, false);
         payload = await resolveDealerId(payload);
@@ -600,6 +623,19 @@ const DynamicForm = ({
         fields.forEach(f => {
           if ((f.type === 'select' || f.type === 'ref') && formData[f.name] === 'Other') {
             payload[f.name] = customValues[f.name] || '';
+          }
+          if (f.type === 'date' && payload[f.name]) {
+            const isSlashFormat = f.name === 'date' || (initialData && String(initialData[f.name]).includes('/'));
+            if (isSlashFormat) {
+              const dateVal = payload[f.name];
+              if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+                const parts = dateVal.split('-');
+                const y = parts[0];
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                payload[f.name] = `${d}/${m}/${y}`;
+              }
+            }
           }
         });
         payload = compileSize(payload, false);

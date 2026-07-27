@@ -1,4 +1,15 @@
 require('dotenv').config();
+const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+Date.prototype.toLocaleDateString = function(locale, options) {
+  if (locale === 'en-IN' && !options) {
+    const day = String(this.getDate()).padStart(2, '0');
+    const month = String(this.getMonth() + 1).padStart(2, '0');
+    const year = this.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  return originalToLocaleDateString.call(this, locale, options);
+};
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -38,6 +49,36 @@ const {
   syncDbChangesToPostgres,
   pool
 } = require('./services/dbService');
+
+const getTodayDateString = () => {
+  const d = new Date();
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const formatToInDate = (dateStr) => {
+  if (!dateStr) return getTodayDateString();
+  let dateOnly = String(dateStr).split(' ')[0];
+  if (dateOnly.includes('-')) {
+    const parts = dateOnly.split('-');
+    if (parts[0].length === 4) {
+      const year = parts[0];
+      const month = parts[1].padStart(2, '0');
+      const day = parts[2].padStart(2, '0');
+      return `${day}/${month}/${year}`;
+    }
+  }
+  const parts = dateOnly.split('/');
+  if (parts.length === 3) {
+    const d = parts[0].padStart(2, '0');
+    const m = parts[1].padStart(2, '0');
+    const y = parts[2];
+    return `${d}/${m}/${y}`;
+  }
+  return dateOnly;
+};
 
 let uniqueSuffixCounter = 0;
 function generateUniqueId(prefix) {
@@ -850,8 +891,53 @@ function handlePitchStatusChange(p, db, req) {
     return null;
   };
 
-  const mappedStage = mapPitchStatusToPipelineAction(p.status) || mapPitchStatusToPipelineAction(p.propertyStatus);
-  if (mappedStage) {
+  const mappedStage = mapPitchStatusToPipelineAction(p.status) || mapPitchStatusToPipelineAction(p.propertyStatus) || 'Contacted';
+  
+  if (p.linkedFollowUpId) {
+    const targetF = (db.follow_ups || []).find(f => String(f.id) === String(p.linkedFollowUpId));
+    if (targetF) {
+      targetF.pipelineAction = mappedStage;
+      targetF.pitchedPropertyId = p.propertyId || targetF.pitchedPropertyId;
+      targetF.pitchPrice = p.quotedPrice || targetF.pitchPrice;
+      targetF.pitchRemarks = p.remarks || targetF.pitchRemarks;
+      handleFollowUpPipelineAction(targetF, db, req);
+
+      if (targetF.queryId) {
+        const targetQ = (db.queries || []).find(q => String(q.id) === String(targetF.queryId));
+        if (targetQ) {
+          targetQ.stage = mappedStage;
+          if (mappedStage === 'Closed') {
+            targetQ.status = 'Closed';
+          }
+        }
+      }
+      writeDb(db);
+      try { syncToSheets('follow_ups'); } catch(e) {}
+      try { syncToSheets('queries'); } catch(e) {}
+    }
+  } else if (p.linkedQueryId) {
+    const targetQ = (db.queries || []).find(q => String(q.id) === String(p.linkedQueryId));
+    if (targetQ) {
+      targetQ.stage = mappedStage;
+      if (mappedStage === 'Closed') {
+        targetQ.status = 'Closed';
+      }
+      
+      (db.follow_ups || []).forEach(f => {
+        if (String(f.queryId) === String(targetQ.id) && f.status !== 'Completed' && f.status !== 'Call Done') {
+          f.pipelineAction = mappedStage;
+          f.pitchedPropertyId = p.propertyId || f.pitchedPropertyId;
+          f.pitchPrice = p.quotedPrice || f.pitchPrice;
+          f.pitchRemarks = p.remarks || f.pitchRemarks;
+          handleFollowUpPipelineAction(f, db, req);
+        }
+      });
+      writeDb(db);
+      try { syncToSheets('queries'); } catch(e) {}
+      try { syncToSheets('follow_ups'); } catch(e) {}
+    }
+  } else {
+    // Fallback: match by customerId
     db.follow_ups = (db.follow_ups || []).map(f => {
       if (String(f.customerId) === String(p.customerId) && f.status !== 'Completed' && f.status !== 'Call Done') {
         f.pipelineAction = mappedStage;
@@ -859,7 +945,6 @@ function handlePitchStatusChange(p, db, req) {
         f.pitchPrice = p.quotedPrice || f.pitchPrice;
         f.pitchRemarks = p.remarks || f.pitchRemarks;
         
-        // Trigger automated post-pipeline action handlers (like auto-creating site visits!)
         const freshFollowUp = (db.follow_ups || []).find(x => x.id === f.id);
         if (freshFollowUp) {
           handleFollowUpPipelineAction(freshFollowUp, db, req);
@@ -880,6 +965,66 @@ function handlePitchStatusChange(p, db, req) {
     });
     try { syncToSheets('queries'); } catch(e) {}
     writeDb(db);
+  }
+
+  // Sync to site_visits directly
+
+  const isSiteVisitStage = mappedStage === 'Site Visit';
+  if (isSiteVisitStage) {
+    db.site_visits = db.site_visits || [];
+    const targetDate = formatToInDate(p.followUpDate || p.pitchDate);
+    let existingVisit = db.site_visits.find(sv => sv.linkedPitchId === p.id || (sv.customerId === p.customerId && sv.propertyId === p.propertyId && sv.date === targetDate));
+    if (existingVisit) {
+      let changed = false;
+      if (!existingVisit.linkedPitchId) {
+        existingVisit.linkedPitchId = p.id;
+        changed = true;
+      }
+      if (existingVisit.date !== targetDate) {
+        existingVisit.date = targetDate;
+        changed = true;
+      }
+      if (existingVisit.propertyId !== p.propertyId) {
+        existingVisit.propertyId = p.propertyId;
+        changed = true;
+      }
+      if (existingVisit.employeeId !== (p.employeeId || existingVisit.employeeId)) {
+        existingVisit.employeeId = p.employeeId || existingVisit.employeeId;
+        changed = true;
+      }
+      if (existingVisit.remarks !== (p.remarks || existingVisit.remarks)) {
+        existingVisit.remarks = p.remarks || existingVisit.remarks;
+        changed = true;
+      }
+      if (changed) {
+        writeDb(db);
+        try { syncToSheets('site_visits'); } catch(e) {}
+      }
+    } else {
+      const visitId = generateNextId(db, 'site_visits', 'VISIT');
+      const newVisit = {
+        id: visitId,
+        customerId: p.customerId,
+        propertyId: p.propertyId || 'PROP-001',
+        employeeId: p.employeeId || 'EMP-001',
+        date: targetDate,
+        time: '12:00 PM',
+        result: 'Scheduled',
+        remarks: p.remarks || `Automatically created from Pitch ${p.id} stage: ${p.status}.`,
+        linkedPitchId: p.id
+      };
+      db.site_visits.push(newVisit);
+      writeDb(db);
+      try { syncToSheets('site_visits'); } catch(e) {}
+    }
+  } else {
+    // If the stage was changed away from Site Visit, delete any site visit linked to this pitch!
+    const originalLen = (db.site_visits || []).length;
+    db.site_visits = (db.site_visits || []).filter(sv => sv.linkedPitchId !== p.id);
+    if ((db.site_visits || []).length !== originalLen) {
+      writeDb(db);
+      try { syncToSheets('site_visits'); } catch(e) {}
+    }
   }
 
   const isDealClosed = p.status === 'Deal Closed' || 
@@ -1213,7 +1358,7 @@ function handleFollowUpPipelineAction(f, db, req) {
   // Auto-create Site Visit if stage is Site Visit Arranged / Scheduled
   const isSiteVisitStage = action === 'Site Visit Arranged' || action === 'Site Visit' || action === 'Site Visit Scheduled' || action === 'Lead_VisitScheduled';
   if (isSiteVisitStage) {
-    let existingVisit = (db.site_visits || []).find(sv => sv.linkedFollowUpId === f.id);
+    let existingVisit = (db.site_visits || []).find(sv => sv.linkedFollowUpId === f.id || (sv.customerId === customerId && sv.propertyId === (f.pitchedPropertyId || 'PROP-001') && sv.date === (f.date || new Date().toLocaleDateString('en-IN'))));
     if (existingVisit) {
       let changed = false;
       if (existingVisit.date !== f.date) {
@@ -1747,7 +1892,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           if (!db.queries) db.queries = [];
           db.queries.push(newQuery);
 
-          if (newQuery.queryType === 'Buy Property') {
+          if (newQuery.queryType === 'Buy Property' && String(existingPerson.id).startsWith('LEAD')) {
             // Automatically schedule a follow up task for the auto-created query
             db.follow_ups = db.follow_ups || [];
             const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
@@ -1896,7 +2041,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       if (module === 'queries') {
         handleQueryStageChange(payload, db, req);
         
-        if (payload.queryType === 'Buy Property') {
+        if (payload.queryType === 'Buy Property' && String(payload.customerId).startsWith('LEAD')) {
           db.follow_ups = db.follow_ups || [];
           const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
           const newFollowUp = {
@@ -2296,6 +2441,10 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         db.deals = (db.deals || []).filter(d => String(d.customerId) !== String(id));
         try { syncToSheets('deals'); } catch(e) {}
       }
+      if (module === 'property_pitch_history') {
+        db.site_visits = (db.site_visits || []).filter(sv => sv.linkedPitchId !== id);
+        try { syncToSheets('site_visits'); } catch(e) {}
+      }
       if (module === 'deals') {
         db.properties = db.properties || [];
         db.properties.forEach(p => {
@@ -2434,6 +2583,10 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
           db.follow_ups = (db.follow_ups || []).filter(f => String(f.queryId) !== String(id));
           db.properties = (db.properties || []).filter(p => String(p.linkedQueryId) !== String(id));
         });
+      }
+      if (module === 'property_pitch_history') {
+        db.site_visits = (db.site_visits || []).filter(sv => !ids.includes(String(sv.linkedPitchId)));
+        try { syncToSheets('site_visits'); } catch(e) {}
       }
 
       // Track Activity Log
@@ -3481,22 +3634,24 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
     if (!db.queries) db.queries = [];
     db.queries.push(newQuery);
 
-    // Automatically schedule a follow up task for the new query
-    db.follow_ups = db.follow_ups || [];
-    const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
-    const newFollowUp = {
-      id: followUpId,
-      customerId: matchedId,
-      queryId: queryId,
-      employeeId: existingCust ? (existingCust.assignedEmployeeId || 'EMP-001') : (existingLead.assignedEmployeeId || 'EMP-001'),
-      date: new Date().toLocaleDateString('en-IN'),
-      time: '12:00 PM',
-      status: 'Pending Call',
-      pipelineAction: 'Fresh Lead',
-      remarks: `Auto-scheduled follow up for requirements form Query ${queryId}.`
-    };
-    db.follow_ups.push(newFollowUp);
-    try { syncToSheets('follow_ups'); } catch(e) {}
+    // Automatically schedule a follow up task for the new query if it's a lead
+    if (String(matchedId).startsWith('LEAD')) {
+      db.follow_ups = db.follow_ups || [];
+      const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+      const newFollowUp = {
+        id: followUpId,
+        customerId: matchedId,
+        queryId: queryId,
+        employeeId: existingCust ? (existingCust.assignedEmployeeId || 'EMP-001') : (existingLead.assignedEmployeeId || 'EMP-001'),
+        date: new Date().toLocaleDateString('en-IN'),
+        time: '12:00 PM',
+        status: 'Pending Call',
+        pipelineAction: 'Fresh Lead',
+        remarks: `Auto-scheduled follow up for requirements form Query ${queryId}.`
+      };
+      db.follow_ups.push(newFollowUp);
+      try { syncToSheets('follow_ups'); } catch(e) {}
+    }
 
     writeDb(db);
     try { syncToSheets('queries'); } catch(e) {}
@@ -3657,25 +3812,23 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
           db.queries.push(newQuery);
 
           // Automatically schedule a follow up task for the new query
-          db.follow_ups = db.follow_ups || [];
-          const followUpId = await generateNextId(client, 'follow_ups', 'FOLLOW');
-          const newFollowUp = {
-            id: followUpId,
-            customerId: matchedId,
-            queryId: queryId,
-            employeeId: payload.assignedEmployeeId || (existingCust ? existingCust.assignedEmployeeId : existingLead.assignedEmployeeId) || 'EMP-001',
-            date: new Date().toLocaleDateString('en-IN'),
-            time: '12:00 PM',
-            status: 'Pending Call',
-            pipelineAction: 'Fresh Lead',
-            remarks: `Auto-scheduled follow up for Quick-Add Query ${queryId}.`
-          };
-          db.follow_ups.push(newFollowUp);
-          
-          await syncDbChangesToPostgres(dbBefore, db, client);
-          dbCache = db;
-          
-          try { syncToSheets('follow_ups'); } catch(e) {}
+          if (String(matchedId).startsWith('LEAD')) {
+            db.follow_ups = db.follow_ups || [];
+            const followUpId = await generateNextId(client, 'follow_ups', 'FOLLOW');
+            const newFollowUp = {
+              id: followUpId,
+              customerId: matchedId,
+              queryId: queryId,
+              employeeId: payload.assignedEmployeeId || (existingCust ? existingCust.assignedEmployeeId : existingLead.assignedEmployeeId) || 'EMP-001',
+              date: new Date().toLocaleDateString('en-IN'),
+              time: '12:00 PM',
+              status: 'Pending Call',
+              pipelineAction: 'Fresh Lead',
+              remarks: `Auto-scheduled follow up for Quick-Add Query ${queryId}.`
+            };
+            db.follow_ups.push(newFollowUp);
+            try { syncToSheets('follow_ups'); } catch(e) {}
+          }
           try { syncToSheets('queries'); } catch(e) {}
           
           return {
@@ -3727,21 +3880,23 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         handleFollowUpPipelineAction(payload, db, req);
       } else if (module === 'queries') {
         handleQueryStageChange(payload, db, req);
-        db.follow_ups = db.follow_ups || [];
-        const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
-        const newFollowUp = {
-          id: followUpId,
-          customerId: payload.customerId,
-          queryId: payload.id,
-          employeeId: payload.assignedEmployeeId || 'EMP-001',
-          date: new Date().toLocaleDateString('en-IN'),
-          time: '12:00 PM',
-          status: 'Pending Call',
-          pipelineAction: 'Fresh Lead',
-          remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
-        };
-        db.follow_ups.push(newFollowUp);
-        try { syncToSheets('follow_ups'); } catch(e) {}
+        if (String(payload.customerId).startsWith('LEAD')) {
+          db.follow_ups = db.follow_ups || [];
+          const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+          const newFollowUp = {
+            id: followUpId,
+            customerId: payload.customerId,
+            queryId: payload.id,
+            employeeId: payload.assignedEmployeeId || 'EMP-001',
+            date: new Date().toLocaleDateString('en-IN'),
+            time: '12:00 PM',
+            status: 'Pending Call',
+            pipelineAction: 'Fresh Lead',
+            remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
+          };
+          db.follow_ups.push(newFollowUp);
+          try { syncToSheets('follow_ups'); } catch(e) {}
+        }
       } else if (module === 'leads') {
         handleLeadStatusChange(payload, db, req);
         if (payload.assignmentStatus === 'accepted' && payload.leadType !== 'Seller') {
