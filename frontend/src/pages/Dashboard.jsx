@@ -17,7 +17,8 @@ import {
   Menu,
   MenuItem,
   TextField,
-  CircularProgress
+  CircularProgress,
+  IconButton
 } from '@mui/material';
 import EntityTooltip from '../components/EntityTooltip';
 import * as Icons from 'lucide-react';
