@@ -4442,7 +4442,9 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
       todayDate: todayStr,
       followUpsToday: (db.follow_ups || []).filter(f => f.status !== 'Completed' && f.date === todayStr).length,
       tasksOverdue: (db.tasks || []).filter(t => t.status !== 'Completed').length,
-      siteVisitsToday: (db.site_visits || []).filter(s => s.date === todayStr).length
+      siteVisitsToday: (db.site_visits || []).filter(s => s.date === todayStr).length,
+      totalActiveLeads: (db.leads || []).filter(l => l.status !== 'Dropped' && l.status !== 'Converted').length,
+      totalPropertiesCount: (db.properties || []).filter(p => p.status === 'Available').length
     };
 
     if (searchResult.type === 'entity360') {
@@ -4454,11 +4456,14 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
       }
       if (searchResult.data.related) {
         for (const relatedKey in searchResult.data.related) {
-          contextData[relatedKey] = searchResult.data.related[relatedKey];
+          // Limit related items to top 15 results to minimize token size
+          contextData[relatedKey] = searchResult.data.related[relatedKey].slice(0, 15);
         }
       }
     } else if (searchResult.type === 'multipleMatches') {
-      for (const item of searchResult.data) {
+      // Limit multiple matches to top 15-20 most relevant results
+      const matches = searchResult.data.slice(0, 20);
+      for (const item of matches) {
         if (!contextData[item.moduleKey]) {
           contextData[item.moduleKey] = [];
         }
@@ -4468,12 +4473,8 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
         }
       }
     } else if (searchResult.type === 'moduleList') {
-      contextData[searchResult.data.moduleKey] = searchResult.data.records;
-    }
-
-    if (Object.keys(contextData).length === 1) {
-      contextData.leads = (db.leads || []).slice(0, 5);
-      contextData.properties = (db.properties || []).slice(0, 5);
+      // Limit list records to top 15
+      contextData[searchResult.data.moduleKey] = searchResult.data.records.slice(0, 15);
     }
 
     const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot). Answer queries using database lists or the tools provided to search more if needed. Keep replies data-centric.
@@ -4510,7 +4511,7 @@ Every search result must be separated by blank lines and show:
     await generateAIResponse(
       message, 
       systemPrompt, 
-      db, 
+      contextData, 
       (token) => {
         res.write(`data: ${JSON.stringify({ token })}\n\n`);
       },
