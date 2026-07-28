@@ -62,6 +62,7 @@ const Dashboard = () => {
   const [aiBriefingLoading, setAiBriefingLoading] = useState(false);
   const [aiInsights, setAiInsights] = useState([]);
   const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+  const [aiInsightsError, setAiInsightsError] = useState(null);
 
   // Attendance shift timer states
   const [elapsedTimeStr, setElapsedTimeStr] = useState('00:00:00');
