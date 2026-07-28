@@ -130,6 +130,9 @@ const DynamicTable = ({
 
   const permittedFields = useMemo(() => {
     return fields.filter(f => {
+      if (moduleKey === 'leads' && (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy')) {
+        return false;
+      }
       if (!user || user.role === 'Admin') return true;
       if (metadata?.userColumnPermissions?.[user.id]?.[moduleKey]) {
         const userOverriden = metadata.userColumnPermissions[user.id][moduleKey][f.name];

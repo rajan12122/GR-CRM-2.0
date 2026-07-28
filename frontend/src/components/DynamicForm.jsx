@@ -108,11 +108,25 @@ const DynamicForm = ({
       if (f.name === 'referrer_id') {
         return ['Employee Referral', 'Client Referral', 'Dealer Referral'].includes(formData.source);
       }
+      if (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy') {
+        return false;
+      }
       if (type === 'Buyer') {
         if (f.name === 'demand') return false;
       }
-      if (type === 'Seller') {
+      if (type === 'Seller' || type === 'Seller Client') {
         if (f.name === 'budget') return false;
+        const duplicateFields = [
+          'r_c_i',
+          'propertyType',
+          'locality',
+          'size',
+          'bhk_and_washrooms',
+          'sector_block',
+          'facing',
+          'bhk_and_washroom'
+        ];
+        if (duplicateFields.includes(f.name)) return false;
       }
     }
     if (moduleKey === 'queries') {
@@ -125,6 +139,17 @@ const DynamicForm = ({
       }
       if (type === 'Sell Property') {
         if (f.name === 'budget') return false;
+        const duplicateFields = [
+          'r_c_i',
+          'propertyType',
+          'locality',
+          'size',
+          'bhk_and_washrooms',
+          'sector_block',
+          'facing',
+          'bhk_and_washroom'
+        ];
+        if (duplicateFields.includes(f.name)) return false;
       }
     }
     if (moduleKey === 'properties') {

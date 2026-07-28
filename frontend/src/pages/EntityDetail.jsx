@@ -829,7 +829,12 @@ const EntityDetail = () => {
             Profile Details
           </Typography>
           <Grid container spacing={2.5}>
-            {moduleConfig.fields.map(f => {
+            {moduleConfig.fields.filter(f => {
+              if (moduleName === 'leads' && (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy')) {
+                return false;
+              }
+              return true;
+            }).map(f => {
               let allowed = true;
               if (user && user.role !== 'Admin') {
                 if (metadata?.userColumnPermissions?.[user.id]?.[moduleName]) {
