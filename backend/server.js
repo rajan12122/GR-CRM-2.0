@@ -212,6 +212,16 @@ function checkPermission(moduleName, action) {
     }
     const metadata = readMetadata();
     const role = req.user.role;
+    const userId = req.user.id;
+    
+    // Check specific user-level override permissions first
+    if (userId && metadata.userPermissions && metadata.userPermissions[userId]) {
+      const userModulePerms = metadata.userPermissions[userId][moduleName] || [];
+      if (userModulePerms.includes(action) || role === 'Admin') {
+        return next();
+      }
+      return res.status(403).json({ message: `Insufficient permissions to perform '${action}' on '${moduleName}' module.` });
+    }
     
     const permissions = metadata.rolesPermissions[role];
     if (!permissions) {
@@ -368,6 +378,7 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
   try {
     const newMetadata = req.body;
     await writeMetadata(newMetadata);
+    notifyAllUsers('metadata-updated', { message: 'Metadata schema has been updated.' });
     res.json({ success: true, message: 'Metadata schema saved successfully.' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to write metadata: ' + error.message });
@@ -1759,6 +1770,8 @@ app.get('/api/data/:module', authenticateToken, (req, res, next) => {
         records = records.filter(r => String(r.employeeId) === String(req.user.id));
       } else if (module === 'salaries') {
         records = records.filter(r => String(r.employeeId) === String(req.user.id));
+      } else if (module === 'tasks') {
+        records = records.filter(r => String(r.assignedTo) === String(req.user.id));
       }
     }
     
@@ -3972,6 +3985,17 @@ function notifyUser(userId, eventType, data) {
       } catch (err) {
         console.error("SSE write error:", err);
       }
+    }
+  });
+}
+
+function notifyAllUsers(eventType, data) {
+  notificationClients.forEach(c => {
+    try {
+      c.res.write(`event: ${eventType}\n`);
+      c.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (err) {
+      console.error("SSE write error:", err);
     }
   });
 }

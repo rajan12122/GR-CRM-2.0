@@ -350,6 +350,12 @@ export const AppProvider = ({ children }) => {
     return modulePerms.includes(action);
   };
 
+  const refreshMetadata = async () => {
+    if (token) {
+      await loadProfileAndMetadata();
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -377,7 +383,8 @@ export const AppProvider = ({ children }) => {
         testSheetsSync,
         triggerFullSheetsSync,
         logEmployeeLocation,
-        hasPermission
+        hasPermission,
+        refreshMetadata
       }}
     >
       {children}

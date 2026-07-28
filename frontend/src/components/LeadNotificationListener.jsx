@@ -5,7 +5,7 @@ import axios from 'axios';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 
 const LeadNotificationListener = () => {
-  const { user, token } = useApp();
+  const { user, token, refreshMetadata } = useApp();
   const [activeLead, setActiveLead] = useState(null);
   const [ringDialogOpen, setRingDialogOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
@@ -148,6 +148,12 @@ const LeadNotificationListener = () => {
         try {
           const data = JSON.parse(e.data);
           showToast(`📄 DOCS UPLOADED: ${data.message}`);
+        } catch (err) { console.error(err); }
+      });
+
+      es.addEventListener('metadata-updated', (e) => {
+        try {
+          refreshMetadata();
         } catch (err) { console.error(err); }
       });
 
