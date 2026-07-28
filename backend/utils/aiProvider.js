@@ -301,6 +301,7 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToke
     if (provider === "gemini") {
       const model = config.gemini.model || "gemini-2.5-flash";
       const apiKey = config.gemini.apiKey;
+      console.log('Gemini request URL:', `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey ? apiKey.slice(0,6) + "...(hidden)" : "MISSING_KEY"}`);
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -310,7 +311,11 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToke
           ]
         })
       });
-      if (!res.ok) throw new Error(`Gemini API returned error: ${res.status}`);
+      if (!res.ok) {
+        const errorBody = await res.text();
+        console.error('Gemini API raw error response:', errorBody);
+        throw new Error(`Gemini API returned error: ${res.status} - ${errorBody}`);
+      }
       const data = await res.json();
       const text = data.candidates[0].content.parts[0].text;
       if (onToken) {
