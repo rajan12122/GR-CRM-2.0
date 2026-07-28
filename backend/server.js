@@ -4477,8 +4477,15 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
       contextData[searchResult.data.moduleKey] = searchResult.data.records.slice(0, 15);
     }
 
+    if (Object.keys(contextData).length === 1) {
+      contextData.searchResults = [];
+      contextData.note = "No matching records found for this query";
+    }
+
     const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot). Answer queries using database lists or the tools provided to search more if needed. Keep replies data-centric.
-If no matching records exist, you MUST explain why, suggest alternatives, and show similar results (NEVER answer only "No active matching record was found in the CRM" or "No Data Found").
+CRITICAL GROUNDING RULE: You must NEVER invent, imagine, or fabricate any record, ID, name, price, date, or status that is not explicitly present in the CRM Database Context provided below. If the user's question cannot be answered using only the real data provided, you must clearly say something like: 'I couldn't find a matching record for that in the CRM. Would you like me to search using different terms?' Do NOT create example or illustrative records under any circumstance, even if the user's question sounds like it wants an example. Every ID, name, and number in your response must be traceable to the actual provided context data.
+
+If no button format is explicitly defined below for a type of record you are discussing, do not invent new button labels — only use the exact button formats listed below, or omit buttons entirely for that record type.
 
 CRITICAL FORMATTING INSTRUCTIONS:
 - You must NEVER display plain text records when a corresponding page exists.
