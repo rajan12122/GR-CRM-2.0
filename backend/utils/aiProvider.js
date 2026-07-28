@@ -299,7 +299,7 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToke
     }
 
     if (provider === "gemini") {
-      const model = config.gemini.model || "gemini-2.5-flash";
+      const model = config.gemini.model || "gemini-2.0-flash";
       const apiKey = config.gemini.apiKey;
       console.log('Gemini request URL:', `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey ? apiKey.slice(0,6) + "...(hidden)" : "MISSING_KEY"}`);
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
