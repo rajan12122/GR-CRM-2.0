@@ -4311,7 +4311,11 @@ app.post('/api/ai/daily-evening-summary', authenticateToken, (req, res) => {
         res.json({ error: "Failed to parse AI summary response." });
       }
     })
-    .catch(err => res.status(500).json({ error: err.message }));
+    .catch(err => {
+      console.error("AI briefing failed:", err);
+      const isNotConfigured = err.message.includes("not configured") || err.message.includes("apiKey");
+      res.status(isNotConfigured ? 400 : 500).json({ error: isNotConfigured ? "AI provider not configured" : err.message });
+    });
 });
 
 app.post('/api/ai/insights', authenticateToken, (req, res) => {
@@ -4339,7 +4343,11 @@ app.post('/api/ai/insights', authenticateToken, (req, res) => {
         ]);
       }
     })
-    .catch(err => res.status(500).json({ error: err.message }));
+    .catch(err => {
+      console.error("AI insights failed:", err);
+      const isNotConfigured = err.message.includes("not configured") || err.message.includes("apiKey");
+      res.status(isNotConfigured ? 400 : 500).json({ error: isNotConfigured ? "AI provider not configured" : err.message });
+    });
 });
 
 function filterDbForUser(db, user) {
@@ -4513,7 +4521,7 @@ Every search result must be separated by blank lines and show:
     res.end();
   } catch (err) {
     console.error("AI chat error:", err);
-    let errorMsg = "Gagan Copilot AI server error: Failed to generate response. Please try again.";
+    let errorMsg = err.message;
     let statusCode = 500;
     if (err.message.includes("not configured")) {
       errorMsg = "AI provider not configured — contact your admin";

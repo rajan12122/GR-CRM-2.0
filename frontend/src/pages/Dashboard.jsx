@@ -90,6 +90,7 @@ const Dashboard = () => {
         setAiBriefing(data);
       } catch (e) {
         console.error("AI briefing failed:", e);
+        setAiBriefing({ error: "AI insights unavailable" });
       } finally {
         setAiBriefingLoading(false);
       }
@@ -110,9 +111,17 @@ const Dashboard = () => {
           body: JSON.stringify({})
         });
         const data = await res.json();
-        setAiInsights(Array.isArray(data) ? data : []);
+        if (data && data.error) {
+          setAiInsightsError(data.error);
+          setAiInsights([]);
+        } else {
+          setAiInsights(Array.isArray(data) ? data : []);
+          setAiInsightsError(null);
+        }
       } catch (e) {
         console.error("AI insights failed:", e);
+        setAiInsightsError("AI insights unavailable");
+        setAiInsights([]);
       } finally {
         setAiInsightsLoading(false);
       }
@@ -1230,6 +1239,11 @@ const Dashboard = () => {
                 <Box display="flex" justifyContent="center" alignItems="center" flex={1} py={4}>
                   <CircularProgress size={24} sx={{ color: '#2563EB' }} />
                 </Box>
+              ) : aiBriefing && aiBriefing.error ? (
+                <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" flex={1} py={4} textAlign="center">
+                  <Typography variant="body2" sx={{ color: '#EF4444', fontWeight: 600 }}>AI insights unavailable</Typography>
+                  <Typography variant="caption" sx={{ color: '#94A3B8', mt: 0.5 }}>{aiBriefing.error}</Typography>
+                </Box>
               ) : aiBriefing ? (
                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {aiBriefingType === 'morning' ? (
@@ -1323,6 +1337,11 @@ const Dashboard = () => {
               {aiInsightsLoading ? (
                 <Box display="flex" justifyContent="center" alignItems="center" flex={1} py={4}>
                   <CircularProgress size={24} sx={{ color: '#10B981' }} />
+                </Box>
+              ) : aiInsightsError ? (
+                <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" flex={1} py={4} textAlign="center">
+                  <Typography variant="body2" sx={{ color: '#EF4444', fontWeight: 600 }}>AI insights unavailable</Typography>
+                  <Typography variant="caption" sx={{ color: '#94A3B8', mt: 0.5 }}>{aiInsightsError}</Typography>
                 </Box>
               ) : aiInsights.length > 0 ? (
                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
