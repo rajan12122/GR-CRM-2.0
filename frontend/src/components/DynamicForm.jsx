@@ -311,6 +311,8 @@ const DynamicForm = ({
             defaultForm[f.name] = user.id;
           } else if (f.name === 'dealer_owner_booked') {
             defaultForm[f.name] = 'Direct';
+          } else if (moduleKey === 'tasks' && f.name === 'status') {
+            defaultForm[f.name] = 'Pending';
           } else {
             defaultForm[f.name] = '';
           }
@@ -729,6 +731,16 @@ const DynamicForm = ({
               
               // Primary keys or non-editable fields (like ID on edit) should be read-only
               let isReadOnly = f.editable === false;
+              if (moduleKey === 'tasks' && f.name === 'status') {
+                if (!initialData) {
+                  isReadOnly = true;
+                } else {
+                  const isAssignee = user && String(user.id) === String(formData.assignedTo);
+                  if (!isAssignee) {
+                    isReadOnly = true;
+                  }
+                }
+              }
               if (user && user.role !== 'Admin') {
                 if (metadata?.userColumnPermissions?.[user.id]?.[moduleKey]) {
                   const userOverriden = metadata.userColumnPermissions[user.id][moduleKey][f.name];
