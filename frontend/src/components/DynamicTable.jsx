@@ -57,15 +57,21 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
   let finalClickModule = resolvedModule;
   let finalClickId = id;
   
-  // Custom logic for Deals: resolve to Dealer Firm Name if Dealer Associated Property
+  // Custom logic for Deals: resolve to Dealer Firm Name or Contact Person Name
   if (field && field.name === 'sellerCustomerId' && rowRecord && rowRecord.propertyId) {
     const prop = (moduleData.properties || []).find(p => String(p.id) === String(rowRecord.propertyId));
-    if (prop && prop.dealerId) {
-      const dealer = (moduleData.dealers || []).find(d => String(d.id) === String(prop.dealerId));
-      if (dealer) {
-        resolvedName = dealer.firm_name || dealer.name || dealer.id;
-        finalClickModule = 'dealers';
-        finalClickId = prop.dealerId;
+    if (prop) {
+      if (prop.dealer_owner_booked === 'Dealer') {
+        const dealer = (moduleData.dealers || []).find(d => String(d.id) === String(prop.dealerId));
+        if (dealer) {
+          resolvedName = dealer.firm_name || dealer.name || dealer.id;
+          finalClickModule = 'dealers';
+          finalClickId = prop.dealerId;
+        } else {
+          resolvedName = 'Dealer N/A';
+        }
+      } else {
+        resolvedName = prop.contact_person_name || 'Direct Owner';
       }
     }
   }

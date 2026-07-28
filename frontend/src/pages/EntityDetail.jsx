@@ -881,9 +881,15 @@ const EntityDetail = () => {
                           label={(() => {
                             if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
                               const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
-                              if (prop && prop.dealerId) {
-                                const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
-                                if (dealer) return dealer.firm_name || dealer.name || dealer.id;
+                              if (prop) {
+                                if (prop.dealer_owner_booked === 'Dealer') {
+                                  if (prop.dealerId) {
+                                    const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
+                                    if (dealer) return dealer.firm_name || dealer.name || dealer.id;
+                                  }
+                                } else {
+                                  return prop.contact_person_name || 'Direct Owner';
+                                }
                               }
                             }
                             const refArray = moduleData[f.refModule] || [];
@@ -894,9 +900,11 @@ const EntityDetail = () => {
                           onClick={() => {
                             if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
                               const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
-                              if (prop && prop.dealerId) {
-                                navigate(`/module/dealers/${prop.dealerId}`);
-                                return;
+                              if (prop) {
+                                if (prop.dealer_owner_booked === 'Dealer' && prop.dealerId) {
+                                  navigate(`/module/dealers/${prop.dealerId}`);
+                                  return;
+                                }
                               }
                             }
                             navigate(`/module/${f.refModule}/${val}`);
@@ -2186,11 +2194,15 @@ const EntityDetail = () => {
                               const prop = record;
                               let resolvedSellerName = d.sellerCustomerId;
                               let clickPath = `/module/customers/${d.sellerCustomerId}`;
-                              if (prop && prop.dealerId) {
-                                const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
-                                if (dealer) {
-                                  resolvedSellerName = dealer.firm_name || dealer.name || dealer.id;
-                                  clickPath = `/module/dealers/${prop.dealerId}`;
+                              if (prop) {
+                                if (prop.dealer_owner_booked === 'Dealer') {
+                                  const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
+                                  if (dealer) {
+                                    resolvedSellerName = dealer.firm_name || dealer.name || dealer.id;
+                                    clickPath = `/module/dealers/${prop.dealerId}`;
+                                  }
+                                } else {
+                                  resolvedSellerName = prop.contact_person_name || d.sellerCustomerId;
                                 }
                               } else {
                                 const cust = (moduleData.customers || []).find(c => String(c.id) === String(d.sellerCustomerId));

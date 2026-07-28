@@ -781,8 +781,6 @@ function handleDealStatusChange(d, db, req) {
     }
     
     prop.current_owner_id = d.customerId;
-    prop.contact_person_name = buyerName;
-    prop.contact_number = buyerCust ? buyerCust.phone : (prop.contact_number || '');
     prop.status = 'Property Registered/Sold Out';
     
     prop.ownership_documents = prop.ownership_documents || { old_owner: [], new_owner: [] };
@@ -4644,9 +4642,6 @@ app.listen(PORT, async () => {
         }
         if (prop.current_owner_id !== d.customerId) {
           prop.current_owner_id = d.customerId;
-          const buyerCust = (db.customers || []).find(c => String(c.id) === String(d.customerId));
-          const buyerName = buyerCust ? buyerCust.name : (d.customerId || 'Unknown');
-          prop.contact_person_name = buyerName;
           updated = true;
         }
         prop.owner_history = prop.owner_history || [];
