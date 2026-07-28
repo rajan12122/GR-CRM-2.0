@@ -442,6 +442,30 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToke
 }
 
 
+function parsePriceToNumeric(priceStr) {
+  if (!priceStr) return 0;
+  if (typeof priceStr === 'number') return priceStr;
+  let clean = String(priceStr).toLowerCase().replace(/,/g, '').trim();
+  
+  let multiplier = 1;
+  if (clean.includes('cr') || clean.includes('crore')) {
+    multiplier = 10000000;
+    clean = clean.replace(/(cr|crore)/g, '');
+  } else if (clean.includes('lakh') || clean.includes('lac') || clean.includes('l')) {
+    multiplier = 100000;
+    clean = clean.replace(/(lakh|lac|l)/g, '');
+  } else if (clean.includes('k')) {
+    multiplier = 1000;
+    clean = clean.replace(/k/g, '');
+  }
+  
+  const match = clean.match(/[0-9.]+/);
+  if (!match) return 0;
+  const parsed = parseFloat(match[0]);
+  return isNaN(parsed) ? 0 : parsed * multiplier;
+}
+
+
 /**
  * High-fidelity, deterministic rule-based response generator (Mock Provider)
  */
@@ -454,7 +478,7 @@ function generateMockAIResponse(prompt, systemPrompt, context) {
     const item = context.lead || context.customer || {};
     const visits = context.siteVisits || [];
     const followups = context.followups || [];
-    const budget = parseFloat(String(item.budget || 0).replace(/[^0-9.]/g, '')) || 0;
+    const budget = parsePriceToNumeric(item.budget);
 
     let score = 35; // base score
     const reasons = [];
@@ -496,13 +520,13 @@ function generateMockAIResponse(prompt, systemPrompt, context) {
   if (sLower.includes("recommendation") || pLower.includes("recommend")) {
     const item = context.lead || context.customer || {};
     const properties = context.properties || [];
-    const budget = parseFloat(String(item.budget || 0).replace(/[^0-9.]/g, '')) || 0;
+    const budget = parsePriceToNumeric(item.budget);
     const locality = String(item.locality || "").toLowerCase().trim();
     const propType = String(item.propertyType || "").toLowerCase().trim();
 
     const matches = properties.map(p => {
       let matchScore = 50;
-      const pPrice = parseFloat(String(p.demand || p.price || 0).replace(/[^0-9.]/g, '')) || 0;
+      const pPrice = parsePriceToNumeric(p.demand || p.price);
       const pLoc = String(p.locality || "").toLowerCase().trim();
       const pType = String(p.propertyType || "").toLowerCase().trim();
 

@@ -356,6 +356,7 @@ const EntityDetail = () => {
       list.push({ label: `Dealer Interaction History (${connections?.calls?.length || 0})`, icon: 'PhoneCall' });
       list.push({ label: `Docs Vault (${connections?.documents?.length || 0})`, icon: 'FolderOpen' });
       list.push({ label: `Referrals (${connections?.referrals?.length || 0})`, icon: 'UserPlus' });
+      list.push({ label: `Wanted Requirements (${connections?.wanted_properties?.length || 0})`, icon: 'Clipboard' });
     } else if (moduleName === 'projects') {
       list.push({ label: 'Project Specifications', icon: 'Home' });
       list.push({ label: `Pitched & Showings History (${connections.pitches?.length || 0})`, icon: 'Eye' });
@@ -2727,6 +2728,65 @@ const EntityDetail = () => {
                             </TableBody>
                           </Table>
                         </TableContainer>
+                      )}
+                    </Box>
+                  )}
+                  {activeTab === 5 && (
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', color: '#0F172A' }}>
+                        Wanted Requirements ({connections.wanted_properties?.length || 0})
+                      </Typography>
+                      {!connections.wanted_properties || connections.wanted_properties.length === 0 ? (
+                        <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' }}>
+                          <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+                            No wanted requirements associated with this dealer.
+                          </Typography>
+                        </Box>
+                      ) : (
+                        connections.wanted_properties.map(wp => (
+                          <Paper key={wp.id} sx={{ p: 2.5, mb: 2, border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: 'none', backgroundColor: 'white' }}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => navigate(`/module/wanted_properties/${wp.id}`)}>
+                                  {wp.id}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#64748B' }}>Recd: {wp.dateReceived || 'N/A'}</Typography>
+                              </Box>
+                              <Chip 
+                                label={wp.status} 
+                                size="small"
+                                sx={{ 
+                                  fontWeight: 700,
+                                  backgroundColor: wp.status === 'New' ? '#DBEAFE' : wp.status === 'Assigned' ? '#F3E8FF' : wp.status === 'Matched' ? '#D1FAE5' : '#F1F5F9',
+                                  color: wp.status === 'New' ? '#1E40AF' : wp.status === 'Assigned' ? '#6B21A8' : wp.status === 'Matched' ? '#065F46' : '#334155'
+                                }}
+                              />
+                            </Box>
+                            <Grid container spacing={2} sx={{ mb: 1.5 }}>
+                              <Grid item xs={6} sm={3}>
+                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Req Type</Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{wp.requirementType || '---'}</Typography>
+                              </Grid>
+                              <Grid item xs={6} sm={3}>
+                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Prop Type</Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{wp.propertyType || '---'}</Typography>
+                              </Grid>
+                              <Grid item xs={6} sm={3}>
+                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Locality</Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{wp.locality || '---'}</Typography>
+                              </Grid>
+                              <Grid item xs={6} sm={3}>
+                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Budget / Size</Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{wp.budget || '---'} {wp.sizeRequired ? `(${wp.sizeRequired})` : ''}</Typography>
+                              </Grid>
+                            </Grid>
+                            {wp.assignedEmployeeId && (
+                              <Typography variant="body2" sx={{ fontSize: '12px', color: '#64748B' }}>
+                                Assigned Executive: <strong>{wp.assignedEmployeeId}</strong>
+                              </Typography>
+                            )}
+                          </Paper>
+                        ))
                       )}
                     </Box>
                   )}

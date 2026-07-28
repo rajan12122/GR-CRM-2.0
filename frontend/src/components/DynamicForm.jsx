@@ -17,10 +17,13 @@ import {
   Chip,
   Switch,
   FormControlLabel,
-  Typography
+  Typography,
+  Alert,
+  Autocomplete
 } from '@mui/material';
-import { useApp } from '../context/AppContext';
-import { Home } from 'lucide-react';
+import axios from 'axios';
+import { useApp, API_BASE_URL } from '../context/AppContext';
+import { Home, Cpu } from 'lucide-react';
 
 const parseIndianNumber = (val) => {
   if (val === undefined || val === null || val === '') return 0;
@@ -80,6 +83,43 @@ const DynamicForm = ({
   const [customValues, setCustomValues] = useState({});
   const [propSearch, setPropSearch] = useState('');
   const [dealerSearch, setDealerSearch] = useState('');
+
+  const [rawText, setRawText] = useState('');
+  const [isParsing, setIsParsing] = useState(false);
+  const [parseMessage, setParseMessage] = useState(null);
+
+  const handleParseAI = async () => {
+    if (!rawText.trim()) {
+      setParseMessage({ type: 'error', text: 'Please paste some text first.' });
+      return;
+    }
+    setIsParsing(true);
+    setParseMessage(null);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/ai/parse-wanted-text`, { rawText });
+      if (res.data.parseFailed) {
+        setParseMessage({ type: 'error', text: "Couldn't auto-detect details, please fill manually." });
+      } else {
+        const parsedData = res.data;
+        const newFormData = { ...formData };
+        if (parsedData.requirementType) newFormData.requirementType = parsedData.requirementType;
+        if (parsedData.propertyType) newFormData.propertyType = parsedData.propertyType;
+        if (parsedData.locality) newFormData.locality = parsedData.locality;
+        if (parsedData.sizeRequired) newFormData.sizeRequired = parsedData.sizeRequired;
+        if (parsedData.budget) newFormData.budget = parsedData.budget;
+        if (parsedData.dealerContactNum) newFormData.dealerContactNum = parsedData.dealerContactNum;
+        
+        newFormData.rawText = rawText;
+        setFormData(newFormData);
+        setParseMessage({ type: 'success', text: 'AI successfully extracted and filled fields!' });
+      }
+    } catch (err) {
+      console.error(err);
+      setParseMessage({ type: 'error', text: "Couldn't auto-detect details, please fill manually." });
+    } finally {
+      setIsParsing(false);
+    }
+  };
 
   // Inline creation states for property / project pitches
   const [nestedDealerData, setNestedDealerData] = useState({});
@@ -186,6 +226,9 @@ const DynamicForm = ({
     if (open) {
       setPropSearch('');
       setDealerSearch('');
+      setRawText('');
+      setIsParsing(false);
+      setParseMessage(null);
       // Find all ref fields and load their databases
       fields.forEach(f => {
         if (f.type === 'ref' && f.refModule) {
@@ -725,6 +768,44 @@ const DynamicForm = ({
               {errors.submit}
             </Alert>
           )}
+          {moduleKey === 'wanted_properties' && !initialData && (
+            <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #E2E8F0', borderRadius: '16px', backgroundColor: '#F8FAFC', boxShadow: 'none' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1, color: '#0F172A' }}>
+                <Cpu size={18} color="#2563EB" />
+                AI-Assisted WhatsApp Parsing
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+                Paste the WhatsApp message from the dealer below, then click "Parse with AI" to automatically fill the form fields.
+              </Typography>
+              <TextField
+                label="Paste WhatsApp Message Here"
+                multiline
+                rows={3}
+                fullWidth
+                variant="outlined"
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                sx={{ mb: 1.5, backgroundColor: 'white' }}
+              />
+              <Box display="flex" justifyContent="space-between" alignItems="center">
+                {parseMessage && (
+                  <Typography variant="caption" sx={{ color: parseMessage.type === 'error' ? '#EF4444' : '#16A34A', fontWeight: 600 }}>
+                    {parseMessage.text}
+                  </Typography>
+                )}
+                {!parseMessage && <span />}
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={isParsing}
+                  onClick={handleParseAI}
+                  sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 700 }}
+                >
+                  {isParsing ? 'Parsing...' : 'Parse with AI'}
+                </Button>
+              </Box>
+            </Paper>
+          )}
           <Grid container spacing={2}>
             {filteredFields.map(f => {
               if (f.name === 'id' && !initialData) return null; // Hide auto-generated ID field on create
@@ -748,6 +829,41 @@ const DynamicForm = ({
                     isReadOnly = isReadOnly || !userOverriden.includes('edit');
                   }
                 }
+              }
+
+              // 0. MULTISELECT TEXT TYPE FIELD
+              if (f.type === 'multiselect_text') {
+                const currentVal = Array.isArray(formData[f.name]) 
+                  ? formData[f.name] 
+                  : (formData[f.name] ? String(formData[f.name]).split(',').map(s => s.trim()).filter(Boolean) : []);
+
+                return (
+                  <Grid item xs={12} sm={f.gridWidth || 6} key={f.name}>
+                    <Autocomplete
+                      multiple
+                      freeSolo
+                      options={[]}
+                      value={currentVal}
+                      disabled={isReadOnly}
+                      onChange={(event, newValue) => {
+                        handleFieldChange(f.name, newValue.join(','));
+                      }}
+                      renderTags={(value, getTagProps) =>
+                        value.map((option, index) => (
+                          <Chip variant="outlined" label={option} {...getTagProps({ index })} />
+                        ))
+                      }
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          variant="outlined"
+                          label={f.label}
+                          placeholder="Type and press Enter"
+                        />
+                      )}
+                    />
+                  </Grid>
+                );
               }
 
               // 1. SELECT TYPE FIELD

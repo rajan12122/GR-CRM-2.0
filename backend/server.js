@@ -1732,7 +1732,9 @@ app.get('/api/data/:module', authenticateToken, (req, res, next) => {
     let records = await getRecords(module);
     
     if (role !== 'Admin') {
-      if (module === 'leads') {
+      if (module === 'wanted_properties' && role !== 'Manager') {
+        records = records.filter(r => String(r.assignedEmployeeId) === String(req.user.id));
+      } else if (module === 'leads') {
         const followUps = await getRecords('follow_ups');
         const siteVisits = await getRecords('site_visits');
         const pitches = await getRecords('property_pitch_history');
@@ -1827,10 +1829,110 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
           tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
           daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-          property_pitch_history: 'PITCH', dealer_calls: 'CALL'
+          property_pitch_history: 'PITCH', dealer_calls: 'CALL', wanted_properties: 'WANT'
         };
         const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
         payload.id = generateNextId(db, module, prefix);
+      }
+
+      if (module === 'wanted_properties') {
+        const dealerContactNum = String(payload.dealerContactNum || '').trim();
+        if (!dealerContactNum) {
+          throw new Error('Dealer Contact Number is required.');
+        }
+
+        db.dealers = db.dealers || [];
+        let dealer = db.dealers.find(d => {
+          const num1 = String(d.contact_num || '').trim().replace(/[^0-9]/g, '');
+          const num2 = dealerContactNum.replace(/[^0-9]/g, '');
+          return num1 === num2 && num1 !== '';
+        });
+
+        if (dealer) {
+          payload.dealerId = dealer.id;
+        } else {
+          const nextDealerId = generateNextId(db, 'dealers', 'DEAL');
+          const newDealer = {
+            id: nextDealerId,
+            contact_num: dealerContactNum,
+            firm_name: "Unverified — Auto-created from Wanted Property",
+            dateAdded: new Date().toISOString().split('T')[0]
+          };
+          db.dealers.push(newDealer);
+          payload.dealerId = nextDealerId;
+
+          const dealerLog = {
+            id: generateUniqueId('LOG'),
+            employeeName: req.user ? req.user.name : 'System',
+            action: `Auto-created Dealer ${nextDealerId} for contact ${dealerContactNum} from Wanted Property`,
+            dateTime: new Date().toLocaleString()
+          };
+          if (!db.activity_logs) db.activity_logs = [];
+          db.activity_logs.unshift(dealerLog);
+        }
+
+        const linkLog = {
+          id: generateUniqueId('LOG'),
+          employeeName: req.user ? req.user.name : 'System',
+          action: dealer 
+            ? `Linked Wanted Property ${payload.id} to existing Dealer ${dealer.id}`
+            : `Linked Wanted Property ${payload.id} to auto-created Dealer ${payload.dealerId}`,
+          dateTime: new Date().toLocaleString()
+        };
+        if (!db.activity_logs) db.activity_logs = [];
+        db.activity_logs.unshift(linkLog);
+
+        if (!payload.assignedEmployeeId && payload.locality) {
+          const reqLocality = String(payload.locality).toLowerCase().trim();
+          db.employees = db.employees || [];
+
+          const matchingEmployees = db.employees.filter(emp => {
+            const areas = String(emp.operatingAreas || '').split(',').map(s => s.toLowerCase().trim());
+            return areas.some(area => area !== '' && (area.includes(reqLocality) || reqLocality.includes(area)));
+          });
+
+          let assignedEmpId = null;
+
+          if (matchingEmployees.length === 1) {
+            assignedEmpId = matchingEmployees[0].id;
+          } else if (matchingEmployees.length > 1) {
+            db.wanted_properties = db.wanted_properties || [];
+            let minCount = Infinity;
+            let bestEmp = null;
+
+            for (const emp of matchingEmployees) {
+              const openCount = db.wanted_properties.filter(wp => 
+                String(wp.assignedEmployeeId) === String(emp.id) &&
+                wp.status !== 'Closed' && wp.status !== 'Not Interested'
+              ).length;
+
+              if (openCount < minCount) {
+                minCount = openCount;
+                bestEmp = emp;
+              }
+            }
+            if (bestEmp) {
+              assignedEmpId = bestEmp.id;
+            }
+          }
+
+          if (assignedEmpId) {
+            payload.assignedEmployeeId = assignedEmpId;
+            payload.status = 'Assigned';
+
+            setTimeout(() => {
+              notifyUser(assignedEmpId, 'new-wanted-requirement', {
+                wantedId: payload.id,
+                locality: payload.locality || '',
+                budget: payload.budget || ''
+              });
+            }, 500);
+          } else {
+            payload.status = payload.status || 'New';
+          }
+        } else {
+          payload.status = payload.status || (payload.assignedEmployeeId ? 'Assigned' : 'New');
+        }
       }
 
       // Populate basic date tracker if applicable
@@ -3269,6 +3371,17 @@ app.get('/api/360/:module/:id', authenticateToken, (req, res) => {
     data.properties = allProperties.filter(p => String(p.dealerId) === String(id));
     data.referrals = (db.leads || []).filter(l => l.referrer_type === 'dealers' && String(l.referrer_id) === String(id));
     data.pitches = allPitches.filter(p => String(p.dealerId) === String(id));
+    data.wanted_properties = (db.wanted_properties || []).filter(wp => String(wp.dealerId) === String(id)).reverse();
+  } else if (module === 'wanted_properties') {
+    const wp = (db.wanted_properties || []).find(r => String(r.id) === String(id));
+    data.wanted_property = wp;
+    data.remarks = allRemarks.filter(r => r.targetModule === 'wanted_properties' && String(r.targetId) === String(id));
+    data.documents = allDocs.filter(d => d.targetModule === 'wanted_properties' && String(d.targetId) === String(id));
+    if (wp) {
+      data.dealer = (db.dealers || []).find(d => String(d.id) === String(wp.dealerId));
+      data.employee = allEmployees.find(e => String(e.id) === String(wp.assignedEmployeeId));
+      data.property = allProperties.find(p => String(p.id) === String(wp.matchedPropertyId));
+    }
   } else if (module === 'dealer_meetings') {
     const meeting = allDealerMeetings.find(m => String(m.id) === String(id));
     data.meeting = meeting;
@@ -4413,6 +4526,43 @@ function filterDbForUser(db, user) {
   return filtered;
 }
 
+app.post('/api/ai/parse-wanted-text', authenticateToken, async (req, res) => {
+  const { rawText } = req.body;
+  if (!rawText) {
+    return res.json({ parseFailed: true, error: "No text provided" });
+  }
+
+  const systemPrompt = `You are a real estate parser AI. Extract wanted property requirements from raw WhatsApp messages.
+Response must be a single valid JSON object with the following fields:
+{
+  "requirementType": "Buy Property" | "Sell Property" | "Rent" | null,
+  "propertyType": "Plot" | "Villa" | "Apartment" | "Commercial" | "LOI" | null,
+  "locality": string | null,
+  "sizeRequired": string | null,
+  "budget": string | null,
+  "dealerContactNum": "10-digit phone number" | null
+}
+Ensure no explanation, no markdown backticks, just the raw JSON object. If a field cannot be found, set it to null. Convert phone numbers to exactly 10 digits without spaces or country codes.`;
+
+  try {
+    const aiResponse = await generateAIResponse(
+      `Parse this WhatsApp message:\n\n${rawText}`,
+      systemPrompt
+    );
+    
+    let cleaned = aiResponse.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+    }
+    
+    const parsed = JSON.parse(cleaned);
+    res.json(parsed);
+  } catch (err) {
+    console.error("Failed to parse wanted text using AI:", err);
+    res.json({ parseFailed: true });
+  }
+});
+
 app.post('/api/ai/chat', authenticateToken, async (req, res) => {
   const { message, history = [] } = req.body;
   if (!message) {
@@ -4483,7 +4633,9 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
     }
 
     const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot). Answer queries using database lists or the tools provided to search more if needed. Keep replies data-centric.
-CRITICAL GROUNDING RULE: You must NEVER invent, imagine, or fabricate any record, ID, name, price, date, or status that is not explicitly present in the CRM Database Context provided below. If the user's question cannot be answered using only the real data provided, you must clearly say something like: 'I couldn't find a matching record for that in the CRM. Would you like me to search using different terms?' Do NOT create example or illustrative records under any circumstance, even if the user's question sounds like it wants an example. Every ID, name, and number in your response must be traceable to the actual provided context data.
+CRITICAL GROUNDING RULE: Never invent, imagine, or fabricate any record, ID, name, price, date, or status not present in the CRM Database Context below. If asked for an 'example,' politely explain you can only show real data from the CRM, not made-up examples.
+
+If an EXACT match exists, show it normally. If NO exact match exists, you may show up to 3 closest alternative results, but you must clearly label them with the heading 'No exact match found. Closest alternatives:' before listing them — never present an approximate result as if it were an exact match. If there are zero results even approximately close, say so plainly and do not invent one.
 
 If no button format is explicitly defined below for a type of record you are discussing, do not invent new button labels — only use the exact button formats listed below, or omit buttons entirely for that record type.
 
@@ -4511,6 +4663,8 @@ Every search result must be separated by blank lines and show:
 - Title (e.g. **Gagan Chopra**)
 - Status (e.g. Status: **Active**)
 - Summary (e.g. Role: Admin, Phone: 1234567890)
+- Size (whenever size exists on the record)
+- Demand/Price (whenever demand or price exists on the record)
 - Date (e.g. Joined: **2026-07-08**)
 - Quick Actions (The inline quick action buttons listed above)`;
 

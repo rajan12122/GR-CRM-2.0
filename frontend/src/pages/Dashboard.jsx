@@ -306,7 +306,8 @@ const Dashboard = () => {
         'property_pitch_history',
         'dealer_calls',
         'documents',
-        'tasks'
+        'tasks',
+        'wanted_properties'
       ];
       await Promise.all(
         modulesToFetch.map(async (m) => {
@@ -342,6 +343,33 @@ const Dashboard = () => {
   const documents = moduleData.documents || [];
   const propertyPitches = moduleData.property_pitch_history || [];
   const tasks = moduleData.tasks || [];
+  const wantedProperties = moduleData.wanted_properties || [];
+
+  const wantedStats = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStrLoc = new Date().toLocaleDateString('en-US'); // MM/DD/YYYY
+    const todayStrLoc2 = new Date().toLocaleDateString('en-IN'); // DD/MM/YYYY
+    
+    const receivedToday = wantedProperties.filter(wp => {
+      const d = wp.dateReceived || wp.dateAdded || '';
+      return d === todayStr || d === todayStrLoc || d === todayStrLoc2;
+    }).length;
+    
+    const unassigned = wantedProperties.filter(wp => {
+      return !wp.assignedEmployeeId || wp.status === 'New';
+    }).length;
+    
+    const overdue = wantedProperties.filter(wp => {
+      if (wp.status === 'Closed' || wp.status === 'Not Interested') return false;
+      if (!wp.followUpDate) return false;
+      const fDate = new Date(wp.followUpDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return fDate < today;
+    }).length;
+    
+    return { receivedToday, unassigned, overdue };
+  }, [wantedProperties]);
 
   const myTasks = useMemo(() => {
     let filtered = tasks;
@@ -686,6 +714,73 @@ const Dashboard = () => {
           </Grid>
         ))}
       </Grid>
+
+      {/* Today's Wanted Requirements Card */}
+      {hasPermission('wanted_properties', 'view') && (
+        <Grid container spacing={3} sx={{ mb: 4.5 }}>
+          <Grid item xs={12}>
+            <Card 
+              onClick={() => navigate('/module/wanted_properties')}
+              sx={{ 
+                cursor: 'pointer',
+                border: '1px solid #E2E8F0', 
+                borderRadius: '16px',
+                boxShadow: 'none',
+                transition: 'all 0.2s',
+                backgroundColor: '#FFFFFF',
+                '&:hover': { 
+                  borderColor: '#8B5CF6',
+                  boxShadow: `0 10px 25px -5px rgba(139, 92, 246, 0.15)`,
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2.5}>
+                  <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins', color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Icons.Clipboard size={20} color="#8B5CF6" />
+                    Today's Wanted Requirements
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>
+                    Click to view all wanted properties
+                  </Typography>
+                </Box>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: 'none' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 800, color: '#2563EB', fontFamily: 'Poppins' }}>
+                        {wantedStats.receivedToday}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 600, mt: 0.5 }}>
+                        Received Today
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: 'none' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 800, color: '#EF4444', fontFamily: 'Poppins' }}>
+                        {wantedStats.unassigned}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 600, mt: 0.5 }}>
+                        Unassigned
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: 'none' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 800, color: '#F59E0B', fontFamily: 'Poppins' }}>
+                        {wantedStats.overdue}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 600, mt: 0.5 }}>
+                        Overdue for Follow-up
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
 
       {/* QUICK ACTIONS GRID FOR MOBILE-FIRST ONE-HAND USE */}
       <Box sx={{ mb: 4 }}>

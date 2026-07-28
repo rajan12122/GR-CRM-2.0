@@ -323,6 +323,17 @@ const DynamicTable = ({
       );
     }
 
+    if (field.type === 'multiselect_text') {
+      const items = String(val || '').split(',').map(s => s.trim()).filter(Boolean);
+      return (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+          {items.map((item, idx) => (
+            <Chip key={idx} label={item} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+          ))}
+        </Box>
+      );
+    }
+
     const currencyFields = [
       'price', 'budget', 'salary', 'salePrice', 'netPay', 'baseSalary', 'dailyRate',
       'leaveDeduction', 'halfDayDeduction', 'overtimePayment', 'allowancesTotal',

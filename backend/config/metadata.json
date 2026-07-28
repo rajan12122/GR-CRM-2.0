@@ -86,6 +86,14 @@
           "required": true,
           "showInTable": true,
           "editable": true
+        },
+        {
+          "name": "operatingAreas",
+          "label": "Operating Areas",
+          "type": "multiselect_text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
         }
       ]
     },
@@ -604,6 +612,147 @@
           "name": "initial_notes",
           "label": "Initial Notes",
           "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        }
+      ]
+    },
+    "wanted_properties": {
+      "id": "wanted_properties",
+      "label": "Wanted Properties",
+      "icon": "Home",
+      "fields": [
+        {
+          "name": "id",
+          "label": "Wanted ID",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": false
+        },
+        {
+          "name": "dateReceived",
+          "label": "Date Received",
+          "type": "date",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "sourceGroup",
+          "label": "Source Group",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "rawText",
+          "label": "Raw Text (WhatsApp)",
+          "type": "textarea",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "requirementType",
+          "label": "Requirement Type",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "requirementTypes"
+        },
+        {
+          "name": "propertyType",
+          "label": "Property Type",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "propertyTypes"
+        },
+        {
+          "name": "locality",
+          "label": "Locality",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "sizeRequired",
+          "label": "Size Required",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "budget",
+          "label": "Budget",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "dealerContactNum",
+          "label": "Dealer Contact Number",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "dealerId",
+          "label": "Associated Dealer",
+          "type": "ref",
+          "refModule": "dealers",
+          "required": false,
+          "showInTable": true,
+          "editable": false
+        },
+        {
+          "name": "assignedEmployeeId",
+          "label": "Assigned RM",
+          "type": "ref",
+          "refModule": "employees",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "wantedStatus"
+        },
+        {
+          "name": "followUpRemarks",
+          "label": "Follow Up Remarks",
+          "type": "textarea",
+          "required": false,
+          "showInTable": false,
+          "editable": true
+        },
+        {
+          "name": "followUpDate",
+          "label": "Follow Up Date",
+          "type": "date",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "matchedPropertyId",
+          "label": "Matched Property",
+          "type": "ref",
+          "refModule": "properties",
           "required": false,
           "showInTable": true,
           "editable": true
@@ -3313,6 +3462,19 @@
         "label": "Cancelled",
         "color": "#EF4444"
       }
+    ],
+    "requirementTypes": [
+      { "value": "Buy Property", "label": "Buy Property", "color": "#3B82F6" },
+      { "value": "Sell Property", "label": "Sell Property", "color": "#EF4444" },
+      { "value": "Rent", "label": "Rent", "color": "#F59E0B" }
+    ],
+    "wantedStatus": [
+      { "value": "New", "label": "New", "color": "#3B82F6" },
+      { "value": "Assigned", "label": "Assigned", "color": "#8B5CF6" },
+      { "value": "Contacted", "label": "Contacted", "color": "#F59E0B" },
+      { "value": "Matched", "label": "Matched", "color": "#10B981" },
+      { "value": "Closed", "label": "Closed", "color": "#64748B" },
+      { "value": "Not Interested", "label": "Not Interested", "color": "#EF4444" }
     ]
   },
   "rolesPermissions": {
@@ -3471,6 +3633,14 @@
         "delete",
         "export",
         "print"
+      ],
+      "wanted_properties": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "export",
+        "print"
       ]
     },
     "Manager": {
@@ -3604,6 +3774,11 @@
         "edit",
         "delete",
         "export"
+      ],
+      "wanted_properties": [
+        "view",
+        "create",
+        "edit"
       ]
     },
     "Sales": {
@@ -3692,6 +3867,11 @@
       "dealer_meetings": [
         "view",
         "edit"
+      ],
+      "wanted_properties": [
+        "view",
+        "create",
+        "edit"
       ]
     },
     "Employee": {
@@ -3738,6 +3918,10 @@
         "view"
       ],
       "dealer_meetings": [
+        "view",
+        "edit"
+      ],
+      "wanted_properties": [
         "view",
         "edit"
       ]
