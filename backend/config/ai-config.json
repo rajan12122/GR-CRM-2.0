@@ -1,7 +1,8 @@
 {
-  "provider": "gemini",
+  "provider": "groq",
   "openai": { "model": "gpt-4o" },
   "gemini": { "apiKey": "", "model": "gemini-2.0-flash" },
+  "groq": { "model": "llama-3.3-70b-versatile" },
   "claude": { "apiKey": "", "model": "claude-3-5-sonnet" },
   "deepseek": { "apiKey": "", "model": "deepseek-chat" },
   "local": { "endpoint": "http://localhost:11434/v1" }

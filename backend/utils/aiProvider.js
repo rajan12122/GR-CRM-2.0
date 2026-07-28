@@ -23,6 +23,11 @@ function getAIConfig() {
     config.gemini.apiKey = process.env.GEMINI_API_KEY;
   }
 
+  if (!config.groq) config.groq = {};
+  if (process.env.GROQ_API_KEY) {
+    config.groq.apiKey = process.env.GROQ_API_KEY;
+  }
+
   return config;
 }
 
@@ -318,6 +323,41 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToke
       }
       const data = await res.json();
       const text = data.candidates[0].content.parts[0].text;
+      if (onToken) {
+        onToken(text);
+      }
+      return text;
+    }
+
+    if (provider === "groq") {
+      const model = config.groq.model || "llama-3.3-70b-versatile";
+      const formattedHistory = history.map(h => ({
+        role: h.role === "assistant" ? "assistant" : "user",
+        content: h.content
+      }));
+      const messages = [
+        { role: "system", content: finalSystemPrompt },
+        ...formattedHistory,
+        { role: "user", content: prompt }
+      ];
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.groq.apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messages,
+          temperature: 0.2
+        })
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Groq API returned error: ${res.status} - ${errText}`);
+      }
+      const data = await res.json();
+      const text = data.choices[0].message.content;
       if (onToken) {
         onToken(text);
       }
