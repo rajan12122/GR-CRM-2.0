@@ -690,8 +690,7 @@ const Dashboard = () => {
             { label: 'Salary', icon: <Icons.CircleDollarSign size={18} />, color: '#10B981', path: '/module/salary' },
             { label: 'Projects', icon: <Icons.FolderOpen size={18} />, color: '#8B5CF6', path: '/module/projects' },
             { label: 'Properties', icon: <Icons.Home size={18} />, color: '#EC4899', path: '/module/properties' },
-            { label: 'Employees', icon: <Icons.Users size={18} />, color: '#14B8A6', path: '/module/employees' },
-            { label: 'Expenses', icon: <Icons.Receipt size={18} />, color: '#DC2626', path: '/module/salary' }
+            { label: 'Employees', icon: <Icons.Users size={18} />, color: '#14B8A6', path: '/module/employees' }
           ].map((act, idx) => (
             <Grid item xs={6} sm={3} key={idx}>
               <Button
