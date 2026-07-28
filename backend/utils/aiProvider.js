@@ -3,39 +3,22 @@ const path = require('path');
 const { CRMSearchService, getRelatedRecords, getParentEntities } = require('../services/crmSearchService');
 
 function getAIConfig() {
+  let config = { provider: "mock" };
   try {
     const configPath = path.join(__dirname, '..', 'config', 'ai-config.json');
-    if (!fs.existsSync(configPath)) {
-      return { provider: "mock" };
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     }
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-    // Inject OpenAI key if present in env
-    if (process.env.OPENAI_API_KEY !== undefined) {
-      if (!config.openai) config.openai = {};
-      config.openai.apiKey = process.env.OPENAI_API_KEY;
-    }
-    // Inject Gemini key if present in env
-    if (process.env.GEMINI_API_KEY !== undefined) {
-      if (!config.gemini) config.gemini = {};
-      config.gemini.apiKey = process.env.GEMINI_API_KEY;
-    }
-    // Inject Claude key if present in env
-    if (process.env.ANTHROPIC_API_KEY !== undefined) {
-      if (!config.claude) config.claude = {};
-      config.claude.apiKey = process.env.ANTHROPIC_API_KEY;
-    }
-    // Inject DeepSeek key if present in env
-    if (process.env.DEEPSEEK_API_KEY !== undefined) {
-      if (!config.deepseek) config.deepseek = {};
-      config.deepseek.apiKey = process.env.DEEPSEEK_API_KEY;
-    }
-
-    return config;
   } catch (e) {
     console.error("Error reading ai-config.json:", e);
   }
-  return { provider: "mock" };
+
+  if (!config.openai) config.openai = {};
+  if (process.env.OPENAI_API_KEY) {
+    config.openai.apiKey = process.env.OPENAI_API_KEY;
+  }
+
+  return config;
 }
 
 function hasKey(config, provider) {
