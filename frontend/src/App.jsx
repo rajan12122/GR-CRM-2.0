@@ -47,6 +47,11 @@ const EntityDetailWrapper = () => {
   return hasPermission(moduleName, 'view') ? <EntityDetail key={`${moduleName}-${id}`} /> : <Navigate to="/" replace />;
 };
 
+const NavigateToModule = () => {
+  const { moduleName } = useParams();
+  return <Navigate to={`/module/${moduleName}`} replace />;
+};
+
 const PipelineViewWrapper = () => {
   const { pipelineType } = useParams();
   const { hasPermission } = useApp();
@@ -165,6 +170,7 @@ const MainLayout = () => {
               <Route path="/module/salary" element={<ModuleRouteGuard element={<Salary />} moduleName="salaries" />} />
               <Route path="/module/location_tracker" element={<ModuleRouteGuard element={<LocationTracker />} moduleName="location_tracker" />} />
               <Route path="/module/:moduleName" element={<ModuleManagerWrapper />} />
+              <Route path="/module/:moduleName/search" element={<NavigateToModule />} />
               <Route path="/module/:moduleName/:id" element={<EntityDetailWrapper />} />
               <Route path="/pipeline/:pipelineType" element={<PipelineViewWrapper />} />
               <Route path="/settings" element={user?.role === 'Admin' ? <Settings /> : <Navigate to="/" replace />} />
