@@ -1,5 +1,5 @@
 {
-  "provider": "openai",
+  "provider": "gemini",
   "openai": { "model": "gpt-4o" },
   "gemini": { "apiKey": "", "model": "gemini-2.5-flash" },
   "claude": { "apiKey": "", "model": "claude-3-5-sonnet" },

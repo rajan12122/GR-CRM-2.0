@@ -18,6 +18,11 @@ function getAIConfig() {
     config.openai.apiKey = process.env.OPENAI_API_KEY;
   }
 
+  if (!config.gemini) config.gemini = {};
+  if (process.env.GEMINI_API_KEY) {
+    config.gemini.apiKey = process.env.GEMINI_API_KEY;
+  }
+
   return config;
 }
 
