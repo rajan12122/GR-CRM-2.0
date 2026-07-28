@@ -1,30 +1,181 @@
 const fs = require('fs');
 const path = require('path');
-const { CRMSearchService } = require('../services/crmSearchService');
+const { CRMSearchService, getRelatedRecords, getParentEntities } = require('../services/crmSearchService');
 
 // Read AI configurations
 function getAIConfig() {
   try {
     const configPath = path.join(__dirname, '..', 'config', 'ai-config.json');
+    let config = { provider: "mock" };
     if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     }
+    
+    // Inject API keys from environment variables
+    if (config.openai) {
+      config.openai.apiKey = process.env.OPENAI_API_KEY || "";
+    }
+    if (config.gemini) {
+      config.gemini.apiKey = process.env.GEMINI_API_KEY || "";
+    }
+    if (config.claude) {
+      config.claude.apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || "";
+    }
+    if (config.deepseek) {
+      config.deepseek.apiKey = process.env.DEEPSEEK_API_KEY || "";
+    }
+    
+    return config;
   } catch (e) {
     console.error("Error reading ai-config.json:", e);
   }
   return { provider: "mock" };
 }
 
+function hasKey(config, provider) {
+  if (provider === "local") return true;
+  if (!config[provider]) return false;
+  return !!config[provider].apiKey;
+}
+
+// AI Tool Calling Definitions for OpenAI
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "searchRecords",
+      description: "Search for records in a specific module (leads, customers, properties, follow_ups, site_visits, deals, projects, employees) matching a search query.",
+      parameters: {
+        type: "object",
+        properties: {
+          module: { type: "string", description: "The module name, e.g., 'leads', 'properties', 'customers', 'employees'." },
+          query: { type: "string", description: "The search query term, e.g., 'Amit', 'Mohali', '9417094170'." }
+        },
+        required: ["module", "query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getRecordById",
+      description: "Retrieve a specific record by its ID from a module.",
+      parameters: {
+        type: "object",
+        properties: {
+          module: { type: "string", description: "The module name." },
+          id: { type: "string", description: "The record ID, e.g., 'CUST-001' or 'LEAD-002'." }
+        },
+        required: ["module", "id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getEntityConnections",
+      description: "Get all related records and parent associations for a specific entity ID (e.g., a customer's deals, followups, site visits, or a property's pitches/visits).",
+      parameters: {
+        type: "object",
+        properties: {
+          module: { type: "string", description: "The module name." },
+          id: { type: "string", description: "The record ID." }
+        },
+        required: ["module", "id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getTodaysSchedule",
+      description: "Retrieve today's active tasks, followups, and site visits (optionally filtered by employeeId).",
+      parameters: {
+        type: "object",
+        properties: {
+          employeeId: { type: "string", description: "Optional employee ID to filter the schedule." }
+        }
+      }
+    }
+  }
+];
+
+// Helper to execute tools locally on the filtered database context
+async function executeTool(name, args, contextData) {
+  try {
+    const metadataPath = path.join(__dirname, '..', 'config', 'metadata.json');
+    let metadata = {};
+    if (fs.existsSync(metadataPath)) {
+      metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    }
+
+    if (name === "searchRecords") {
+      const { module, query } = args;
+      const list = contextData[module] || [];
+      const q = String(query).toLowerCase();
+      const results = list.filter(rec => {
+        return Object.values(rec).some(val => val !== null && val !== undefined && String(val).toLowerCase().includes(q));
+      });
+      return JSON.stringify(results.slice(0, 10));
+    }
+    
+    if (name === "getRecordById") {
+      const { module, id } = args;
+      const list = contextData[module] || [];
+      const record = list.find(rec => String(rec.id) === String(id));
+      return JSON.stringify(record || { message: "Record not found" });
+    }
+    
+    if (name === "getEntityConnections") {
+      const { module, id } = args;
+      const related = getRelatedRecords(module, id, contextData, metadata);
+      const record = (contextData[module] || []).find(r => String(r.id) === String(id));
+      const parents = record ? getParentEntities(module, record, contextData, metadata) : {};
+      return JSON.stringify({ related, parents });
+    }
+    
+    if (name === "getTodaysSchedule") {
+      const { employeeId } = args;
+      const todayStr = new Date().toLocaleDateString('en-IN');
+      const tasks = (contextData.tasks || []).filter(t => 
+        (!employeeId || String(t.assignedTo) === String(employeeId)) && 
+        (t.dueDate === todayStr || t.date === todayStr)
+      );
+      const followups = (contextData.follow_ups || []).filter(f => 
+        (!employeeId || String(f.employeeId) === String(employeeId)) && 
+        f.date === todayStr
+      );
+      const siteVisits = (contextData.site_visits || []).filter(s => 
+        (!employeeId || String(s.employeeId) === String(employeeId)) && 
+        s.date === todayStr
+      );
+      return JSON.stringify({ tasks, followups, siteVisits });
+    }
+  } catch (e) {
+    console.error("Error executing tool:", name, e);
+    return JSON.stringify({ error: e.message });
+  }
+  return JSON.stringify({ error: `Tool ${name} not implemented.` });
+}
+
 /**
- * Universal AI dispatch routine
+ * Universal AI dispatch routine supporting streaming and tool calling
  */
-async function generateAIResponse(prompt, systemPrompt, contextData = {}) {
+async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToken = null, history = []) {
   const config = getAIConfig();
   const provider = config.provider || "mock";
 
-  // If provider is mock or no API key is provided, trigger dynamic data-driven fallback engine
-  if (provider === "mock" || !hasKey(config, provider)) {
-    return generateMockAIResponse(prompt, systemPrompt, contextData);
+  if (provider === "mock") {
+    const res = generateMockAIResponse(prompt, systemPrompt, contextData);
+    if (onToken) {
+      onToken(res);
+      return "";
+    }
+    return res;
+  }
+
+  if (!hasKey(config, provider)) {
+    throw new Error("AI provider not configured — contact your admin");
   }
 
   // Serialize active context data safely for external LLMs
@@ -43,30 +194,114 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}) {
         cleanContext[key] = contextData[key];
       }
     }
-    contextText = `\n\nActive CRM Database Context (Strictly use ONLY this data to construct your response):\n${JSON.stringify(cleanContext, null, 2)}`;
+    contextText = `\n\nActive CRM Database Context (Strictly use ONLY this data or tools to construct your response):\n${JSON.stringify(cleanContext, null, 2)}`;
   }
 
   const finalSystemPrompt = systemPrompt + contextText;
 
   try {
     if (provider === "openai") {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.openai.apiKey}`
-        },
-        body: JSON.stringify({
+      // Setup messaging history
+      const formattedHistory = history.map(h => ({
+        role: h.role === "assistant" ? "assistant" : "user",
+        content: h.content
+      }));
+
+      const messages = [
+        { role: "system", content: finalSystemPrompt },
+        ...formattedHistory,
+        { role: "user", content: prompt }
+      ];
+
+      let runToolCalls = true;
+      let apiMessages = [...messages];
+      let finalResponseText = "";
+
+      while (runToolCalls) {
+        const payload = {
           model: config.openai.model || "gpt-4o",
-          messages: [
-            { role: "system", content: finalSystemPrompt },
-            { role: "user", content: prompt }
-          ],
+          messages: apiMessages,
           temperature: 0.2
-        })
-      });
-      const data = await res.json();
-      return data.choices[0].message.content;
+        };
+
+        // Only supply tools if we are using OpenAI and have tools defined
+        if (tools && tools.length > 0) {
+          payload.tools = tools;
+          payload.tool_choice = "auto";
+        }
+
+        if (onToken && !payload.tools) {
+          payload.stream = true;
+        }
+
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${config.openai.apiKey}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`OpenAI API returned error: ${res.status} - ${errText}`);
+        }
+
+        if (onToken && !payload.tools) {
+          const decoder = new TextDecoder("utf-8");
+          let buffer = "";
+          for await (const chunk of res.body) {
+            buffer += decoder.decode(chunk, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop();
+            for (const line of lines) {
+              const cleanLine = line.trim();
+              if (cleanLine === "" || cleanLine === "data: [DONE]") continue;
+              if (cleanLine.startsWith("data: ")) {
+                try {
+                  const parsed = JSON.parse(cleanLine.slice(6));
+                  const token = parsed.choices[0]?.delta?.content || "";
+                  if (token) {
+                    onToken(token);
+                    finalResponseText += token;
+                  }
+                } catch (e) {}
+              }
+            }
+          }
+          runToolCalls = false;
+          return finalResponseText;
+        } else {
+          const data = await res.json();
+          const message = data.choices[0].message;
+          
+          if (message.tool_calls && message.tool_calls.length > 0) {
+            // Append assistant tool request
+            apiMessages.push(message);
+            
+            // Execute each tool call
+            for (const tc of message.tool_calls) {
+              const args = JSON.parse(tc.function.arguments);
+              const toolResult = await executeTool(tc.function.name, args, contextData);
+              apiMessages.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                name: tc.function.name,
+                content: toolResult
+              });
+            }
+            // Continue loop to get the response based on tool execution
+          } else {
+            finalResponseText = message.content;
+            if (onToken) {
+              onToken(finalResponseText);
+            }
+            runToolCalls = false;
+          }
+        }
+      }
+      return finalResponseText;
     }
 
     if (provider === "gemini") {
@@ -81,8 +316,13 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}) {
           ]
         })
       });
+      if (!res.ok) throw new Error(`Gemini API returned error: ${res.status}`);
       const data = await res.json();
-      return data.candidates[0].content.parts[0].text;
+      const text = data.candidates[0].content.parts[0].text;
+      if (onToken) {
+        onToken(text);
+      }
+      return text;
     }
 
     if (provider === "claude") {
@@ -100,8 +340,13 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}) {
           max_tokens: 1000
         })
       });
+      if (!res.ok) throw new Error(`Claude API returned error: ${res.status}`);
       const data = await res.json();
-      return data.content[0].text;
+      const text = data.content[0].text;
+      if (onToken) {
+        onToken(text);
+      }
+      return text;
     }
 
     if (provider === "deepseek") {
@@ -120,8 +365,13 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}) {
           temperature: 0.2
         })
       });
+      if (!res.ok) throw new Error(`DeepSeek API returned error: ${res.status}`);
       const data = await res.json();
-      return data.choices[0].message.content;
+      const text = data.choices[0].message.content;
+      if (onToken) {
+        onToken(text);
+      }
+      return text;
     }
 
     if (provider === "local") {
@@ -138,22 +388,20 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}) {
           temperature: 0.2
         })
       });
+      if (!res.ok) throw new Error(`Local API returned error: ${res.status}`);
       const data = await res.json();
-      return data.choices[0].message.content;
+      const text = data.choices[0].message.content;
+      if (onToken) {
+        onToken(text);
+      }
+      return text;
     }
   } catch (e) {
-    console.error(`AI provider ${provider} call failed, triggering mock fallback:`, e);
+    console.error(`AI provider ${provider} call failed:`, e);
+    throw e;
   }
-
-  // Fallback if API calls fail
-  return generateMockAIResponse(prompt, systemPrompt, contextData);
 }
 
-function hasKey(config, provider) {
-  if (provider === "local") return true;
-  if (!config[provider]) return false;
-  return !!config[provider].apiKey;
-}
 
 /**
  * High-fidelity, deterministic rule-based response generator (Mock Provider)

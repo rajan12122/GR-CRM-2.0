@@ -4130,7 +4130,7 @@ app.post('/api/leads/:id/drop', authenticateToken, (req, res) => {
 
 // --- AI ASSISTANT API ENDPOINTS ---
 const { generateAIResponse } = require('./utils/aiProvider');
-const { filterDb } = require('./services/crmSearchService');
+const { filterDb, CRMSearchService } = require('./services/crmSearchService');
 
 // Helper to resolve employee name
 function getEmployeeName(empId, db) {
@@ -4342,11 +4342,133 @@ app.post('/api/ai/insights', authenticateToken, (req, res) => {
     .catch(err => res.status(500).json({ error: err.message }));
 });
 
-app.post('/api/ai/chat', authenticateToken, (req, res) => {
-  const { message } = req.body;
-  const db = filterDb(readDb());
+function filterDbForUser(db, user) {
+  if (!user || user.role === 'Admin') return db;
+  
+  const userId = String(user.id);
+  const filtered = { ...db };
+  
+  const followUps = db.follow_ups || [];
+  const siteVisits = db.site_visits || [];
+  const pitches = db.property_pitch_history || [];
+  
+  const myFollowUpCustomerIds = new Set(followUps.filter(f => String(f.employeeId) === userId).map(f => String(f.customerId)));
+  const mySiteVisitCustomerIds = new Set(siteVisits.filter(sv => String(sv.employeeId) === userId).map(sv => String(sv.customerId)));
+  const myPitchCustomerIds = new Set(pitches.filter(p => String(p.employeeId) === userId).map(p => String(p.customerId)));
+  
+  if (db.leads) {
+    filtered.leads = db.leads.filter(r => 
+      String(r.assignedEmployeeId) === userId ||
+      myFollowUpCustomerIds.has(String(r.id)) ||
+      mySiteVisitCustomerIds.has(String(r.id)) ||
+      myPitchCustomerIds.has(String(r.id))
+    );
+  }
+  
+  if (db.customers) {
+    filtered.customers = db.customers.filter(r => 
+      String(r.assignedEmployeeId) === userId ||
+      myFollowUpCustomerIds.has(String(r.id)) ||
+      mySiteVisitCustomerIds.has(String(r.id)) ||
+      myPitchCustomerIds.has(String(r.id))
+    );
+  }
+  
+  if (db.follow_ups) {
+    filtered.follow_ups = db.follow_ups.filter(r => String(r.employeeId) === userId);
+  }
+  
+  if (db.queries) {
+    const myFollowUpQueryIds = new Set(followUps.filter(f => String(f.employeeId) === userId).map(f => String(f.queryId)));
+    filtered.queries = db.queries.filter(r => 
+      String(r.assignedEmployeeId) === userId ||
+      myFollowUpQueryIds.has(String(r.id))
+    );
+  }
+  
+  if (db.property_pitch_history) {
+    filtered.property_pitch_history = db.property_pitch_history.filter(r => String(r.employeeId) === userId);
+  }
+  
+  if (db.site_visits) {
+    filtered.site_visits = db.site_visits.filter(r => String(r.employeeId) === userId);
+  }
+  
+  if (db.salaries) {
+    filtered.salaries = db.salaries.filter(r => String(r.employeeId) === userId);
+  }
+  
+  if (db.tasks) {
+    filtered.tasks = db.tasks.filter(r => String(r.assignedTo) === userId);
+  }
+  
+  return filtered;
+}
 
-  const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot). Answer queries using database lists. Keep replies data-centric.
+app.post('/api/ai/chat', authenticateToken, async (req, res) => {
+  const { message, history = [] } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: "Message is required" });
+  }
+
+  // Set SSE Headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    // 1. Read and filter database for the logged-in user
+    const rawDb = readDb();
+    const cleanDb = filterDb(rawDb);
+    const db = filterDbForUser(cleanDb, req.user);
+
+    // 2. RAG: Search database for matches relevant to user message
+    const searchResult = CRMSearchService.search(message, db);
+    
+    // Construct small, highly relevant starting context data from RAG search result
+    const contextData = {};
+    const todayStr = new Date().toLocaleDateString('en-IN');
+    
+    // Add dashboard summary statistics
+    contextData.todaySummary = {
+      todayDate: todayStr,
+      followUpsToday: (db.follow_ups || []).filter(f => f.status !== 'Completed' && f.date === todayStr).length,
+      tasksOverdue: (db.tasks || []).filter(t => t.status !== 'Completed').length,
+      siteVisitsToday: (db.site_visits || []).filter(s => s.date === todayStr).length
+    };
+
+    if (searchResult.type === 'entity360') {
+      contextData[searchResult.data.moduleKey] = [searchResult.data.record];
+      if (searchResult.data.parents) {
+        for (const parentKey in searchResult.data.parents) {
+          contextData[parentKey] = [searchResult.data.parents[parentKey]];
+        }
+      }
+      if (searchResult.data.related) {
+        for (const relatedKey in searchResult.data.related) {
+          contextData[relatedKey] = searchResult.data.related[relatedKey];
+        }
+      }
+    } else if (searchResult.type === 'multipleMatches') {
+      for (const item of searchResult.data) {
+        if (!contextData[item.moduleKey]) {
+          contextData[item.moduleKey] = [];
+        }
+        const record = (db[item.moduleKey] || []).find(r => String(r.id) === String(item.id));
+        if (record) {
+          contextData[item.moduleKey].push(record);
+        }
+      }
+    } else if (searchResult.type === 'moduleList') {
+      contextData[searchResult.data.moduleKey] = searchResult.data.records;
+    }
+
+    if (Object.keys(contextData).length === 1) {
+      contextData.leads = (db.leads || []).slice(0, 5);
+      contextData.properties = (db.properties || []).slice(0, 5);
+    }
+
+    const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot). Answer queries using database lists or the tools provided to search more if needed. Keep replies data-centric.
 If no matching records exist, you MUST explain why, suggest alternatives, and show similar results (NEVER answer only "No active matching record was found in the CRM" or "No Data Found").
 
 CRITICAL FORMATTING INSTRUCTIONS:
@@ -4375,12 +4497,31 @@ Every search result must be separated by blank lines and show:
 - Summary (e.g. Role: Admin, Phone: 1234567890)
 - Date (e.g. Joined: **2026-07-08**)
 - Quick Actions (The inline quick action buttons listed above)`;
-  
-  const contextData = db;
 
-  generateAIResponse(message, systemPrompt, contextData)
-    .then(reply => res.json({ reply }))
-    .catch(err => res.status(500).json({ error: err.message }));
+    // 3. Call AI dispatch routine with token callback writing directly to stream
+    await generateAIResponse(
+      message, 
+      systemPrompt, 
+      db, 
+      (token) => {
+        res.write(`data: ${JSON.stringify({ token })}\n\n`);
+      },
+      history
+    );
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err) {
+    console.error("AI chat error:", err);
+    let errorMsg = "Gagan Copilot AI server error: Failed to generate response. Please try again.";
+    let statusCode = 500;
+    if (err.message.includes("not configured")) {
+      errorMsg = "AI provider not configured — contact your admin";
+      statusCode = 403;
+    }
+    res.write(`data: ${JSON.stringify({ error: errorMsg, code: statusCode })}\n\n`);
+    res.end();
+  }
 });
 
 // ==========================================

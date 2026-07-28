@@ -291,9 +291,15 @@ export default function AIAssistantDrawer() {
     const promptText = String(textToSend).trim();
     if (!promptText) return;
 
+    // Keep only last 10 messages as history
+    const chatHistory = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
+
     setMessages(prev => [...prev, { role: 'user', content: promptText }]);
     setInputValue('');
     setLoading(true);
+
+    // Append placeholder for assistant streaming message
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     try {
       const res = await fetch(`${API_BASE_URL}/ai/chat`, {
@@ -302,12 +308,64 @@ export default function AIAssistantDrawer() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('gr_crm_token')}`
         },
-        body: JSON.stringify({ message: promptText })
+        body: JSON.stringify({ message: promptText, history: chatHistory })
       });
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply || "Insufficient CRM data available." }]);
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let fullReply = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const cleanLine = line.trim();
+          if (!cleanLine) continue;
+          if (cleanLine === 'data: [DONE]') continue;
+
+          if (cleanLine.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(cleanLine.substring(6));
+              if (data.error) {
+                setMessages(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'assistant', content: data.error };
+                  return updated;
+                });
+                setLoading(false);
+                return;
+              }
+              if (data.token) {
+                fullReply += data.token;
+                setMessages(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'assistant', content: fullReply };
+                  return updated;
+                });
+              }
+            } catch (err) {
+              console.error("Error parsing stream chunk:", err);
+            }
+          }
+        }
+      }
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Error connecting to Gagan Realtech AI server." }]);
+      console.error("AI response stream error:", e);
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: 'assistant', content: "Error connecting to Gagan Realtech AI server. Please try again." };
+        return updated;
+      });
     } finally {
       setLoading(false);
     }
