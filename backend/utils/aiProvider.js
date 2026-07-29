@@ -162,22 +162,7 @@ async function executeTool(name, args, contextData) {
  */
 async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToken = null, history = []) {
   const config = getAIConfig();
-  const provider = config.provider || "mock";
 
-  if (provider === "mock") {
-    const res = generateMockAIResponse(prompt, systemPrompt, contextData);
-    if (onToken) {
-      onToken(res);
-      return "";
-    }
-    return res;
-  }
-
-  if (!hasKey(config, provider)) {
-    throw new Error("AI provider not configured — contact your admin");
-  }
-
-  // Serialize active context data safely for external LLMs
   let contextText = "";
   if (contextData && Object.keys(contextData).length > 0) {
     const cleanContext = {};
@@ -197,6 +182,35 @@ async function generateAIResponse(prompt, systemPrompt, contextData = {}, onToke
   }
 
   const finalSystemPrompt = systemPrompt + contextText;
+
+  const primaryProvider = config.provider || "mock";
+  const fallbackOrder = [primaryProvider, "openai", "gemini", "groq", "mock"].filter((p, index, self) => self.indexOf(p) === index);
+
+  let lastError = null;
+  for (const prov of fallbackOrder) {
+    if (prov !== "mock" && !hasKey(config, prov)) {
+      continue;
+    }
+    try {
+      const res = await runProvider(prov, config, prompt, finalSystemPrompt, contextData, onToken, history);
+      return res;
+    } catch (e) {
+      console.warn(`AI Provider "${prov}" failed, attempting next fallback. Error:`, e.message);
+      lastError = e;
+    }
+  }
+  throw lastError || new Error("All AI providers failed.");
+}
+
+async function runProvider(provider, config, prompt, finalSystemPrompt, contextData, onToken, history) {
+  if (provider === "mock") {
+    const res = generateMockAIResponse(prompt, finalSystemPrompt, contextData);
+    if (onToken) {
+      onToken(res);
+      return "";
+    }
+    return res;
+  }
 
   try {
     if (provider === "openai") {

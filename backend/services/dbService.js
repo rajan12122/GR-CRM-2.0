@@ -125,8 +125,60 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "droppedBy" JSONB DEFAULT '[]';
     `);
 
+    // Auto-create missing tables for modules in metadata
+    await ensureModuleTablesExist(client);
+
   } finally {
     client.release();
+  }
+}
+
+async function ensureModuleTablesExist(client) {
+  const metadata = readMetadata();
+  if (!metadata || !metadata.modules) return;
+
+  for (const [modKey, modConfig] of Object.entries(metadata.modules)) {
+    if (modKey === 'location_tracker') continue; // Virtual module
+    
+    const checkRes = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+          AND table_name = $1
+      );
+    `, [modKey]);
+
+    const exists = checkRes.rows[0]?.exists;
+    if (!exists) {
+      console.log(`Auto-creating missing table for module "${modKey}"...`);
+      const fields = modConfig.fields || [];
+      const columnDefs = [];
+      
+      if (!fields.some(f => f.name === 'id')) {
+        columnDefs.push(`"id" TEXT PRIMARY KEY`);
+      }
+
+      fields.forEach(f => {
+        let pgType = 'TEXT';
+        if (f.name === 'id') {
+          pgType = 'TEXT PRIMARY KEY';
+        } else if (f.type === 'number') {
+          pgType = 'NUMERIC';
+        } else if (f.type === 'boolean' || f.type === 'checkbox') {
+          pgType = 'BOOLEAN DEFAULT false';
+        } else if (f.type === 'multiref' || f.type === 'jsonb') {
+          pgType = 'JSONB';
+        }
+        columnDefs.push(`"${f.name}" ${pgType}`);
+      });
+
+      columnDefs.push('created_at TIMESTAMPTZ DEFAULT now()');
+      columnDefs.push('updated_at TIMESTAMPTZ');
+
+      const createSql = `CREATE TABLE IF NOT EXISTS "${modKey}" (\n  ${columnDefs.join(',\n  ')}\n);`;
+      await client.query(createSql);
+      console.log(`Successfully created table "${modKey}".`);
+    }
   }
 }
 
@@ -382,7 +434,8 @@ async function loadTransactionDb(client) {
     'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals',
     'property_pitch_history', 'dealer_calls', 'activity_logs',
     'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
-    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history'
+    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history',
+    'wanted_properties', 'dealer_meetings'
   ];
 
   const results = await Promise.all([
@@ -454,7 +507,8 @@ async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
     'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals', 
     'property_pitch_history', 'dealer_calls', 'activity_logs',
     'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
-    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history'
+    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history',
+    'wanted_properties', 'dealer_meetings'
   ];
 
   for (const tbl of tables) {
