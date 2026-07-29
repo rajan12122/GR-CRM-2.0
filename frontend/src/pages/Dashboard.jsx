@@ -297,7 +297,6 @@ const Dashboard = () => {
         'customers',
         'leads',
         'properties',
-        'sales',
         'site_visits',
         'follow_ups',
         'attendance',
@@ -332,7 +331,7 @@ const Dashboard = () => {
   const customers = moduleData.customers || [];
   const leads = moduleData.leads || [];
   const properties = moduleData.properties || [];
-  const sales = moduleData.sales || [];
+  const sales = [];
   const followUps = moduleData.follow_ups || [];
   const siteVisits = moduleData.site_visits || [];
   const attendance = moduleData.attendance || [];

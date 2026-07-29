@@ -1229,73 +1229,7 @@
         }
       ]
     },
-    "sales": {
-      "id": "sales",
-      "label": "Sales Bookings",
-      "icon": "IndianRupee",
-      "fields": [
-        {
-          "name": "id",
-          "label": "Sales ID",
-          "type": "text",
-          "required": true,
-          "showInTable": true,
-          "editable": false
-        },
-        {
-          "name": "customerId",
-          "label": "Buyer",
-          "type": "ref",
-          "required": true,
-          "showInTable": true,
-          "editable": true,
-          "refModule": "customers"
-        },
-        {
-          "name": "propertyId",
-          "label": "Property Booked",
-          "type": "ref",
-          "required": true,
-          "showInTable": true,
-          "editable": true,
-          "refModule": "properties"
-        },
-        {
-          "name": "employeeId",
-          "label": "Sales Rep",
-          "type": "ref",
-          "required": true,
-          "showInTable": true,
-          "editable": true,
-          "refModule": "employees"
-        },
-        {
-          "name": "salePrice",
-          "label": "Sold Price (INR)",
-          "type": "number",
-          "required": true,
-          "showInTable": true,
-          "editable": true
-        },
-        {
-          "name": "agreementDate",
-          "label": "Agreement Date",
-          "type": "date",
-          "required": true,
-          "showInTable": true,
-          "editable": true
-        },
-        {
-          "name": "status",
-          "label": "Sales Status",
-          "type": "select",
-          "required": true,
-          "showInTable": true,
-          "editable": true,
-          "chipGroup": "salesStatus"
-        }
-      ]
-    },
+
     "tasks": {
       "id": "tasks",
       "label": "Tasks",
@@ -3551,14 +3485,7 @@
         "export",
         "print"
       ],
-      "sales": [
-        "view",
-        "create",
-        "edit",
-        "delete",
-        "export",
-        "print"
-      ],
+
       "tasks": [
         "view",
         "create",
@@ -3696,12 +3623,7 @@
         "create",
         "edit"
       ],
-      "sales": [
-        "view",
-        "create",
-        "edit",
-        "export"
-      ],
+
       "tasks": [
         "view",
         "create",
@@ -3820,10 +3742,7 @@
         "view",
         "create"
       ],
-      "sales": [
-        "view",
-        "create"
-      ],
+
       "tasks": [
         "view",
         "create",
@@ -3891,7 +3810,6 @@
         "view",
         "create"
       ],
-      "sales": [],
       "tasks": [
         "view",
         "edit"

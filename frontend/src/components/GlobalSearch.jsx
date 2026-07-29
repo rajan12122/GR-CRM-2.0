@@ -384,17 +384,7 @@ const GlobalSearch = ({ open, onClose }) => {
                                   ))
                                 )}
 
-                                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Sales Bookings completed ({connections.sales?.length || 0}):</Typography>
-                                {connections.sales?.length === 0 ? (
-                                  <Typography variant="body2" sx={{ color: '#94A3B8' }}>None registered</Typography>
-                                ) : (
-                                  connections.sales.map(sa => (
-                                    <Paper key={sa.id} sx={{ p: 1, mt: 0.5, backgroundColor: 'rgba(34, 197, 94, 0.05)', border: '1px solid rgba(34, 197, 94, 0.2)', boxShadow: 'none' }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#16A34A' }}>Booked: {sa.property?.name || sa.propertyId}</Typography>
-                                      <Typography variant="caption" sx={{ color: '#16A34A' }}>Sold Price: ₹{sa.salePrice?.toLocaleString('en-IN')} • Date: {sa.agreementDate}</Typography>
-                                    </Paper>
-                                  ))
-                                )}
+
                               </Grid>
                             </Grid>
                           )}
@@ -462,17 +452,7 @@ const GlobalSearch = ({ open, onClose }) => {
                                   </Box>
                                 )}
 
-                                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Sales Booking status:</Typography>
-                                {connections.sales?.length === 0 ? (
-                                  <Typography variant="body2" sx={{ color: '#22C55E', fontWeight: 600 }}>Available for Booking</Typography>
-                                ) : (
-                                  connections.sales.map(sa => (
-                                    <Paper key={sa.id} sx={{ p: 1, mt: 0.5, backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', boxShadow: 'none' }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#EF4444' }}>Sold out Deal</Typography>
-                                      <Typography variant="caption" sx={{ color: '#64748B' }}>Sold Price: ₹{sa.salePrice?.toLocaleString('en-IN')} • Date: {sa.agreementDate}</Typography>
-                                    </Paper>
-                                  ))
-                                )}
+
                               </Grid>
                             </Grid>
                           )}

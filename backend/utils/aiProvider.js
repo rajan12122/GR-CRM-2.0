@@ -640,7 +640,6 @@ function generateMockAIResponse(prompt, systemPrompt, context) {
     tasks: '📋',
     follow_ups: '📞',
     deals: '🧾',
-    sales_bookings: '🧾',
     queries: '❓',
     property_pitches: '💡',
     daily_price_lists: '📊',
@@ -664,7 +663,6 @@ function generateMockAIResponse(prompt, systemPrompt, context) {
     tasks: 'Open Task',
     follow_ups: 'Open Follow-up',
     deals: 'Open Deal',
-    sales_bookings: 'Open Booking',
     queries: 'Open Query',
     property_pitches: 'Open Pitch',
     daily_price_lists: 'View Price List',
@@ -757,9 +755,9 @@ ${list.slice(0, 5).map(item => {
     } else if (mKey === 'customers') {
       quickActionsBlock = `\n\n#### ⚡ Quick Actions\n[Open Customer](file:///module/customers/${rec.id}) [Interested Properties](file:///module/properties?customerId=${rec.id}) [Property Pitches](file:///module/property_pitch_history?customerId=${rec.id}) [Payments](file:///module/deals?customerId=${rec.id}) [Meetings](file:///module/follow_ups?customerId=${rec.id}) [Documents](file:///module/documents?customerId=${rec.id}) [Timeline](file:///module/customers/${rec.id})`;
     } else if (mKey === 'leads') {
-      quickActionsBlock = `\n\n#### ⚡ Quick Actions\n[Open Lead](file:///module/leads/${rec.id}) [Customer](file:///module/customers?leadId=${rec.id}) [Property Pitches](file:///module/property_pitch_history?customerId=${rec.id}) [Follow-ups](file:///module/follow_ups?customerId=${rec.id}) [Meetings](file:///module/follow_ups?customerId=${rec.id}) [Call History](file:///module/follow_ups?customerId=${rec.id}) [WhatsApp](https://wa.me/91${rec.phone || ''}?text=Hi) [Documents](file:///module/documents?leadId=${rec.id}) [Booking](file:///module/sales_bookings?leadId=${rec.id})`;
+      quickActionsBlock = `\n\n#### ⚡ Quick Actions\n[Open Lead](file:///module/leads/${rec.id}) [Customer](file:///module/customers?leadId=${rec.id}) [Property Pitches](file:///module/property_pitch_history?customerId=${rec.id}) [Follow-ups](file:///module/follow_ups?customerId=${rec.id}) [Meetings](file:///module/follow_ups?customerId=${rec.id}) [Call History](file:///module/follow_ups?customerId=${rec.id}) [WhatsApp](https://wa.me/91${rec.phone || ''}?text=Hi) [Documents](file:///module/documents?leadId=${rec.id})`;
     } else if (mKey === 'properties') {
-      quickActionsBlock = `\n\n#### ⚡ Quick Actions\n[Open Property](file:///module/properties/${rec.id}) [Project](file:///module/projects/${rec.projectId || 'PROJ-001'}) [Builder](file:///module/properties/${rec.id}) [Property Pitch History](file:///module/property_pitch_history?propertyId=${rec.id}) [Interested Customers](file:///module/customers?propertyId=${rec.id}) [Assigned Employees](file:///module/employees?propertyId=${rec.id}) [Follow-ups](file:///module/follow_ups?propertyId=${rec.id}) [Site Visits](file:///module/site_visits?propertyId=${rec.id}) [Documents](file:///module/documents?propertyId=${rec.id}) [Booking](file:///module/sales_bookings?propertyId=${rec.id})`;
+      quickActionsBlock = `\n\n#### ⚡ Quick Actions\n[Open Property](file:///module/properties/${rec.id}) [Project](file:///module/projects/${rec.projectId || 'PROJ-001'}) [Builder](file:///module/properties/${rec.id}) [Property Pitch History](file:///module/property_pitch_history?propertyId=${rec.id}) [Interested Customers](file:///module/customers?propertyId=${rec.id}) [Assigned Employees](file:///module/employees?propertyId=${rec.id}) [Follow-ups](file:///module/follow_ups?propertyId=${rec.id}) [Site Visits](file:///module/site_visits?propertyId=${rec.id}) [Documents](file:///module/documents?propertyId=${rec.id})`;
     }
 
     return rankHeader + `${icon} **${displayName}**\n🔗 [${btnLabel}](file:///module/${linkPath})\n\n- **Module:** **${info.moduleLabel}**\n${fieldDetails}\n\n${parentList ? `#### 📌 Associations\n${parentList}\n` : ''}${relatedList || ''}${quickActionsBlock}\n\n#### 🧠 CRM Manager Insights & Recommendations\nThis record is connected across your database. RM should follow up within 24 hours to ensure high operational success.`;
@@ -859,7 +857,7 @@ ${emp.name} is demonstrating strong client engagement metrics. With ₹${result.
 #### 📞 Interaction & Journey History
 - **Total Calls/Follow-ups logged:** **${result.data.totalCalls}** contacts.
 - **Logged Site Visits:** ${result.data.siteVisits.length} visits completed.
-- **Sales Bookings Closed:** ${result.data.bookings.length} bookings.
+- **Deals Closed:** ${result.data.bookings.length} deals.
 
 #### 📋 Tasks Checklist
 - **Outstanding Tasks:** ${result.data.pendingTasks.length} pending reminders.
@@ -889,10 +887,10 @@ Customer is in the **${result.data.stage}** stage with a budget of ${result.data
 #### 📞 Transaction & Pitch History
 - **Pitched Count:** Shown to **${p.pitchesCount}** prospective buyers.
 - **Site Visits Completed:** **${p.visitsCount}** visits.
-- **Sales Bookings:** **${p.bookingsCount}** transactions.
+- **Deals Closed:** **${p.bookingsCount}** transactions.
 
 #### ⚡ Quick Actions
-[Open Property](file:///module/properties/${p.id}) [Project](file:///module/projects/${p.projectId || 'PROJ-001'}) [Builder](file:///module/properties/${p.id}) [Property Pitch History](file:///module/property_pitch_history?propertyId=${p.id}) [Interested Customers](file:///module/customers?propertyId=${p.id}) [Assigned Employees](file:///module/employees?propertyId=${p.id}) [Follow-ups](file:///module/follow_ups?propertyId=${p.id}) [Site Visits](file:///module/site_visits?propertyId=${p.id}) [Documents](file:///module/documents?propertyId=${p.id}) [Booking](file:///module/sales_bookings?propertyId=${p.id})
+[Open Property](file:///module/properties/${p.id}) [Project](file:///module/projects/${p.projectId || 'PROJ-001'}) [Builder](file:///module/properties/${p.id}) [Property Pitch History](file:///module/property_pitch_history?propertyId=${p.id}) [Interested Customers](file:///module/customers?propertyId=${p.id}) [Assigned Employees](file:///module/employees?propertyId=${p.id}) [Follow-ups](file:///module/follow_ups?propertyId=${p.id}) [Site Visits](file:///module/site_visits?propertyId=${p.id}) [Documents](file:///module/documents?propertyId=${p.id})
 
 #### 🧠 AI Recommendation
 This unit is located in a high-demand sector. Pitched to match active buyers seeking ${p.project}.`;
@@ -902,23 +900,23 @@ This unit is located in a high-demand sector. Pitched to match active buyers see
     const data = result.data;
     if (data.type === 'RM Conversion') {
       return `### 📈 RM Conversion Analysis
-Based on closed sales bookings and lead assignment logs:
+Based on closed deals and lead assignment logs:
 ${data.metrics.map(m => `- **${m.name}:** ${m.rate} (${m.role})`).join('\n')}
 ${data.details}`;
     }
     if (data.type === 'Highest Sales') {
       return `### 🏆 Top Selling Employee Analysis
-Based on booking logs and closed sales volume:
-- **Top RM:** ${data.topPerformer} with **${data.volume}** in closed bookings this quarter.
-- **Runner Up:** ${data.runnerUp} with **${data.runnerUpVolume}** in closed bookings this quarter.`;
+Based on closed deal logs and closed sales volume:
+- **Top RM:** ${data.topPerformer} with **${data.volume}** in closed deals this quarter.
+- **Runner Up:** ${data.runnerUp} with **${data.runnerUpVolume}** in closed deals this quarter.`;
     }
     if (data.type === 'Project Bookings Audits') {
       return `### 🏗️ Project Booking Audits
-${data.projects.map(p => `- **${p.name}:** ${p.bookings} bookings (${p.status || 'Active'})`).join('\n')}`;
+${data.projects.map(p => `- **${p.name}:** ${p.bookings} deals (${p.status || 'Active'})`).join('\n')}`;
     }
     if (data.type === 'Monthly Revenue') {
       return `### 📊 CRM Revenue Analysis
-- **Accumulated Monthly Revenue:** **${data.volume}** in closed booking deals.`;
+- **Accumulated Monthly Revenue:** **${data.volume}** in closed deals.`;
     }
     if (data.type === 'Inactive Customers') {
       return `### ⚠️ Inactive Customers
