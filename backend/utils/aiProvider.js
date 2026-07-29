@@ -684,7 +684,7 @@ function generateMockAIResponse(prompt, systemPrompt, context) {
 
   // 6. CRM SEARCH SERVICE ROUTER
   const result = CRMSearchService.search(prompt, context);
-  const rankHeader = result.rankingSummary ? `*Ranked Modules by Score: ${result.rankingSummary}*\n\n` : '';
+  const rankHeader = '';
 
   if (result.type === 'entity360') {
     const info = result.data;

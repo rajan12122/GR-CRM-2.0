@@ -480,7 +480,7 @@
           "type": "ref",
           "refModule": "customers",
           "required": false,
-          "showInTable": true,
+          "showInTable": false,
           "editable": true
         },
         {

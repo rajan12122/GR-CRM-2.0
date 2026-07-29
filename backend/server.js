@@ -1427,23 +1427,35 @@ function handleFollowUpPipelineAction(f, db, req) {
       }
     }
 
-    // 2. Insert new Deal closed
-    const dealId = generateNextId(db, 'deals', 'DEAL');
-    const newDeal = {
-      id: dealId,
-      customerId: finalCustomerId,
-      propertyId: f.pitchedPropertyId || 'PROP-001',
-      employeeId: f.employeeId || 'EMP-001',
-      status: 'Closed',
-      salePrice: f.pitchPrice || 1000000,
-      registrationDate: new Date().toISOString().split('T')[0]
-    };
-    
+    // 2. Insert new Deal closed if not exists
+    const propId = f.pitchedPropertyId || 'PROP-001';
     db.deals = db.deals || [];
-    db.deals.push(newDeal);
-    handleDealStatusChange(newDeal, db, req);
-    writeDb(db);
-    try { syncToSheets('deals'); } catch(e) {}
+    const existingDeal = db.deals.find(d => 
+      String(d.propertyId) === String(propId) && 
+      String(d.customerId) === String(finalCustomerId)
+    );
+
+    if (!existingDeal) {
+      const dealId = generateNextId(db, 'deals', 'DEAL');
+      const newDeal = {
+        id: dealId,
+        customerId: finalCustomerId,
+        propertyId: propId,
+        employeeId: f.employeeId || 'EMP-001',
+        status: 'Closed',
+        salePrice: f.pitchPrice || 1000000,
+        registrationDate: new Date().toISOString().split('T')[0]
+      };
+      db.deals.push(newDeal);
+      handleDealStatusChange(newDeal, db, req);
+      writeDb(db);
+      try { syncToSheets('deals'); } catch(e) {}
+    } else {
+      // Sync/update property ownership even if deal already existed (idempotence)
+      handleDealStatusChange(existingDeal, db, req);
+      writeDb(db);
+      try { syncToSheets('deals'); } catch(e) {}
+    }
   }
 
   // Always update linked lead or query stage dynamically
@@ -4560,14 +4572,151 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
     const cleanDb = filterDb(rawDb);
     const db = filterDbForUser(cleanDb, req.user);
 
-    // 2. RAG: Search database for matches relevant to user message
-    const searchResult = CRMSearchService.search(message, db);
-    
-    // Construct small, highly relevant starting context data from RAG search result
-    const contextData = {};
+    // 2. AI Intent Classification (Preliminary Step)
+    const classificationSystemPrompt = `You are a classification assistant for a Real Estate CRM.
+Your task is to analyze the user's query and extract their intent:
+1. Which CRM module or modules are relevant to search? Choose only from the following list of allowed module keys:
+   - "employees"
+   - "attendance"
+   - "salaries"
+   - "leaves"
+   - "leads"
+   - "follow_ups"
+   - "customers"
+   - "properties"
+   - "projects"
+   - "deals"
+   - "queries"
+   - "daily_price_lists"
+   - "employee_notices"
+   - "documents"
+   Note: Map "payments", "dues", "unpaid amount", "who has paid", "pending payments" to the "deals" module.
+2. What search term or keyword (like a person's name, property ID, location name) is the user looking for?
+3. Any specific filters (such as status: "Pending", "Closed", "Active", "Available", "Under Process") that should be applied.
+
+You must output ONLY a valid JSON object matching the format below, with no markdown styling, no backticks, and no extra conversational text:
+{
+  "modules": ["deals"],
+  "searchTerm": "",
+  "filters": {
+    "status": "Pending"
+  },
+  "intentSummary": "Search for pending or unpaid deals."
+}`;
+
+    let classification = { modules: [], searchTerm: "", filters: {} };
+    try {
+      const classificationRes = await generateAIResponse(message, classificationSystemPrompt);
+      if (classificationRes) {
+        const cleanRes = classificationRes.replace(/```json/i, '').replace(/```/g, '').trim();
+        classification = JSON.parse(cleanRes);
+      }
+    } catch (e) {
+      console.warn("AI intent classification failed or returned plain text. Falling back to heuristic mapping.");
+    }
+
+    // Heuristic Fallback if AI classification didn't return modules
+    if (!classification.modules || classification.modules.length === 0) {
+      const searchResult = CRMSearchService.search(message, db);
+      if (searchResult.type === 'entity360') {
+        classification.modules = [searchResult.data.moduleKey];
+        classification.searchTerm = searchResult.data.record.name || searchResult.data.record.person_name || '';
+      } else if (searchResult.type === 'multipleMatches') {
+        classification.modules = [...new Set(searchResult.data.map(m => m.moduleKey))];
+      } else if (searchResult.type === 'moduleList') {
+        classification.modules = [searchResult.data.moduleKey];
+      } else {
+        // Broad default search if nothing matched
+        classification.modules = ["employees", "leads", "customers", "properties", "deals", "follow_ups"];
+      }
+    }
+
+    // Use classification intent to search & filter database
+    const matchedRecords = [];
     const todayStr = new Date().toLocaleDateString('en-IN');
-    
-    // Add dashboard summary statistics
+    const qWord = classification.searchTerm ? String(classification.searchTerm).toLowerCase().trim() : '';
+    const filters = classification.filters || {};
+
+    for (const mKey of classification.modules) {
+      if (!db[mKey]) continue;
+      let list = db[mKey];
+
+      // Apply intent-based filters (status, date, reference IDs, etc.)
+      if (Object.keys(filters).length > 0) {
+        list = list.filter(rec => {
+          for (const [fKey, fVal] of Object.entries(filters)) {
+            if (fVal === undefined || fVal === null || fVal === '') continue;
+
+            // Handle date filter
+            if (fKey === 'date' && String(fVal).toLowerCase() === 'today') {
+              if (rec.date && rec.date !== todayStr) return false;
+              if (rec.registrationDate && rec.registrationDate !== new Date().toISOString().split('T')[0]) return false;
+              continue;
+            }
+
+            // Handle status/stage filter
+            if (fKey === 'status' || fKey === 'stage') {
+              const recVal = rec.status || rec.stage;
+              if (!recVal || String(recVal).toLowerCase() !== String(fVal).toLowerCase()) {
+                // Support equivalent mappings (Pending <-> Under Process)
+                const fValClean = String(fVal).toLowerCase();
+                const recValClean = String(recVal).toLowerCase();
+                if (fValClean === 'pending' && recValClean === 'under process') continue;
+                if (fValClean === 'under process' && recValClean === 'pending') continue;
+                if (fValClean === 'unpaid' && recValClean === 'pending') continue;
+                return false;
+              }
+              continue;
+            }
+
+            // General field match
+            if (rec[fKey] !== undefined) {
+              if (String(rec[fKey]).toLowerCase() !== String(fVal).toLowerCase()) return false;
+            }
+          }
+          return true;
+        });
+      }
+
+      // Apply search term filter
+      if (qWord) {
+        list = list.filter(rec => {
+          // Direct field check
+          const directMatch = Object.keys(rec).some(k => {
+            const val = rec[k];
+            if (val === undefined || val === null) return false;
+            return String(val).toLowerCase().includes(qWord);
+          });
+          if (directMatch) return true;
+
+          // Reference checks (if property name, employee name, or customer name matched query)
+          if (rec.customerId && db.customers) {
+            const cust = db.customers.find(c => String(c.id) === String(rec.customerId));
+            if (cust && (cust.name || cust.person_name || '').toLowerCase().includes(qWord)) return true;
+          }
+          if (rec.customerId && db.leads) {
+            const lead = db.leads.find(l => String(l.id) === String(rec.customerId));
+            if (lead && (lead.name || lead.person_name || '').toLowerCase().includes(qWord)) return true;
+          }
+          if (rec.employeeId && db.employees) {
+            const emp = db.employees.find(e => String(e.id) === String(rec.employeeId));
+            if (emp && (emp.name || '').toLowerCase().includes(qWord)) return true;
+          }
+          if (rec.propertyId && db.properties) {
+            const prop = db.properties.find(p => String(p.id) === String(rec.propertyId));
+            if (prop && (prop.propertyName || prop.name || '').toLowerCase().includes(qWord)) return true;
+          }
+          return false;
+        });
+      }
+
+      for (const rec of list) {
+        matchedRecords.push({ moduleKey: mKey, rec });
+      }
+    }
+
+    // Populate context data for main AI prompt grounding
+    const contextData = {};
     contextData.todaySummary = {
       todayDate: todayStr,
       followUpsToday: (db.follow_ups || []).filter(f => f.status !== 'Completed' && f.date === todayStr).length,
@@ -4577,49 +4726,32 @@ app.post('/api/ai/chat', authenticateToken, async (req, res) => {
       totalPropertiesCount: (db.properties || []).filter(p => p.status === 'Available').length
     };
 
-    if (searchResult.type === 'entity360') {
-      contextData[searchResult.data.moduleKey] = [searchResult.data.record];
-      if (searchResult.data.parents) {
-        for (const parentKey in searchResult.data.parents) {
-          contextData[parentKey] = [searchResult.data.parents[parentKey]];
-        }
-      }
-      if (searchResult.data.related) {
-        for (const relatedKey in searchResult.data.related) {
-          // Limit related items to top 15 results to minimize token size
-          contextData[relatedKey] = searchResult.data.related[relatedKey].slice(0, 15);
-        }
-      }
-    } else if (searchResult.type === 'multipleMatches') {
-      // Limit multiple matches to top 15-20 most relevant results
-      const matches = searchResult.data.slice(0, 20);
-      for (const item of matches) {
+    if (matchedRecords.length > 0) {
+      for (const item of matchedRecords) {
         if (!contextData[item.moduleKey]) {
           contextData[item.moduleKey] = [];
         }
-        const record = (db[item.moduleKey] || []).find(r => String(r.id) === String(item.id));
-        if (record) {
-          contextData[item.moduleKey].push(record);
+        // Limit to max 15 records per module
+        if (contextData[item.moduleKey].length < 15) {
+          contextData[item.moduleKey].push(item.rec);
         }
       }
-    } else if (searchResult.type === 'moduleList') {
-      // Limit list records to top 15
-      contextData[searchResult.data.moduleKey] = searchResult.data.records.slice(0, 15);
-    }
-
-    if (Object.keys(contextData).length === 1) {
+    } else {
       contextData.searchResults = [];
       contextData.note = "No matching records found for this query";
     }
 
-    const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot). Answer queries using database lists or the tools provided to search more if needed. Keep replies data-centric.
+    const systemPrompt = `You are an advanced AI Assistant for a Real Estate CRM (Gagan Realtech Copilot).
 CRITICAL GROUNDING RULE: Never invent, imagine, or fabricate any record, ID, name, price, date, or status not present in the CRM Database Context below. If asked for an 'example,' politely explain you can only show real data from the CRM, not made-up examples.
 
 If an EXACT match exists, show it normally. If NO exact match exists, you may show up to 3 closest alternative results, but you must clearly label them with the heading 'No exact match found. Closest alternatives:' before listing them — never present an approximate result as if it were an exact match. If there are zero results even approximately close, say so plainly and do not invent one.
 
 If no button format is explicitly defined below for a type of record you are discussing, do not invent new button labels — only use the exact button formats listed below, or omit buttons entirely for that record type.
 
-CRITICAL FORMATTING INSTRUCTIONS:
+CRITICAL FORMATTING & STYLE INSTRUCTIONS:
+- Answer the user's question in natural, conversational language first, in your own words, as a knowledgeable assistant would — then present the specific matching records below your explanation using the existing card format.
+- Do not show scores, percentages, rankings, or any internal reasoning about how matches were found.
+- Do not use asterisks or markdown headers for casual conversational replies — only use the structured card format when actually presenting record data.
 - You must NEVER display plain text records when a corresponding page exists.
 - Every record must be clickable and contain quick action buttons. Format them exactly using the markdown: [Button Label](file:///module/path) or [Button Label](https://...).
 - Wrap all matching search keywords, names, statuses, and dates in double asterisks, e.g. **Rajan Gupta**, **Active**, **24/07/2026**.

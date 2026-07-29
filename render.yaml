@@ -24,14 +24,6 @@ services:
       - key: JWT_SECRET
         generateValue: true
 
-databases:
-  - name: gr-crm-db
-    databaseName: gr_crm
-    user: gr_crm_user
-    region: singapore
-    plan: free
-
-
   # Frontend React Static Site
   - type: web
     name: gr-crm-frontend
@@ -43,3 +35,11 @@ databases:
       - type: rewrite
         source: /*
         destination: /index.html
+
+databases:
+  - name: gr-crm-db
+    databaseName: gr_crm
+    user: gr_crm_user
+    region: singapore
+    plan: free
+
