@@ -156,6 +156,7 @@ const DynamicForm = ({
       }
       if (type === 'Seller' || type === 'Seller Client') {
         if (f.name === 'budget') return false;
+        if (f.name === 'demand') return false;
         const duplicateFields = [
           'r_c_i',
           'propertyType',
@@ -195,6 +196,9 @@ const DynamicForm = ({
     if (moduleKey === 'properties') {
       if (f.name === 'current_owner_id') return false;
       if (f.name === 'dealerId' || f.name === 'dealer_deal_type') {
+        return formData.dealer_owner_booked === 'Dealer';
+      }
+      if (f.name === 'firm_name') {
         return formData.dealer_owner_booked === 'Dealer';
       }
       if (f.name === 'booked_by_customer_id') {
@@ -407,7 +411,7 @@ const DynamicForm = ({
     }
   }, [open, initialData, fields, user]);
 
-  const isSellerLead = moduleKey === 'leads' && formData.leadType === 'Seller';
+  const isSellerLead = moduleKey === 'leads' && (formData.leadType === 'Seller' || formData.leadType === 'Seller Client');
   const isSellerQuery = moduleKey === 'queries' && formData.queryType === 'Sell Property';
   const showSellerPropertyForm = isSellerLead || isSellerQuery;
 
@@ -426,21 +430,36 @@ const DynamicForm = ({
         }
       }
 
-      if (ownerName || ownerPhone) {
-        setNestedPropertyData(prev => ({
-          ...prev,
-          contact_person_name: ownerName,
-          contact_number: ownerPhone
-        }));
-      }
+      setNestedPropertyData(prev => {
+        const updated = { ...prev };
+        if (!updated.contact_person_name || updated.contact_person_name === prev._lastSyncName) {
+          updated.contact_person_name = ownerName;
+          updated._lastSyncName = ownerName;
+        }
+        if (!updated.contact_number || updated.contact_number === prev._lastSyncPhone) {
+          updated.contact_number = ownerPhone;
+          updated._lastSyncPhone = ownerPhone;
+        }
+        return updated;
+      });
     }
   }, [showSellerPropertyForm, formData.name, formData.person_name, formData.phone, formData.contact_num, formData.customerId, moduleData.customers, moduleData.leads]);
 
   const handleNestedPropertyChange = (name, val) => {
-    setNestedPropertyData(prev => ({
-      ...prev,
-      [name]: val
-    }));
+    setNestedPropertyData(prev => {
+      const updated = { ...prev, [name]: val };
+      if (name === 'dealer_owner_booked' && val === 'Direct') {
+        const ownerName = formData.name || formData.person_name || '';
+        const ownerPhone = formData.phone || formData.contact_num || '';
+        if (!updated.contact_person_name) {
+          updated.contact_person_name = ownerName;
+        }
+        if (!updated.contact_number) {
+          updated.contact_number = ownerPhone;
+        }
+      }
+      return updated;
+    });
   };
 
   const handleChange = (name, val, type) => {
@@ -1794,6 +1813,9 @@ const DynamicForm = ({
                       if (f.name === 'current_owner_id') return false;
                       if (f.name === 'source' || f.name === 'leadSource' || f.name === 'lead_source') return false;
                       if (f.name === 'dealerId' || f.name === 'dealer_deal_type') {
+                        return nestedPropertyData.dealer_owner_booked === 'Dealer';
+                      }
+                      if (f.name === 'firm_name') {
                         return nestedPropertyData.dealer_owner_booked === 'Dealer';
                       }
                       if (f.name === 'booked_by_customer_id') {

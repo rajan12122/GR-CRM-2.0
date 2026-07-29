@@ -2110,6 +2110,13 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       }
 
       if (module === 'leads') {
+        if (payload.propertyId && !payload.demand) {
+          db.properties = db.properties || [];
+          const assocProp = db.properties.find(p => String(p.id) === String(payload.propertyId));
+          if (assocProp) {
+            payload.demand = assocProp.demand || '';
+          }
+        }
         if (payload.leadType === 'Seller') {
           payload.status = 'Converted';
           payload.assignmentStatus = 'accepted';
