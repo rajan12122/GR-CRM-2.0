@@ -70,6 +70,14 @@ const DynamicIcon = ({ name, size = 20, color = 'currentColor', ...props }) => {
   return <IconComponent size={size} color={color} {...props} />;
 };
 
+const parseTabLabel = (label) => {
+  const match = label.match(/^(.*?)\s*\((\d+)\)$/);
+  if (match) {
+    return { name: match[1], count: match[2] };
+  }
+  return { name: label, count: null };
+};
+
 const EntityDetail = () => {
   const { moduleName, id } = useParams();
   const navigate = useNavigate();
@@ -1026,27 +1034,152 @@ const EntityDetail = () => {
         {/* Right Side: Tabbed Salesforce 360 Linked Lists */}
         <Grid item xs={12} md={8}>
           <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', minHeight: '560px', display: 'flex', flexDirection: 'column' }}>
-            <Tabs 
-              value={activeTab} 
-              onChange={(e, val) => setActiveTab(val)}
-              variant="scrollable"
-              scrollButtons="auto"
-              sx={{ borderBottom: '1px solid #E2E8F0', px: 2, pt: 1, backgroundColor: '#F8FAFC', borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}
-            >
-              {tabs.map((t, idx) => (
-                <Tab 
-                  key={idx} 
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <DynamicIcon name={t.icon} size={16} />
-                      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px', textTransform: 'none' }}>
-                        {t.label}
-                      </Typography>
-                    </Box>
-                  } 
-                />
-              ))}
-            </Tabs>
+            {/* KPI Cards Selector Tabs */}
+            <Box sx={{ p: 2, backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}>
+              <Grid container spacing={1.5}>
+                {tabs.map((t, idx) => {
+                  const { name, count: rawCount } = parseTabLabel(t.label);
+                  const count = (() => {
+                    if (rawCount !== null) return parseInt(rawCount, 10);
+                    const nameLower = name.toLowerCase();
+                    if (nameLower.includes('timeline')) return connections?.timeline?.length || 0;
+                    if (nameLower.includes('owner history')) return connections?.owners?.length || 0;
+                    if (nameLower.includes('matcher')) return 'Matcher';
+                    if (nameLower.includes('copilot') || nameLower.includes('ai')) return 'Active';
+                    return null;
+                  })();
+                  const isActive = activeTab === idx;
+                  return (
+                    <Grid item xs={6} sm={4} md={3} key={idx}>
+                      <Box
+                        onClick={() => setActiveTab(idx)}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: '12px',
+                          border: '2px solid',
+                          borderColor: isActive ? '#2563EB' : '#E2E8F0',
+                          backgroundColor: isActive ? '#EFF6FF' : '#FFFFFF',
+                          boxShadow: isActive ? '0 4px 6px -1px rgba(37, 99, 235, 0.1), 0 2px 4px -1px rgba(37, 99, 235, 0.05)' : 'none',
+                          cursor: 'pointer',
+                          height: '100%',
+                          minHeight: '76px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          userSelect: 'none',
+                          '&:hover': {
+                            borderColor: isActive ? '#2563EB' : '#CBD5E1',
+                            boxShadow: isActive 
+                              ? '0 4px 6px -1px rgba(37, 99, 235, 0.15)' 
+                              : '0 2px 4px -1px rgba(0,0,0,0.05)',
+                            transform: 'translateY(-2px)'
+                          },
+                          transition: 'all 0.15s ease-in-out'
+                        }}
+                      >
+                        {/* Background icon watermark on hover/active */}
+                        <Box 
+                          sx={{ 
+                            position: 'absolute', 
+                            right: '-8px', 
+                            bottom: '-8px', 
+                            opacity: isActive ? 0.08 : 0.03, 
+                            color: isActive ? '#2563EB' : '#94A3B8',
+                            pointerEvents: 'none',
+                            transition: 'all 0.15s ease-in-out'
+                          }}
+                        >
+                          <DynamicIcon name={t.icon} size={64} />
+                        </Box>
+
+                        <Box display="flex" alignItems="center" gap={1} sx={{ position: 'relative', zIndex: 1 }}>
+                          <Box 
+                            sx={{ 
+                              p: 0.75, 
+                              borderRadius: '6px', 
+                              backgroundColor: isActive ? '#3B82F6' : '#F1F5F9',
+                              color: isActive ? '#FFFFFF' : '#64748B',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s ease-in-out'
+                            }}
+                          >
+                            <DynamicIcon name={t.icon} size={15} />
+                          </Box>
+                          <Typography 
+                            variant="subtitle2" 
+                            sx={{ 
+                              fontWeight: 700, 
+                              color: isActive ? '#1E3A8A' : '#475569',
+                              fontSize: '11px',
+                              lineHeight: 1.1
+                            }}
+                          >
+                            {name}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ mt: 1, display: 'flex', alignItems: 'baseline', gap: 0.5, position: 'relative', zIndex: 1 }}>
+                          {typeof count === 'number' ? (
+                            <>
+                              <Typography 
+                                variant="h5" 
+                                sx={{ 
+                                  fontWeight: 800, 
+                                  color: isActive ? '#2563EB' : '#1E293B',
+                                  lineHeight: 1,
+                                  fontFamily: 'Poppins'
+                                }}
+                              >
+                                {count}
+                              </Typography>
+                              <Typography 
+                                variant="caption" 
+                                sx={{ 
+                                  color: isActive ? '#3B82F6' : '#94A3B8',
+                                  fontWeight: 600,
+                                  fontSize: '9px'
+                                }}
+                              >
+                                entries
+                              </Typography>
+                            </>
+                          ) : count ? (
+                            <Typography 
+                              variant="subtitle1" 
+                              sx={{ 
+                                fontWeight: 800, 
+                                color: isActive ? '#2563EB' : '#475569',
+                                lineHeight: 1,
+                                fontFamily: 'Poppins',
+                                fontSize: '12px'
+                              }}
+                            >
+                              {count}
+                            </Typography>
+                          ) : (
+                            <Typography 
+                              variant="subtitle1" 
+                              sx={{ 
+                                fontWeight: 800, 
+                                color: '#94A3B8',
+                                lineHeight: 1,
+                                fontSize: '12px'
+                              }}
+                            >
+                              —
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </Box>
 
             <Box sx={{ p: 3, flexGrow: 1 }}>
               {tabs[activeTab]?.label === 'Property Matcher' && (
