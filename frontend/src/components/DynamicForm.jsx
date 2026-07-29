@@ -1420,15 +1420,46 @@ const DynamicForm = ({
                             />
                           </MenuItem>
                         )}
+                        {f.refModule === 'properties' && (
+                          <MenuItem
+                            disableRipple
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            sx={{ 
+                              backgroundColor: 'transparent !important', 
+                              cursor: 'default',
+                              p: '4px 16px',
+                              '&:hover': { backgroundColor: 'transparent' }
+                            }}
+                          >
+                            <TextField
+                              size="small"
+                              placeholder="Search properties..."
+                              fullWidth
+                              value={propSearch}
+                              onChange={(e) => setPropSearch(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            />
+                          </MenuItem>
+                        )}
                         {options.filter(opt => {
-                          if (f.refModule !== 'dealers' || !dealerSearch) return true;
-                          const name = opt.name || opt.firm_name || opt.person_name || '';
-                          const searchStr = `${name} ${opt.id}`.toLowerCase();
-                          return searchStr.includes(dealerSearch.toLowerCase());
+                          if (f.refModule === 'dealers' && dealerSearch) {
+                            const name = opt.name || opt.firm_name || opt.person_name || '';
+                            const searchStr = `${name} ${opt.id}`.toLowerCase();
+                            return searchStr.includes(dealerSearch.toLowerCase());
+                          }
+                          if (f.refModule === 'properties' && propSearch) {
+                            const desc = `${opt.locality || ''} ${opt.sector_block || ''} ${opt.propertyType || ''} ${opt.id}`.toLowerCase();
+                            return desc.includes(propSearch.toLowerCase());
+                          }
+                          return true;
                         }).map(opt => (
                           <MenuItem key={opt.id} value={opt.id}>
                             {f.refModule === 'dealers'
                               ? `${opt.firm_name || opt.person_name || 'Dealer'} (${opt.id})`
+                              : f.refModule === 'properties'
+                              ? `${opt.locality || ''} ${opt.sector_block ? `(Sec ${opt.sector_block})` : ''} ${opt.propertyType || ''} - ${opt.id}`
                               : opt.name ? `${opt.name} (${opt.id})` : opt.id
                             }
                           </MenuItem>

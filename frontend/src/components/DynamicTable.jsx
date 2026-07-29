@@ -79,7 +79,15 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
   if (!resolvedName) {
     const list = moduleData[resolvedModule] || [];
     const record = list.find(r => String(r.id) === String(id));
-    resolvedName = record ? (record.propertyName || record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed') : id;
+    if (record) {
+      if (resolvedModule === 'properties') {
+        resolvedName = `${record.locality || ''} ${record.sector_block ? `(Sec ${record.sector_block})` : ''} ${record.propertyType || ''} (${record.id})`;
+      } else {
+        resolvedName = record.propertyName || record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed';
+      }
+    } else {
+      resolvedName = id;
+    }
   }
   
   return (

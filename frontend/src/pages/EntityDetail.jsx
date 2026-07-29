@@ -107,7 +107,7 @@ const EntityDetail = () => {
     }
     const list = moduleData.properties || [];
     const p = list.find(x => String(x.id) === String(propId));
-    return p ? (p.propertyName || p.name || `Property: ${propId}`) : `Property: ${propId}`;
+    return p ? `${p.locality || ''} ${p.sector_block ? `(Sec ${p.sector_block})` : ''} ${p.propertyType || ''} (${p.id})` : `Property: ${propId}`;
   };
   
   // Custom dialogs & form states for ERP features
