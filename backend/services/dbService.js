@@ -52,6 +52,45 @@ async function initializeMetadata() {
     if (res.rows.length > 0) {
       metadataCache = res.rows[0].value;
       console.log('Successfully loaded metadataCache from PostgreSQL app_metadata.');
+
+      // Check if local file contains modules or columns that are missing in PostgreSQL metadataCache
+      if (fs.existsSync(metadataPath)) {
+        try {
+          const localMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+          let needsUpdate = false;
+          if (localMetadata && localMetadata.modules) {
+            for (const mKey of Object.keys(localMetadata.modules)) {
+              if (!metadataCache.modules || !metadataCache.modules[mKey]) {
+                console.log(`Local metadata contains new module "${mKey}" not present in PostgreSQL. Syncing...`);
+                needsUpdate = true;
+                break;
+              }
+            }
+            if (!needsUpdate) {
+              for (const mKey of Object.keys(localMetadata.modules)) {
+                const localFields = localMetadata.modules[mKey].fields || [];
+                const dbFields = metadataCache.modules?.[mKey]?.fields || [];
+                if (localFields.length !== dbFields.length) {
+                  console.log(`Local fields count for "${mKey}" differs from PostgreSQL. Syncing...`);
+                  needsUpdate = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (needsUpdate) {
+            metadataCache = localMetadata;
+            await client.query(`
+              INSERT INTO app_metadata (key, value)
+              VALUES ('main_metadata', $1)
+              ON CONFLICT (key) DO UPDATE SET value = $1;
+            `, [JSON.stringify(localMetadata)]);
+            console.log('Successfully updated PostgreSQL app_metadata from local file due to schema updates.');
+          }
+        } catch (e) {
+          console.error('Error during local metadata auto-sync:', e.message);
+        }
+      }
     } else {
       // If missing in PG, read from local file as fallback, and write to PG!
       let localMetadata = { modules: {}, chips: {} };
