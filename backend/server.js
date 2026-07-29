@@ -4326,34 +4326,7 @@ app.post('/api/ai/lead-scoring', authenticateToken, (req, res) => {
     .catch(err => res.status(500).json({ error: err.message }));
 });
 
-app.post('/api/ai/property-recommendations', authenticateToken, (req, res) => {
-  const { customerId } = req.body;
-  const db = filterDb(readDb());
 
-  const customer = (db.customers || []).find(c => String(c.id) === String(customerId)) ||
-                   (db.leads || []).find(l => String(l.id) === String(customerId));
-
-  if (!customer) return res.status(404).json({ message: "Customer/Lead not found." });
-
-  const contextData = {
-    customer,
-    properties: db.properties || []
-  };
-
-  const systemPrompt = `Compare available properties against buyer constraints and return a JSON list of matches containing { "id": string, "name": string, "locality": string, "price": string, "propertyType": string, "matchPercentage": number }.`;
-  const prompt = `Recommend property listings matching customer constraints.`;
-
-  generateAIResponse(prompt, systemPrompt, contextData)
-    .then(result => {
-      try {
-        const parsed = JSON.parse(result);
-        res.json(parsed);
-      } catch (e) {
-        res.json([]);
-      }
-    })
-    .catch(err => res.status(500).json({ error: err.message }));
-});
 
 app.post('/api/ai/generate-content', authenticateToken, (req, res) => {
   const { type, customerId, projectName } = req.body;

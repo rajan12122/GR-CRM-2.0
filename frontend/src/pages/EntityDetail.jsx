@@ -41,6 +41,7 @@ import {
 import * as Icons from 'lucide-react';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 import EntityTooltip from '../components/EntityTooltip';
+import PropertyMatcher from '../components/PropertyMatcher';
 
 const getSingularLabel = (label) => {
   if (!label) return '';
@@ -232,8 +233,6 @@ const EntityDetail = () => {
   const [aiLabel, setAiLabel] = useState('Cold');
   const [aiReasons, setAiReasons] = useState([]);
   const [aiScoreLoading, setAiScoreLoading] = useState(false);
-  const [aiProperties, setAiProperties] = useState([]);
-  const [aiPropertiesLoading, setAiPropertiesLoading] = useState(false);
   const [aiContent, setAiContent] = useState('');
   const [aiContentType, setAiContentType] = useState('whatsapp');
   const [aiContentLoading, setAiContentLoading] = useState(false);
@@ -341,6 +340,7 @@ const EntityDetail = () => {
       list.push({ label: 'Activity Timeline', icon: 'Clock' });
       list.push({ label: `Docs & Files (${connections.documents?.length || 0})`, icon: 'FileText' });
       list.push({ label: `Referrals (${connections.referrals?.length || 0})`, icon: 'UserPlus' });
+      list.push({ label: 'Property Matcher', icon: 'Home' });
       list.push({ label: 'AI Copilot Summary', icon: 'Cpu' });
     } else if (moduleName === 'properties') {
       list.push({ label: 'Overview', icon: 'Home' });
@@ -357,6 +357,7 @@ const EntityDetail = () => {
       list.push({ label: `Docs Vault (${connections?.documents?.length || 0})`, icon: 'FolderOpen' });
       list.push({ label: `Referrals (${connections?.referrals?.length || 0})`, icon: 'UserPlus' });
       list.push({ label: `Wanted Requirements (${connections?.wanted_properties?.length || 0})`, icon: 'Clipboard' });
+      list.push({ label: 'Property Matcher', icon: 'Home' });
     } else if (moduleName === 'projects') {
       list.push({ label: 'Project Specifications', icon: 'Home' });
       list.push({ label: `Pitched & Showings History (${connections.pitches?.length || 0})`, icon: 'Eye' });
@@ -373,6 +374,9 @@ const EntityDetail = () => {
       if (moduleName === 'employees') {
         list.push({ label: `Odometer & Travel Logs (${travelLogs.length})`, icon: 'Compass' });
         list.push({ label: `Referrals (${connections.referrals?.length || 0})`, icon: 'UserPlus' });
+      }
+      if (['leads', 'follow_ups', 'queries', 'wanted_properties'].includes(moduleName)) {
+        list.push({ label: 'Property Matcher', icon: 'Home' });
       }
     }
     return list;
@@ -632,30 +636,8 @@ const EntityDetail = () => {
         }
       };
 
-      // 3. Fetch Property Recommendations
-      const fetchRecs = async () => {
-        setAiPropertiesLoading(true);
-        try {
-          const res = await fetch(`${API_BASE_URL}/ai/property-recommendations`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('gr_crm_token')}`
-            },
-            body: JSON.stringify({ customerId: id })
-          });
-          const data = await res.json();
-          setAiProperties(data || []);
-        } catch (e) {
-          console.error("AI property matching failed:", e);
-        } finally {
-          setAiPropertiesLoading(false);
-        }
-      };
-
       fetchSummary();
       fetchScore();
-      fetchRecs();
     }
   }, [activeTab, id, moduleName, tabs]);
 
@@ -1267,6 +1249,9 @@ const EntityDetail = () => {
             </Tabs>
 
             <Box sx={{ p: 3, flexGrow: 1 }}>
+              {tabs[activeTab]?.label === 'Property Matcher' && (
+                <PropertyMatcher />
+              )}
               {/* 1. CUSTOMER TABS */}
               {moduleName === 'customers' && (
                 <Box>
@@ -1751,40 +1736,7 @@ const EntityDetail = () => {
                           </Paper>
                         </Grid>
 
-                        {/* Row 2: Property Matching & Recommendations */}
-                        <Grid item xs={12} md={6}>
-                          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Icons.Home size={16} />
-                              Matched Inventory Recommendations
-                            </Typography>
-                            {aiPropertiesLoading ? (
-                              <CircularProgress size={24} />
-                            ) : aiProperties.length > 0 ? (
-                              <Box display="flex" flexDirection="column" gap={1.5}>
-                                {aiProperties.map((p) => (
-                                  <Paper key={p.id} variant="outlined" sx={{ p: 1.5, borderRadius: '12px', borderColor: '#F1F5F9', backgroundColor: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Box>
-                                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#1E293B' }}>{p.name}</Typography>
-                                      <Typography variant="caption" sx={{ color: '#64748B' }}>Locality: {p.locality} • Demand: {p.price}</Typography>
-                                    </Box>
-                                    <Box display="flex" flexDirection="column" alignItems="flex-end" gap={0.5}>
-                                      <Chip label={`${p.matchPercentage}% Match`} color="success" size="small" sx={{ fontWeight: 700, fontSize: '10px' }} />
-                                      <Button size="small" variant="text" onClick={() => navigate(`/module/properties/${p.id}`)} sx={{ fontSize: '10px', textTransform: 'none', fontWeight: 700, p: 0 }}>
-                                        View Details
-                                      </Button>
-                                    </Box>
-                                  </Paper>
-                                ))}
-                              </Box>
-                            ) : (
-                              <Typography variant="caption" sx={{ color: '#64748B' }}>No inventory matches found within budget segment.</Typography>
-                            )}
-                          </Paper>
-                        </Grid>
-
-                        {/* Row 3: Follow-up & Template Generator */}
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12} md={12}>
                           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: '16px', border: '1px solid #E2E8F0' }}>
                             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                               <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1 }}>
