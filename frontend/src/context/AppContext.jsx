@@ -1,6 +1,7 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 import { encryptData } from '../utils/crypto';
 
 const AppContext = createContext();
@@ -28,6 +29,189 @@ export const AppProvider = ({ children }) => {
   const [reloadKey, setReloadKey] = useState(0);
 
   const triggerAppReload = () => setReloadKey(prev => prev + 1);
+
+  // Background Location Tracking state & references
+  const [sharingLocation, setSharingLocation] = useState(
+    localStorage.getItem('gr_sharing_location') === 'true'
+  );
+  const [sharingError, setSharingError] = useState('');
+  const watchIdRef = useRef(null);
+  const intervalIdRef = useRef(null);
+
+  const startLocationSharing = async () => {
+    if (watchIdRef.current || intervalIdRef.current) return;
+
+    setSharingLocation(true);
+    setSharingError("");
+    localStorage.setItem('gr_sharing_location', 'true');
+
+    const captureLocation = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+          if (pos) {
+            setSharingError("");
+            await logEmployeeLocation(pos.coords.latitude, pos.coords.longitude, 'sharing');
+          }
+        } catch (err) {
+          console.warn("GPS initial lock weak/delay:", err);
+          const isPerm = err.code === 1 || (err.message && err.message.toLowerCase().includes('permission'));
+          if (isPerm) {
+            setSharingError("Failed to lock location. Please enable GPS permissions.");
+          }
+        }
+      } else {
+        if (!navigator.geolocation) {
+          setSharingError("Geolocation is not supported by your browser/device.");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            if (pos) {
+              setSharingError("");
+              await logEmployeeLocation(pos.coords.latitude, pos.coords.longitude, 'sharing');
+            }
+          },
+          (err) => {
+            console.warn("GPS initial lock weak/delay:", err);
+            if (err.code === 1) {
+              setSharingError("Failed to lock location. Please enable GPS permissions.");
+            }
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      }
+    };
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        let status = await Geolocation.checkPermissions();
+        if (status.location !== 'granted') {
+          status = await Geolocation.requestPermissions();
+        }
+        if (status.location !== 'granted') {
+          setSharingError("Failed to lock location. Please enable GPS permissions.");
+          setSharingLocation(false);
+          localStorage.removeItem('gr_sharing_location');
+          return;
+        }
+
+        await captureLocation();
+
+        const watchId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+          async (pos, err) => {
+            if (err) {
+              console.warn("GPS watch position error:", err);
+              return;
+            }
+            if (pos) {
+              setSharingError("");
+              await logEmployeeLocation(pos.coords.latitude, pos.coords.longitude, 'sharing');
+            }
+          }
+        );
+        watchIdRef.current = watchId;
+      } catch (err) {
+        console.error("Error starting location sharing on native platform:", err);
+        setSharingLocation(false);
+        localStorage.removeItem('gr_sharing_location');
+        return;
+      }
+    } else {
+      if (!navigator.geolocation) {
+        setSharingError("Geolocation is not supported by your browser/device.");
+        return;
+      }
+
+      await captureLocation();
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        async (pos) => {
+          if (pos) {
+            setSharingError("");
+            await logEmployeeLocation(pos.coords.latitude, pos.coords.longitude, 'sharing');
+          }
+        },
+        (err) => {
+          if (err.code === 1) {
+            setSharingError("Failed to lock location. Please enable GPS permissions.");
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    intervalIdRef.current = setInterval(captureLocation, 10000);
+  };
+
+  const endLocationSharing = async () => {
+    setSharingLocation(false);
+    localStorage.removeItem('gr_sharing_location');
+    setSharingError("");
+
+    if (watchIdRef.current) {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await Geolocation.clearWatch({ id: watchIdRef.current });
+        } catch (e) {
+          console.error("Error clearing watch", e);
+        }
+      } else {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      watchIdRef.current = null;
+    }
+
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
+
+    await logEmployeeLocation(0, 0, 'ended');
+  };
+
+  // Auto sharing location manager effect
+  useEffect(() => {
+    if (!user) {
+      if (watchIdRef.current || intervalIdRef.current) {
+        endLocationSharing();
+      }
+      return;
+    }
+
+    const todayDateStr = new Date().toISOString().split('T')[0];
+    const todayRecord = (moduleData.attendance || []).find(
+      a => String(a.employeeId) === String(user?.id) && a.date === todayDateStr
+    );
+    const isCurrentlyCheckedIn = todayRecord && todayRecord.outTime === '--';
+
+    if (isCurrentlyCheckedIn) {
+      if (!watchIdRef.current && !intervalIdRef.current) {
+        startLocationSharing();
+      }
+    } else {
+      if (watchIdRef.current || intervalIdRef.current) {
+        endLocationSharing();
+      }
+    }
+  }, [user, moduleData.attendance]);
+
+  // Clean up on provider unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current) {
+        if (Capacitor.isNativePlatform()) {
+          Geolocation.clearWatch({ id: watchIdRef.current }).catch(() => {});
+        } else {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+      }
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+      }
+    };
+  }, []);
 
   // Load user profile and metadata if token exists
   useEffect(() => {
@@ -393,7 +577,11 @@ export const AppProvider = ({ children }) => {
         triggerFullSheetsSync,
         logEmployeeLocation,
         hasPermission,
-        refreshMetadata
+        refreshMetadata,
+        sharingLocation,
+        sharingError,
+        startLocationSharing,
+        endLocationSharing
       }}
     >
       {children}

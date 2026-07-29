@@ -224,15 +224,6 @@ const Dashboard = () => {
       };
       await createRecord('attendance', payload);
       fetchModuleData('attendance');
-      
-      // Auto share location
-      if (Capacitor.isNativePlatform()) {
-        try {
-          await logEmployeeLocation(user?.id, todayDateStr, "Check In via Dashboard");
-        } catch (err) {
-          console.error("Location share error:", err);
-        }
-      }
     } catch (e) {
       console.error(e);
     }
@@ -248,15 +239,6 @@ const Dashboard = () => {
         outTime: timeStr
       });
       fetchModuleData('attendance');
-      
-      // Auto stop/log location check-out
-      if (Capacitor.isNativePlatform()) {
-        try {
-          await logEmployeeLocation(user?.id, todayDateStr, "Check Out via Dashboard");
-        } catch (err) {
-          console.error("Location share error:", err);
-        }
-      }
     } catch (e) {
       console.error(e);
     }
