@@ -334,7 +334,8 @@ const EntityDetail = () => {
     if (!connections) return list;
     
     if (moduleName === 'customers') {
-      list.push({ label: 'Overview', icon: 'User' });
+      list.push({ label: `Client Remarks (${connections.remarks?.length || 0})`, icon: 'MessageSquare' });
+      list.push({ label: `Pitches & Showings (${connections.pitches?.length || 0})`, icon: 'Eye' });
       list.push({ label: `Queries (${connections.queries?.length || 0})`, icon: 'HelpCircle' });
       list.push({ label: `Deals (${connections.deals?.length || 0})`, icon: 'Handshake' });
       list.push({ label: 'Activity Timeline', icon: 'Clock' });
@@ -343,7 +344,7 @@ const EntityDetail = () => {
       list.push({ label: 'Property Matcher', icon: 'Home' });
       list.push({ label: 'AI Copilot Summary', icon: 'Cpu' });
     } else if (moduleName === 'properties') {
-      list.push({ label: 'Overview', icon: 'Home' });
+      list.push({ label: `Property Remarks (${connections.remarks?.length || 0})`, icon: 'MessageSquare' });
       list.push({ label: `Pitches & Showings (${connections.pitches?.length || 0})`, icon: 'Eye' });
       list.push({ label: `Price/Status History Logs (${connections.history?.length || 0})`, icon: 'Clock' });
       list.push({ label: 'Owner History', icon: 'UserCheck' });
@@ -351,9 +352,12 @@ const EntityDetail = () => {
       list.push({ label: `Deals History (${connections.deals?.length || 0})`, icon: 'TrendingUp' });
       list.push({ label: 'Activity Timeline', icon: 'Clock' });
     } else if (moduleName === 'dealers') {
-      list.push({ label: 'Overview & Activity', icon: 'Building' });
+      list.push({ label: 'Overview & Outreach', icon: 'Building' });
+      list.push({ label: `General Remarks (${connections?.remarks?.length || 0})`, icon: 'MessageSquare' });
+      list.push({ label: 'Activity Timeline', icon: 'Clock' });
+      list.push({ label: `Property Listings (${connections?.properties?.length || 0})`, icon: 'Home' });
       list.push({ label: `Pitches & Showings (${connections?.pitches?.length || 0})`, icon: 'Eye' });
-      list.push({ label: `Dealer Interaction History (${connections?.calls?.length || 0})`, icon: 'PhoneCall' });
+      list.push({ label: `Call History (${connections?.calls?.length || 0})`, icon: 'PhoneCall' });
       list.push({ label: `Docs Vault (${connections?.documents?.length || 0})`, icon: 'FolderOpen' });
       list.push({ label: `Referrals (${connections?.referrals?.length || 0})`, icon: 'UserPlus' });
       list.push({ label: `Wanted Requirements (${connections?.wanted_properties?.length || 0})`, icon: 'Clipboard' });
@@ -1051,7 +1055,7 @@ const EntityDetail = () => {
               {/* 1. CUSTOMER TABS */}
               {moduleName === 'customers' && (
                 <Box>
-                  {/* Tab 0: Customer Overview & Remarks */}
+                  {/* Tab 0: Client Remarks */}
                   {activeTab === 0 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Client Remarks & Feedback Logs</Typography>
@@ -1088,8 +1092,12 @@ const EntityDetail = () => {
                           </Paper>
                         ))
                       )}
+                    </Box>
+                  )}
 
-                      <Divider sx={{ my: 4 }} />
+                  {/* Tab 1: Pitches & Showings */}
+                  {activeTab === 1 && (
+                    <Box>
                       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                         <Typography variant="h6" sx={{ fontWeight: 700, fontFamily: 'Poppins' }}>Pitched Properties & Details</Typography>
                         <Button 
@@ -1163,8 +1171,8 @@ const EntityDetail = () => {
                     </Box>
                   )}
 
-                  {/* Tab 1: Queries */}
-                  {activeTab === 1 && (
+                  {/* Tab 2: Queries */}
+                  {activeTab === 2 && (
                     <Box>
                       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                         <Typography variant="h6" sx={{ fontWeight: 700, fontFamily: 'Poppins' }}>Active Property Queries</Typography>
@@ -1268,8 +1276,8 @@ const EntityDetail = () => {
                     </Box>
                   )}
 
-                  {/* Tab 2: Deals */}
-                  {activeTab === 2 && (
+                  {/* Tab 3: Deals */}
+                  {activeTab === 3 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Deals & Transaction History</Typography>
                       {connections.deals?.length === 0 ? (
@@ -1323,8 +1331,8 @@ const EntityDetail = () => {
                     </Box>
                   )}
 
-                  {/* Tab 3: Consolidated Timeline */}
-                  {activeTab === 3 && (
+                  {/* Tab 4: Consolidated Timeline */}
+                  {activeTab === 4 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Consolidated Activity Timeline</Typography>
                       {connections.timeline?.length === 0 ? (
@@ -1359,8 +1367,8 @@ const EntityDetail = () => {
                     </Box>
                   )}
 
-                  {/* Tab 4: Docs & Files */}
-                  {activeTab === 4 && (
+                  {/* Tab 5: Docs & Files */}
+                  {activeTab === 5 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Documents Vault</Typography>
                       {/* Upload Simulator */}
@@ -1417,8 +1425,8 @@ const EntityDetail = () => {
                     </Box>
                   )}
 
-                  {/* Tab 5: Referrals List */}
-                  {activeTab === 5 && (
+                  {/* Tab 6: Referrals List */}
+                  {activeTab === 6 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Referred Leads Log</Typography>
                       {!connections.referrals || connections.referrals.length === 0 ? (
@@ -1663,10 +1671,10 @@ const EntityDetail = () => {
               {/* 2. PROPERTY TABS */}
               {moduleName === 'properties' && (
                 <Box>
-                  {/* Tab 0: Overview */}
+                  {/* Tab 0: Property Remarks & Comments */}
                   {activeTab === 0 && (
                     <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Property Summary & Remarks</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Property Remarks & Comments</Typography>
                       {/* Remarks Log Section */}
                       <Box component="form" onSubmit={handlePostRemark} sx={{ mb: 3 }}>
                         <Grid container spacing={1.5}>
@@ -1698,42 +1706,6 @@ const EntityDetail = () => {
                             <Typography variant="body2" sx={{ color: '#4B5563', fontStyle: 'italic' }}>"{rem.comment}"</Typography>
                           </Paper>
                         ))
-                      )}
-
-                      <Divider sx={{ my: 4 }} />
-                      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, fontFamily: 'Poppins' }}>Pitched Clients & Prospects History</Typography>
-                      </Box>
-                      {connections.pitches?.length === 0 ? (
-                        <Typography variant="body2" sx={{ color: '#94A3B8' }}>No pitches logged for this property yet.</Typography>
-                      ) : (
-                        connections.pitches.map(p => {
-                          const isLead = String(p.customerId).startsWith('LEAD-');
-                          const clientPath = isLead ? `/module/leads/${p.customerId}` : `/module/customers/${p.customerId}`;
-                          return (
-                            <Paper key={p.id} sx={{ p: 2.5, mb: 2, border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: 'none' }}>
-                              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                                <Box display="flex" alignItems="center" gap={1}>
-                                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => navigate(clientPath)}>
-                                    Client: {p.customerName || p.customerId}
-                                  </Typography>
-                                  <Typography variant="caption" sx={{ color: '#64748B' }}>({p.id})</Typography>
-                                </Box>
-                                <Chip 
-                                  label={p.interestLevel} 
-                                  color={p.interestLevel === 'Interested' ? 'success' : p.interestLevel === 'Not Interested' ? 'error' : 'warning'} 
-                                  size="small"
-                                  sx={{ fontWeight: 700 }}
-                                />
-                              </Box>
-                              <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 1 }}>
-                                Pitched on: {p.pitchDate} • Method: <strong>{p.pitchMethod}</strong> • Pitched by: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/employees/${p.employeeId || 'EMP-001'}`)}>{p.employeeName}</span>
-                              </Typography>
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>Quoted Offer Price: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/property_pitch_history/${p.id}`)}>{p.id}</span> (Quoted: ₹{formatCurrency(p.quotedPrice)})</Typography>
-                              <Typography variant="body2" sx={{ color: '#475569', mt: 0.5 }}>Remarks: {p.remarks}</Typography>
-                            </Paper>
-                          );
-                        })
                       )}
                     </Box>
                   )}
@@ -2034,6 +2006,7 @@ const EntityDetail = () => {
 
               {moduleName === 'dealers' && (
                 <Box>
+                  {/* Tab 0: Overview & Outreach */}
                   {activeTab === 0 && (
                     <Box>
                       <Typography variant="h5" sx={{ fontWeight: 850, mb: 1.5, fontFamily: 'Poppins', color: '#0F172A' }}>
@@ -2041,301 +2014,314 @@ const EntityDetail = () => {
                       </Typography>
                       <Divider sx={{ mb: 3 }} />
 
-                  {/* 1. Quick Outreach Log Actions */}
-                  <Grid container spacing={3} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={6}>
-                      <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none', backgroundColor: '#F8FAFC' }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Icons.PhoneCall size={20} color="#2563EB" />
-                          Outreach Calling
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
-                          Log phone call outcomes, duration, and gather remarks from the dealer.
-                        </Typography>
-                        <Button 
-                          variant="contained" 
-                          size="small" 
-                          startIcon={<Icons.Phone size={16} />}
-                          onClick={() => {
-                            setCallDuration('');
-                            setCallBudget('');
-                            setCallAreas('');
-                            setCallRemarks('');
-                            setCallOutcomeOption('Call Done');
-                            setCallDialogOpen(true);
-                          }}
-                          sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 700 }}
-                        >
-                          Log Outreach Call
-                        </Button>
-                      </Paper>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none', backgroundColor: '#F8FAFC' }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1, display: 'flex', alignItems: 'center', gap: 1, fontFamily: 'Poppins' }}>
-                          <Icons.MapPin size={20} color="#16A34A" />
-                          Physical Visit Assignment
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
-                          Assign an employee to physically visit the dealer. If assigned, they will get a notification to visit.
+                      {/* 1. Quick Outreach Log Actions */}
+                      <Grid container spacing={3} sx={{ mb: 4 }}>
+                        <Grid item xs={12} sm={6}>
+                          <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none', backgroundColor: '#F8FAFC' }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Icons.PhoneCall size={20} color="#2563EB" />
+                              Outreach Calling
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
+                              Log phone call outcomes, duration, and gather remarks from the dealer.
+                            </Typography>
+                            <Button 
+                              variant="contained" 
+                              size="small" 
+                              startIcon={<Icons.Phone size={16} />}
+                              onClick={() => {
+                                setCallDuration('');
+                                setCallBudget('');
+                                setCallAreas('');
+                                setCallRemarks('');
+                                setCallOutcomeOption('Call Done');
+                                setCallDialogOpen(true);
+                              }}
+                              sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 700 }}
+                            >
+                              Log Outreach Call
+                            </Button>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none', backgroundColor: '#F8FAFC' }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1, display: 'flex', alignItems: 'center', gap: 1, fontFamily: 'Poppins' }}>
+                              <Icons.MapPin size={20} color="#16A34A" />
+                              Physical Visit Assignment
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#64748B', mb: 2 }}>
+                              Assign an employee to physically visit the dealer. If assigned, they will get a notification to visit.
+                            </Typography>
+                            
+                            <FormControl fullWidth size="small" sx={{ mb: 2, backgroundColor: 'white' }}>
+                              <InputLabel>Select Employee</InputLabel>
+                              <Select
+                                label="Select Employee"
+                                value={record?.assignedEmployeeId || ''}
+                                onChange={async (e) => {
+                                  const selectedVal = e.target.value;
+                                  const payload = {
+                                    ...record,
+                                    assignedEmployeeId: selectedVal || ''
+                                  };
+                                  const res = await updateRecord('dealers', record.id, payload);
+                                  if (res.success) {
+                                    loadData();
+                                  } else {
+                                    alert(res.message || "Failed to assign employee");
+                                  }
+                                }}
+                              >
+                                <MenuItem value=""><em>Unassigned</em></MenuItem>
+                                {(moduleData.employees || []).map(emp => (
+                                  <MenuItem key={emp.id} value={emp.id}>
+                                    {emp.name} ({emp.id})
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+
+                            {record?.assignedEmployeeId && (
+                              <Box sx={{ mt: 1, p: 2, border: '1px solid #E2E8F0', borderRadius: '12px', backgroundColor: 'white' }}>
+                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                                  <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 700 }}>
+                                    Visit Status:
+                                  </Typography>
+                                  <Chip 
+                                    label={record.visitStatus || 'Assigned'} 
+                                    color={record.visitStatus === 'Completed' ? 'success' : record.visitStatus === 'Cancelled' ? 'error' : 'warning'} 
+                                    size="small" 
+                                    sx={{ fontWeight: 800, fontSize: '10px', borderRadius: '6px' }}
+                                  />
+                                </Box>
+                                
+                                {(!record.visitStatus || record.visitStatus === 'Assigned') ? (
+                                  <Box sx={{ mt: 1.5 }}>
+                                    <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
+                                      <InputLabel>Visit Outcome</InputLabel>
+                                      <Select
+                                        label="Visit Outcome"
+                                        value={meetingOutcome}
+                                        onChange={(e) => setMeetingOutcome(e.target.value)}
+                                      >
+                                        <MenuItem value="Completed">Visit Completed</MenuItem>
+                                        <MenuItem value="Dealer Not Interested">Dealer Not Interested to Meet</MenuItem>
+                                      </Select>
+                                    </FormControl>
+                                    <TextField
+                                      placeholder="Type visit remarks..."
+                                      size="small"
+                                      fullWidth
+                                      multiline
+                                      rows={2}
+                                      value={meetingDocCollected}
+                                      onChange={(e) => setMeetingDocCollected(e.target.value)}
+                                      sx={{ mb: 1.5 }}
+                                    />
+                                    <Button
+                                      variant="contained"
+                                      color="success"
+                                      size="small"
+                                      fullWidth
+                                      sx={{ fontWeight: 700, textTransform: 'none' }}
+                                      onClick={async () => {
+                                        if (!meetingOutcome) {
+                                          alert("Please select visit outcome");
+                                          return;
+                                        }
+                                        const nextStatus = meetingOutcome === 'Completed' ? 'Completed' : 'Cancelled';
+                                        const finalOutcome = meetingOutcome === 'Completed' 
+                                          ? `Visit Completed: ${meetingDocCollected}` 
+                                          : `Dealer Not Interested: ${meetingDocCollected}`;
+                                        
+                                        const payload = {
+                                          ...record,
+                                          visitStatus: nextStatus,
+                                          remarks: finalOutcome
+                                        };
+                                        const res = await updateRecord('dealers', record.id, payload);
+                                        if (res.success) {
+                                          setMeetingOutcome('');
+                                          setMeetingDocCollected('');
+                                          loadData();
+                                        } else {
+                                          alert(res.message || "Failed to update visit details");
+                                        }
+                                      }}
+                                    >
+                                      Save Visit Remarks
+                                    </Button>
+                                  </Box>
+                                ) : (
+                                  <Typography variant="body2" sx={{ color: '#475569', mt: 1, fontStyle: 'italic' }}>
+                                    Visit resolved. Remarks: "{record.remarks}"
+                                  </Typography>
+                                )}
+                              </Box>
+                            )}
+                          </Paper>
+                        </Grid>
+                      </Grid>
+
+                      {/* 2. Admin Visit Assignments */}
+                      <Paper sx={{ p: 3, mb: 4, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Icons.UserCheck size={22} color="#F59E0B" />
+                          Assigned Site Visits & Physical Meetings
                         </Typography>
                         
-                        <FormControl fullWidth size="small" sx={{ mb: 2, backgroundColor: 'white' }}>
-                          <InputLabel>Select Employee</InputLabel>
-                          <Select
-                            label="Select Employee"
-                            value={record?.assignedEmployeeId || ''}
-                            onChange={async (e) => {
-                              const selectedVal = e.target.value;
-                              const payload = {
-                                ...record,
-                                assignedEmployeeId: selectedVal || ''
-                              };
-                              const res = await updateRecord('dealers', record.id, payload);
-                              if (res.success) {
-                                loadData();
-                              } else {
-                                alert(res.message || "Failed to assign employee");
-                              }
-                            }}
-                          >
-                            <MenuItem value=""><em>Unassigned</em></MenuItem>
-                            {(moduleData.employees || []).map(emp => (
-                              <MenuItem key={emp.id} value={emp.id}>
-                                {emp.name} ({emp.id})
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        {record?.assignedEmployeeId && (
-                          <Box sx={{ mt: 1, p: 2, border: '1px solid #E2E8F0', borderRadius: '12px', backgroundColor: 'white' }}>
-                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                              <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 700 }}>
-                                Visit Status:
+                        {!record?.assignedEmployeeId ? (
+                          <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' }}>
+                            <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+                              No active physical visit assigned. Assign an employee in the card above or on the sheet page.
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Paper sx={{ p: 2.5, border: '1px solid #FEF3C7', backgroundColor: '#FFFBEB', borderRadius: '12px', boxShadow: 'none' }}>
+                            <Box display="flex" justifyContent="space-between" mb={1.5}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#D97706' }}>
+                                Visit Assigned To: <strong>{moduleData.employees?.find(e => String(e.id) === String(record.assignedEmployeeId))?.name || record.assignedEmployeeId}</strong>
                               </Typography>
                               <Chip 
                                 label={record.visitStatus || 'Assigned'} 
                                 color={record.visitStatus === 'Completed' ? 'success' : record.visitStatus === 'Cancelled' ? 'error' : 'warning'} 
                                 size="small" 
-                                sx={{ fontWeight: 800, fontSize: '10px', borderRadius: '6px' }}
+                                sx={{ fontWeight: 800, fontSize: '10px', borderRadius: '6px' }} 
                               />
                             </Box>
-                            
-                            {(!record.visitStatus || record.visitStatus === 'Assigned') ? (
-                              <Box sx={{ mt: 1.5 }}>
-                                <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-                                  <InputLabel>Visit Outcome</InputLabel>
-                                  <Select
-                                    label="Visit Outcome"
-                                    value={meetingOutcome}
-                                    onChange={(e) => setMeetingOutcome(e.target.value)}
-                                  >
-                                    <MenuItem value="Completed">Visit Completed</MenuItem>
-                                    <MenuItem value="Dealer Not Interested">Dealer Not Interested to Meet</MenuItem>
-                                  </Select>
-                                </FormControl>
-                                <TextField
-                                  placeholder="Type visit remarks..."
-                                  size="small"
-                                  fullWidth
-                                  multiline
-                                  rows={2}
-                                  value={meetingDocCollected}
-                                  onChange={(e) => setMeetingDocCollected(e.target.value)}
-                                  sx={{ mb: 1.5 }}
-                                />
-                                <Button
-                                  variant="contained"
-                                  color="success"
-                                  size="small"
-                                  fullWidth
-                                  sx={{ fontWeight: 700, textTransform: 'none' }}
-                                  onClick={async () => {
-                                    if (!meetingOutcome) {
-                                      alert("Please select visit outcome");
-                                      return;
-                                    }
-                                    const nextStatus = meetingOutcome === 'Completed' ? 'Completed' : 'Cancelled';
-                                    const finalOutcome = meetingOutcome === 'Completed' 
-                                      ? `Visit Completed: ${meetingDocCollected}` 
-                                      : `Dealer Not Interested: ${meetingDocCollected}`;
-                                    
-                                    const payload = {
-                                      ...record,
-                                      visitStatus: nextStatus,
-                                      remarks: finalOutcome
-                                    };
-                                    const res = await updateRecord('dealers', record.id, payload);
-                                    if (res.success) {
-                                      setMeetingOutcome('');
-                                      setMeetingDocCollected('');
-                                      loadData();
-                                    } else {
-                                      alert(res.message || "Failed to update visit details");
-                                    }
-                                  }}
-                                >
-                                  Save Visit Remarks
-                                </Button>
+                            <Typography variant="body2" sx={{ color: '#475569' }}>
+                              <strong>Last Update / Remarks:</strong> {record.remarks || 'No visit updates logged yet.'}
+                            </Typography>
+                          </Paper>
+                        )}
+                      </Paper>
+                    </Box>
+                  )}
+
+                  {/* Tab 1: General Remarks & Comments */}
+                  {activeTab === 1 && (
+                    <Box>
+                      <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>
+                          General Remarks & Comments
+                        </Typography>
+                        <Box component="form" onSubmit={handlePostRemark} sx={{ mb: 3 }}>
+                          <Grid container spacing={1.5}>
+                            <Grid item xs={12} sm={10}>
+                              <TextField 
+                                placeholder="Type dealer remarks or brokerage disputes..."
+                                fullWidth
+                                size="small"
+                                value={remarkInput}
+                                onChange={(e) => setRemarkInput(e.target.value)}
+                              />
+                            </Grid>
+                            <Grid item xs={12} sm={2}>
+                              <Button type="submit" variant="contained" fullWidth sx={{ py: 1, backgroundColor: '#2563EB', textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
+                                Post Log
+                              </Button>
+                            </Grid>
+                          </Grid>
+                        </Box>
+                        
+                        {connections?.remarks?.length === 0 ? (
+                          <Typography variant="body2" sx={{ color: '#94A3B8' }}>No remarks posted yet.</Typography>
+                        ) : (
+                          connections.remarks.map((rem, idx) => (
+                            <Paper key={idx} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', boxShadow: 'none', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                              <Box display="flex" justifyContent="space-between" mb={0.5}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{rem.employeeName}</Typography>
+                                <Typography variant="caption" sx={{ color: '#94A3B8' }}>{rem.dateTime}</Typography>
                               </Box>
-                            ) : (
-                              <Typography variant="body2" sx={{ color: '#475569', mt: 1, fontStyle: 'italic' }}>
-                                Visit resolved. Remarks: "{record.remarks}"
-                              </Typography>
-                            )}
+                              <Typography variant="body2" sx={{ color: '#4B5563', fontStyle: 'italic' }}>"{rem.comment}"</Typography>
+                            </Paper>
+                          ))
+                        )}
+                      </Paper>
+                    </Box>
+                  )}
+
+                  {/* Tab 2: Outreach Activity Timeline */}
+                  {activeTab === 2 && (
+                    <Box>
+                      <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 3, fontFamily: 'Poppins' }}>
+                          Complete Outreach Timeline (Calls, Visits & Meetings)
+                        </Typography>
+                        
+                        {connections.timeline?.length === 0 ? (
+                          <Typography variant="body2" sx={{ color: '#94A3B8', py: 2 }}>No activity timeline logs recorded.</Typography>
+                        ) : (
+                          <Box sx={{ borderLeft: '2px solid #E2E8F0', pl: 3, ml: 1, position: 'relative' }}>
+                            {connections.timeline.map((evt, idx) => (
+                              <Box key={idx} sx={{ mb: 3.5, position: 'relative' }}>
+                                <Box sx={{ position: 'absolute', left: '-35px', top: '0px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#FFFFFF', border: '2px solid #2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
+                                  <DynamicIcon name={evt.icon || 'Circle'} size={12} />
+                                </Box>
+                                <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 700 }}>{evt.date}</Typography>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', mt: 0.2 }}>{evt.event}</Typography>
+                                <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', mt: 0.5 }}>{evt.details}</Typography>
+                              </Box>
+                            ))}
                           </Box>
                         )}
                       </Paper>
-                    </Grid>
-                  </Grid>
-
-                  {/* 2. Admin Visit Assignments */}
-                  <Paper sx={{ p: 3, mb: 4, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Icons.UserCheck size={22} color="#F59E0B" />
-                      Assigned Site Visits & Physical Meetings
-                    </Typography>
-                    
-                    {!record?.assignedEmployeeId ? (
-                      <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' }}>
-                        <Typography variant="body2" sx={{ color: '#94A3B8' }}>
-                          No active physical visit assigned. Assign an employee in the card above or on the sheet page.
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Paper sx={{ p: 2.5, border: '1px solid #FEF3C7', backgroundColor: '#FFFBEB', borderRadius: '12px', boxShadow: 'none' }}>
-                        <Box display="flex" justifyContent="space-between" mb={1.5}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#D97706' }}>
-                            Visit Assigned To: <strong>{moduleData.employees?.find(e => String(e.id) === String(record.assignedEmployeeId))?.name || record.assignedEmployeeId}</strong>
-                          </Typography>
-                          <Chip 
-                            label={record.visitStatus || 'Assigned'} 
-                            color={record.visitStatus === 'Completed' ? 'success' : record.visitStatus === 'Cancelled' ? 'error' : 'warning'} 
-                            size="small" 
-                            sx={{ fontWeight: 800, fontSize: '10px', borderRadius: '6px' }} 
-                          />
-                        </Box>
-                        <Typography variant="body2" sx={{ color: '#475569' }}>
-                          <strong>Last Update / Remarks:</strong> {record.remarks || 'No visit updates logged yet.'}
-                        </Typography>
-                      </Paper>
-                    )}
-                  </Paper>
-
-
-
-                  {/* 3. General Remarks & Comments Log */}
-                  <Paper sx={{ p: 3, mb: 4, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>
-                      General Remarks & Comments
-                    </Typography>
-                    <Box component="form" onSubmit={handlePostRemark} sx={{ mb: 3 }}>
-                      <Grid container spacing={1.5}>
-                        <Grid item xs={12} sm={10}>
-                          <TextField 
-                            placeholder="Type dealer remarks or brokerage disputes..."
-                            fullWidth
-                            size="small"
-                            value={remarkInput}
-                            onChange={(e) => setRemarkInput(e.target.value)}
-                          />
-                        </Grid>
-                        <Grid item xs={12} sm={2}>
-                          <Button type="submit" variant="contained" fullWidth sx={{ py: 1, backgroundColor: '#2563EB', textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}>
-                            Post Log
-                          </Button>
-                        </Grid>
-                      </Grid>
                     </Box>
-                    
-                    {connections?.remarks?.length === 0 ? (
-                      <Typography variant="body2" sx={{ color: '#94A3B8' }}>No remarks posted yet.</Typography>
-                    ) : (
-                      connections.remarks.map((rem, idx) => (
-                        <Paper key={idx} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', boxShadow: 'none', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                          <Box display="flex" justifyContent="space-between" mb={0.5}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{rem.employeeName}</Typography>
-                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>{rem.dateTime}</Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ color: '#4B5563', fontStyle: 'italic' }}>"{rem.comment}"</Typography>
-                        </Paper>
-                      ))
-                    )}
-                  </Paper>
+                  )}
 
-                  {/* 4. Complete Outreach Activity Timeline */}
-                  <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 3, fontFamily: 'Poppins' }}>
-                      Complete Outreach Timeline (Calls, Visits & Meetings)
-                    </Typography>
-                    
-                    {connections.timeline?.length === 0 ? (
-                      <Typography variant="body2" sx={{ color: '#94A3B8', py: 2 }}>No activity timeline logs recorded.</Typography>
-                    ) : (
-                      <Box sx={{ borderLeft: '2px solid #E2E8F0', pl: 3, ml: 1, position: 'relative' }}>
-                        {connections.timeline.map((evt, idx) => (
-                          <Box key={idx} sx={{ mb: 3.5, position: 'relative' }}>
-                            <Box sx={{ position: 'absolute', left: '-35px', top: '0px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#FFFFFF', border: '2px solid #2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
-                              <DynamicIcon name={evt.icon || 'Circle'} size={12} />
-                            </Box>
-                            <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 700 }}>{evt.date}</Typography>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', mt: 0.2 }}>{evt.event}</Typography>
-                            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', mt: 0.5 }}>{evt.details}</Typography>
-                          </Box>
-                        ))}
-                      </Box>
-                    )}
-                  </Paper>
-                  {/* 5. Associated Properties / Listings */}
-                  <Paper sx={{ p: 3, mt: 4, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Icons.Home size={22} color="#2563EB" />
-                      Associated Property Listings / Inventories ({connections.properties?.length || 0})
-                    </Typography>
-                    
-                    {renderListControls([
-                      { value: 'id', label: 'Property ID' },
-                      { value: 'locality', label: 'Locality' },
-                      { value: 'propertyType', label: 'Property Type' },
-                      { value: 'demand', label: 'Price' }
-                    ])}
-                    
-                    {!connections.properties || connections.properties.length === 0 ? (
-                      <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' }}>
-                        <Typography variant="body2" sx={{ color: '#94A3B8' }}>
-                          No properties associated with this dealer.
+                  {/* Tab 3: Associated Property Listings */}
+                  {activeTab === 3 && (
+                    <Box>
+                      <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Icons.Home size={22} color="#2563EB" />
+                          Associated Property Listings / Inventories ({connections.properties?.length || 0})
                         </Typography>
-                      </Box>
-                    ) : (
-                      <Grid container spacing={2}>
-                        {filterAndSortList(connections.properties || [], ['id', 'locality', 'sector_block', 'propertyType', 'demand', 'size']).map(p => {
-                          const pitch = (connections.pitches || []).find(pi => String(pi.propertyId) === String(p.id));
-                          return (
-                            <Grid item xs={12} sm={6} md={4} key={p.id}>
-                              <Paper sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', '&:hover': { borderColor: '#2563EB' } }} onClick={() => navigate(`/module/properties/${p.id}`)}>
-                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
-                                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#2563EB' }}>{p.id}</Typography>
-                                  <Chip 
-                                    label={pitch?.propertyStatus || p.status || 'Available'} 
-                                    color={(pitch?.propertyStatus || p.status) === 'Property Registered/Sold Out' ? 'error' : 'primary'}
-                                    size="small"
-                                    sx={{ fontWeight: 800, fontSize: '9px', height: '18px', borderRadius: '4px' }}
-                                  />
-                                </Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{p.locality} {p.sector_block ? `(Sector ${p.sector_block})` : ''}</Typography>
-                                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>Type: {p.propertyType} • Size: {p.size}</Typography>
-                                <Typography variant="caption" sx={{ color: '#16A34A', fontWeight: 700, display: 'block', mt: 0.5 }}>Price: {p.demand ? `₹${p.demand}` : 'N/A'}</Typography>
-                              </Paper>
-                            </Grid>
-                          );
-                        })}
-                      </Grid>
-                    )}
-                  </Paper>
-                </Box>
-              )}
-                  {activeTab === 1 && (
+                        
+                        {renderListControls([
+                          { value: 'id', label: 'Property ID' },
+                          { value: 'locality', label: 'Locality' },
+                          { value: 'propertyType', label: 'Property Type' },
+                          { value: 'demand', label: 'Price' }
+                        ])}
+                        
+                        {!connections.properties || connections.properties.length === 0 ? (
+                          <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' }}>
+                            <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+                              No properties associated with this dealer.
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Grid container spacing={2}>
+                            {filterAndSortList(connections.properties || [], ['id', 'locality', 'sector_block', 'propertyType', 'demand', 'size']).map(p => {
+                              const pitch = (connections.pitches || []).find(pi => String(pi.propertyId) === String(p.id));
+                              return (
+                                <Grid item xs={12} sm={6} md={4} key={p.id}>
+                                  <Paper sx={{ p: 2, border: '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', '&:hover': { borderColor: '#2563EB' } }} onClick={() => navigate(`/module/properties/${p.id}`)}>
+                                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#2563EB' }}>{p.id}</Typography>
+                                      <Chip 
+                                        label={pitch?.propertyStatus || p.status || 'Available'} 
+                                        color={(pitch?.propertyStatus || p.status) === 'Property Registered/Sold Out' ? 'error' : 'primary'}
+                                        size="small"
+                                        sx={{ fontWeight: 800, fontSize: '9px', height: '18px', borderRadius: '4px' }}
+                                      />
+                                    </Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{p.locality} {p.sector_block ? `(Sector ${p.sector_block})` : ''}</Typography>
+                                    <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>Type: {p.propertyType} • Size: {p.size}</Typography>
+                                    <Typography variant="caption" sx={{ color: '#16A34A', fontWeight: 700, display: 'block', mt: 0.5 }}>Price: {p.demand ? `₹${p.demand}` : 'N/A'}</Typography>
+                                  </Paper>
+                                </Grid>
+                              );
+                            })}
+                          </Grid>
+                        )}
+                      </Paper>
+                    </Box>
+                  )}
+
+                  {/* Tab 4: Pitches & Showings */}
+                  {activeTab === 4 && (
                     <Box>
                       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins', color: '#0F172A' }}>
@@ -2405,7 +2391,9 @@ const EntityDetail = () => {
                       )}
                     </Box>
                   )}
-                  {activeTab === 2 && (
+
+                  {/* Tab 5: Call History */}
+                  {activeTab === 5 && (
                     <Box>
                       <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>Calls History ({connections?.calls?.length || 0})</Typography>
                       {connections?.calls?.length === 0 ? (
@@ -2419,11 +2407,11 @@ const EntityDetail = () => {
                           </Paper>
                         ))
                       )}
-
-
                     </Box>
                   )}
-                  {activeTab === 3 && (
+
+                  {/* Tab 6: Docs Vault */}
+                  {activeTab === 6 && (
                     <Box>
                       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                         <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Docs Vault</Typography>
@@ -2450,8 +2438,9 @@ const EntityDetail = () => {
                       )}
                     </Box>
                   )}
-                  {/* Tab 4: Referrals List */}
-                  {activeTab === 4 && (
+
+                  {/* Tab 7: Referrals List */}
+                  {activeTab === 7 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Referred Leads Log</Typography>
                       {!connections.referrals || connections.referrals.length === 0 ? (
@@ -2488,7 +2477,9 @@ const EntityDetail = () => {
                       )}
                     </Box>
                   )}
-                  {activeTab === 5 && (
+
+                  {/* Tab 8: Wanted Requirements */}
+                  {activeTab === 8 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', color: '#0F172A' }}>
                         Wanted Requirements ({connections.wanted_properties?.length || 0})
