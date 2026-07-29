@@ -64,7 +64,7 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', gap: 2.5 }}>
           
           {/* Left section: Folder tab and ID */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: '140px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: { xs: 'auto', md: '200px' }, flexShrink: 0 }}>
             <Box sx={{ p: 1, borderRadius: '8px', backgroundColor: 'rgba(37,99,235,0.06)', color: '#2563EB', display: 'flex', alignItems: 'center' }}>
               <Icons.Folder size={20} />
             </Box>
@@ -86,7 +86,21 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
                 <Chip 
                   label={rec.status} 
                   size="small" 
-                  sx={{ fontWeight: 700, fontSize: '9px', borderRadius: '4px', height: 16, mt: 0.5 }}
+                  sx={{ 
+                    fontWeight: 700, 
+                    fontSize: '9px', 
+                    borderRadius: '4px', 
+                    height: 'auto',
+                    minHeight: 16,
+                    mt: 0.5,
+                    whiteSpace: 'normal',
+                    '& .MuiChip-label': {
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      py: 0.3,
+                      px: 1
+                    }
+                  }}
                 />
               )}
             </Box>
