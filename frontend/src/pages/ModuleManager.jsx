@@ -44,7 +44,7 @@ const getSingularLabel = (label) => {
 };
 
 const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDeleteClick, moduleName }) => {
-  const { moduleData } = useApp();
+  const { moduleData, hasPermission } = useApp();
   const [expanded, setExpanded] = useState(false);
   const primaryFields = fields.filter(f => f.showInTable && f.name !== 'id' && f.name !== 'status');
   
@@ -240,12 +240,16 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
             <IconButton size="small" onClick={() => handleInspectClick(moduleName, rec.id)} sx={{ color: '#2563EB', '&:hover': { backgroundColor: 'rgba(37,99,235,0.05)' } }}>
               <Icons.Eye size={16} />
             </IconButton>
-            <IconButton size="small" onClick={() => handleEditClick(rec)} sx={{ color: '#F59E0B', '&:hover': { backgroundColor: 'rgba(245,158,11,0.05)' } }}>
-              <Icons.Edit3 size={16} />
-            </IconButton>
-            <IconButton size="small" onClick={() => handleDeleteClick(rec.id)} sx={{ color: '#EF4444', '&:hover': { backgroundColor: 'rgba(239,68,68,0.05)' } }}>
-              <Icons.Trash2 size={16} />
-            </IconButton>
+            {hasPermission(moduleName, 'edit') && (
+              <IconButton size="small" onClick={() => handleEditClick(rec)} sx={{ color: '#F59E0B', '&:hover': { backgroundColor: 'rgba(245,158,11,0.05)' } }}>
+                <Icons.Edit3 size={16} />
+              </IconButton>
+            )}
+            {hasPermission(moduleName, 'delete') && (
+              <IconButton size="small" onClick={() => handleDeleteClick(rec.id)} sx={{ color: '#EF4444', '&:hover': { backgroundColor: 'rgba(239,68,68,0.05)' } }}>
+                <Icons.Trash2 size={16} />
+              </IconButton>
+            )}
           </Box>
         </Box>
         {hasMoreFields && (
@@ -275,7 +279,8 @@ const ModuleManager = () => {
     deleteRecord,
     bulkDeleteRecord,
     loadingData,
-    user
+    user,
+    hasPermission
   } = useApp();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -1134,14 +1139,16 @@ const ModuleManager = () => {
             </ToggleButton>
           </ToggleButtonGroup>
 
-          <Button 
-            variant="contained" 
-            startIcon={<Icons.Plus size={18} />}
-            onClick={handleCreateClick}
-            sx={{ backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' }, textTransform: 'none', borderRadius: '8px', fontWeight: 700 }}
-          >
-            Add {getSingularLabel(moduleConfig.label)}
-          </Button>
+          {hasPermission(moduleName, 'create') && (
+            <Button 
+              variant="contained" 
+              startIcon={<Icons.Plus size={18} />}
+              onClick={handleCreateClick}
+              sx={{ backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' }, textTransform: 'none', borderRadius: '8px', fontWeight: 700 }}
+            >
+              Add {getSingularLabel(moduleConfig.label)}
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -1513,8 +1520,8 @@ const ModuleManager = () => {
                 handleSortRequest={handleSortRequest}
                 colMenuOpen={colMenuOpen}
                 setColMenuOpen={setColMenuOpen}
-                onEditClick={handleEditClick}
-                onDeleteClick={handleDeleteClick}
+                onEditClick={hasPermission(moduleName, 'edit') ? handleEditClick : null}
+                onDeleteClick={hasPermission(moduleName, 'delete') ? handleDeleteClick : null}
                 onInspectClick={handleInspectClick}
                 onLogCallClick={handleLogCallClick}
               />
