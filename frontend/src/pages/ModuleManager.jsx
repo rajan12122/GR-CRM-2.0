@@ -136,9 +136,40 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
                       }
                       const list = moduleData[resolvedModule] || [];
                       const record = list.find(r => String(r.id) === String(val));
-                      const resolvedName = record ? (record.propertyName || record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed') : val;
-                      return (
-                        <span style={{ color: '#2563EB', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline' }} onClick={() => handleInspectClick(resolvedModule, val)}>
+                      let resolvedName = record ? (record.propertyName || record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed') : val;
+                      let finalClickModule = resolvedModule;
+                      let finalClickId = val;
+                      let isSellerLink = true;
+
+                      // Custom logic for Deals: resolve sellerCustomerId to Dealer Firm Name or Contact Person Name
+                      if (moduleName === 'deals' && f.name === 'sellerCustomerId' && rec.propertyId) {
+                        const prop = (moduleData.properties || []).find(p => String(p.id) === String(rec.propertyId));
+                        if (prop) {
+                          if (prop.dealer_owner_booked === 'Dealer') {
+                            const dealer = (moduleData.dealers || []).find(d => String(d.id) === String(prop.dealerId));
+                            if (dealer) {
+                              resolvedName = dealer.firm_name || dealer.name || dealer.id;
+                              finalClickModule = 'dealers';
+                              finalClickId = prop.dealerId;
+                            } else {
+                              resolvedName = 'Dealer N/A';
+                              isSellerLink = false;
+                            }
+                          } else {
+                            resolvedName = prop.contact_person_name || 'Direct Owner';
+                            isSellerLink = false;
+                          }
+                        }
+                      }
+
+                      const canClick = isSellerLink && finalClickModule && finalClickId;
+
+                      return canClick ? (
+                        <span style={{ color: '#2563EB', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline' }} onClick={() => handleInspectClick(finalClickModule, finalClickId)}>
+                          {resolvedName}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#64748B', fontWeight: 700 }}>
                           {resolvedName}
                         </span>
                       );

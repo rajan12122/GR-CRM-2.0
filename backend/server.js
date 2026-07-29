@@ -1056,8 +1056,7 @@ function handlePitchStatusChange(p, db, req) {
   db.deals = db.deals || [];
   let existingDeal = db.deals.find(d => 
     String(d.propertyId) === String(p.propertyId) && 
-    String(d.customerId) === String(finalCustomerId) &&
-    String(d.associatedPitchId) === String(p.id)
+    String(d.customerId) === String(finalCustomerId)
   );
 
   if (!existingDeal) {
@@ -1083,6 +1082,23 @@ function handlePitchStatusChange(p, db, req) {
     };
     db.deals.push(existingDeal);
     try { syncToSheets('deals'); } catch(e) {}
+  } else {
+    // If the deal was created without associatedPitchId or sellerCustomerId (e.g. by follow-up helper first), populate it
+    let updated = false;
+    if (!existingDeal.associatedPitchId) {
+      existingDeal.associatedPitchId = p.id;
+      updated = true;
+    }
+    if (!existingDeal.sellerCustomerId) {
+      const prop = (db.properties || []).find(pr => String(pr.id) === String(p.propertyId));
+      const sellerId = prop ? (prop.current_owner_id || '') : '';
+      existingDeal.sellerCustomerId = sellerId || finalCustomerId;
+      updated = true;
+    }
+    if (updated) {
+      writeDb(db);
+      try { syncToSheets('deals'); } catch(e) {}
+    }
   }
 
   // Invoke the master deal status change helper to update property registry details & timeline
@@ -1437,13 +1453,17 @@ function handleFollowUpPipelineAction(f, db, req) {
 
     if (!existingDeal) {
       const dealId = generateNextId(db, 'deals', 'DEAL');
+      const prop = (db.properties || []).find(pr => String(pr.id) === String(propId));
+      const sellerId = prop ? (prop.current_owner_id || '') : '';
       const newDeal = {
         id: dealId,
         customerId: finalCustomerId,
+        sellerCustomerId: sellerId || finalCustomerId,
         propertyId: propId,
         employeeId: f.employeeId || 'EMP-001',
         status: 'Closed',
         salePrice: f.pitchPrice || 1000000,
+        purchasePrice: prop ? (prop.demand || '') : '',
         registrationDate: new Date().toISOString().split('T')[0]
       };
       db.deals.push(newDeal);

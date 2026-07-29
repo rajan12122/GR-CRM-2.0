@@ -57,6 +57,8 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
   let finalClickModule = resolvedModule;
   let finalClickId = id;
   
+  let isSellerLink = true;
+
   // Custom logic for Deals: resolve to Dealer Firm Name or Contact Person Name
   if (field && field.name === 'sellerCustomerId' && rowRecord && rowRecord.propertyId) {
     const prop = (moduleData.properties || []).find(p => String(p.id) === String(rowRecord.propertyId));
@@ -69,9 +71,11 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
           finalClickId = prop.dealerId;
         } else {
           resolvedName = 'Dealer N/A';
+          isSellerLink = false;
         }
       } else {
         resolvedName = prop.contact_person_name || 'Direct Owner';
+        isSellerLink = false;
       }
     }
   }
@@ -89,14 +93,16 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
       resolvedName = id;
     }
   }
+
+  const canClick = isSellerLink && finalClickModule && finalClickId;
   
   return (
-    <Tooltip title={`${getSingularLabel(finalClickModule).toUpperCase()}: ${resolvedName}`} arrow placement="top">
+    <Tooltip title={canClick ? `${getSingularLabel(finalClickModule).toUpperCase()}: ${resolvedName}` : resolvedName} arrow placement="top">
       <Chip 
         label={resolvedName} 
         size="small"
-        onClick={(e) => { e.stopPropagation(); onClick(finalClickModule, finalClickId); }}
-        sx={{ 
+        onClick={canClick ? (e) => { e.stopPropagation(); onClick(finalClickModule, finalClickId); } : undefined}
+        sx={canClick ? { 
           cursor: 'pointer', 
           borderRadius: '6px', 
           fontWeight: 700, 
@@ -108,6 +114,13 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
             backgroundColor: 'rgba(37,99,235,0.15)',
             textDecoration: 'underline'
           }
+        } : {
+          borderRadius: '6px', 
+          fontWeight: 700, 
+          fontSize: '11px',
+          color: '#64748B',
+          backgroundColor: '#F1F5F9',
+          border: '1px solid #E2E8F0'
         }}
       />
     </Tooltip>

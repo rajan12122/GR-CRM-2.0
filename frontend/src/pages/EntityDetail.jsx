@@ -863,43 +863,62 @@ const EntityDetail = () => {
                           sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
                         />
                       </EntityTooltip>
-                    ) : f.type === 'ref' ? (
-                      <EntityTooltip moduleName={f.refModule} id={val}>
-                        <Chip 
-                          label={(() => {
-                            if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
-                              const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
-                              if (prop) {
-                                if (prop.dealer_owner_booked === 'Dealer') {
-                                  if (prop.dealerId) {
-                                    const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
-                                    if (dealer) return dealer.firm_name || dealer.name || dealer.id;
-                                  }
-                                } else {
-                                  return prop.contact_person_name || 'Direct Owner';
-                                }
+                    ) : f.type === 'ref' ? ( (() => {
+                      let isClickable = true;
+                      let resolvedLabel = '';
+                      let onClickAction = () => navigate(`/module/${f.refModule}/${val}`);
+
+                      if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
+                        const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
+                        if (prop) {
+                          if (prop.dealer_owner_booked === 'Dealer') {
+                            if (prop.dealerId) {
+                              const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
+                              if (dealer) {
+                                resolvedLabel = dealer.firm_name || dealer.name || dealer.id;
+                                onClickAction = () => navigate(`/module/dealers/${prop.dealerId}`);
+                              } else {
+                                resolvedLabel = 'Dealer N/A';
+                                isClickable = false;
                               }
+                            } else {
+                              resolvedLabel = 'Dealer N/A';
+                              isClickable = false;
                             }
-                            const refArray = moduleData[f.refModule] || [];
-                            const referencedRecord = refArray.find(r => String(r.id) === String(val));
-                            return referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || val) : val;
-                          })()} 
-                          size="small" 
-                          onClick={() => {
-                            if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
-                              const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
-                              if (prop) {
-                                if (prop.dealer_owner_booked === 'Dealer' && prop.dealerId) {
-                                  navigate(`/module/dealers/${prop.dealerId}`);
-                                  return;
-                                }
-                              }
-                            }
-                            navigate(`/module/${f.refModule}/${val}`);
-                          }}
-                          sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
-                        />
-                      </EntityTooltip>
+                          } else {
+                            resolvedLabel = prop.contact_person_name || 'Direct Owner';
+                            isClickable = false;
+                          }
+                        }
+                      }
+
+                      if (!resolvedLabel) {
+                        const refArray = moduleData[f.refModule] || [];
+                        const referencedRecord = refArray.find(r => String(r.id) === String(val));
+                        resolvedLabel = referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || val) : val;
+                      }
+
+                      return (
+                        <EntityTooltip moduleName={f.refModule} id={val} disabled={!isClickable}>
+                          <Chip 
+                            label={resolvedLabel} 
+                            size="small" 
+                            onClick={isClickable ? onClickAction : undefined}
+                            sx={{ 
+                              height: 20, 
+                              fontSize: '10px', 
+                              fontWeight: 700, 
+                              cursor: isClickable ? 'pointer' : 'default',
+                              ...(!isClickable ? {
+                                color: '#64748B',
+                                backgroundColor: '#F1F5F9',
+                                border: '1px solid #E2E8F0'
+                              } : {})
+                            }} 
+                          />
+                        </EntityTooltip>
+                      );
+                    })()
                     ) : f.type === 'multiref' ? (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                         {String(val).split(',').filter(Boolean).map(itemId => (
@@ -1929,15 +1948,20 @@ const EntityDetail = () => {
                               const prop = record;
                               let resolvedSellerName = d.sellerCustomerId;
                               let clickPath = `/module/customers/${d.sellerCustomerId}`;
+                              let isSellerLink = true;
                               if (prop) {
                                 if (prop.dealer_owner_booked === 'Dealer') {
                                   const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
                                   if (dealer) {
                                     resolvedSellerName = dealer.firm_name || dealer.name || dealer.id;
                                     clickPath = `/module/dealers/${prop.dealerId}`;
+                                  } else {
+                                    resolvedSellerName = 'Dealer N/A';
+                                    isSellerLink = false;
                                   }
                                 } else {
-                                  resolvedSellerName = prop.contact_person_name || d.sellerCustomerId;
+                                  resolvedSellerName = prop.contact_person_name || 'Direct Owner';
+                                  isSellerLink = false;
                                 }
                               } else {
                                 const cust = (moduleData.customers || []).find(c => String(c.id) === String(d.sellerCustomerId));
@@ -1948,12 +1972,16 @@ const EntityDetail = () => {
                               return (
                                 <Typography variant="body2">
                                   Seller Customer:{' '}
-                                  <span 
-                                    style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} 
-                                    onClick={() => navigate(clickPath)}
-                                  >
-                                    {resolvedSellerName}
-                                  </span>
+                                  {isSellerLink ? (
+                                    <span 
+                                      style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB', fontWeight: 700 }} 
+                                      onClick={() => navigate(clickPath)}
+                                    >
+                                      {resolvedSellerName}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#64748B', fontWeight: 700 }}>{resolvedSellerName}</span>
+                                  )}
                                 </Typography>
                               );
                             })()}
