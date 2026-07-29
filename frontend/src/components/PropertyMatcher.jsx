@@ -16,7 +16,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { Home } from 'lucide-react';
 
-const PropertyMatcher = () => {
+const PropertyMatcher = ({ variant = 'tab' }) => {
   const navigate = useNavigate();
   const { moduleData } = useApp();
   const properties = moduleData.properties || [];
@@ -113,16 +113,27 @@ const PropertyMatcher = () => {
     setDealType('');
   };
 
+  const isSidebar = variant === 'sidebar';
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins', color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Home size={20} color="#2563EB" />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: isSidebar ? 2 : 3 }}>
+      <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins', color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1, fontSize: isSidebar ? '15px' : '18px' }}>
+        <Home size={isSidebar ? 18 : 20} color="#2563EB" />
         Manual Property Matcher
       </Typography>
 
-      <Paper variant="outlined" sx={{ p: 3, borderRadius: '16px', borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={4}>
+      <Paper 
+        variant="outlined" 
+        sx={{ 
+          p: isSidebar ? 2 : 3, 
+          borderRadius: '16px', 
+          borderColor: '#E2E8F0', 
+          backgroundColor: isSidebar ? 'white' : '#F8FAFC',
+          border: isSidebar ? 'none' : undefined
+        }}
+      >
+        <Grid container spacing={isSidebar ? 1.5 : 2}>
+          <Grid item xs={12} sm={isSidebar ? 6 : 4}>
             <TextField
               label="Locality"
               placeholder="e.g. Sector 82"
@@ -133,7 +144,7 @@ const PropertyMatcher = () => {
               sx={{ backgroundColor: 'white' }}
             />
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={isSidebar ? 6 : 4}>
             <TextField
               label="Sector/Block"
               placeholder="e.g. Block A"
@@ -144,7 +155,7 @@ const PropertyMatcher = () => {
               sx={{ backgroundColor: 'white' }}
             />
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={isSidebar ? 6 : 4}>
             <TextField
               label="Size"
               placeholder="e.g. 100 Sq.Yd."
@@ -155,7 +166,7 @@ const PropertyMatcher = () => {
               sx={{ backgroundColor: 'white' }}
             />
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={isSidebar ? 6 : 4}>
             <TextField
               label="Budget (Demand)"
               placeholder="e.g. 1.90 Cr"
@@ -166,7 +177,7 @@ const PropertyMatcher = () => {
               sx={{ backgroundColor: 'white' }}
             />
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={isSidebar ? 6 : 4}>
             <FormControl fullWidth size="small" sx={{ backgroundColor: 'white' }}>
               <InputLabel>R/C/I</InputLabel>
               <Select
@@ -182,7 +193,7 @@ const PropertyMatcher = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={isSidebar ? 6 : 4}>
             <FormControl fullWidth size="small" sx={{ backgroundColor: 'white' }}>
               <InputLabel>Dealer/Owner/Booked</InputLabel>
               <Select
@@ -209,17 +220,17 @@ const PropertyMatcher = () => {
 
       {isSearchActive ? (
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: '#475569' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: '#475569', fontSize: isSidebar ? '12px' : '14px' }}>
             Matching Properties ({matchedProperties.length})
           </Typography>
           {matchedProperties.length > 0 ? (
-            <Box display="flex" flexDirection="column" gap={2}>
+            <Box display="flex" flexDirection="column" gap={1.5}>
               {matchedProperties.map(p => (
                 <Paper
                   key={p.id}
                   variant="outlined"
                   sx={{
-                    p: 2.5,
+                    p: isSidebar ? 1.5 : 2.5,
                     borderRadius: '12px',
                     borderColor: '#E2E8F0',
                     transition: 'all 0.2s',
@@ -229,11 +240,11 @@ const PropertyMatcher = () => {
                     }
                   }}
                 >
-                  <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={3}>
+                  <Grid container spacing={isSidebar ? 1 : 2} alignItems="center">
+                    <Grid item xs={12} sm={isSidebar ? 12 : 3}>
                       <Typography
                         variant="subtitle2"
-                        sx={{ fontWeight: 800, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline' }}
+                        sx={{ fontWeight: 800, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline', fontSize: isSidebar ? '13px' : '14px' }}
                         onClick={() => navigate(`/module/properties/${p.id}`)}
                       >
                         {p.id}
@@ -242,34 +253,35 @@ const PropertyMatcher = () => {
                         {p.propertyName || 'Unnamed Listing'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={2.5}>
+                    <Grid item xs={6} sm={isSidebar ? 6 : 2.5}>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Location</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B', fontSize: isSidebar ? '11px' : '12px' }}>
                         {p.locality || '---'} {p.sector_block ? `(Sec ${p.sector_block})` : ''}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={2}>
+                    <Grid item xs={6} sm={isSidebar ? 6 : 2}>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Size</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B', fontSize: isSidebar ? '11px' : '12px' }}>
                         {p.size || '---'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={2.5}>
+                    <Grid item xs={6} sm={isSidebar ? 6 : 2.5}>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Demand / Price</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', fontSize: isSidebar ? '12px' : '14px' }}>
                         ₹{p.demand || '---'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={2} display="flex" flexDirection="column" gap={0.5} alignItems="flex-end">
+                    <Grid item xs={6} sm={isSidebar ? 6 : 2} display="flex" flexDirection={isSidebar ? 'row' : 'column'} gap={0.5} justifyContent={isSidebar ? 'flex-start' : 'flex-end'} alignItems={isSidebar ? 'center' : 'flex-end'}>
                       {p.r_c_i && (
                         <Chip
                           label={p.r_c_i}
                           size="small"
                           sx={{
                             fontWeight: 700,
-                            fontSize: '10px',
+                            fontSize: '9px',
                             backgroundColor: p.r_c_i === 'Residential' ? '#DBEAFE' : p.r_c_i === 'Commercial' ? '#FEF3C7' : '#D1FAE5',
-                            color: p.r_c_i === 'Residential' ? '#1E40AF' : p.r_c_i === 'Commercial' ? '#D97706' : '#065F46'
+                            color: p.r_c_i === 'Residential' ? '#1E40AF' : p.r_c_i === 'Commercial' ? '#D97706' : '#065F46',
+                            height: 18
                           }}
                         />
                       )}
@@ -278,7 +290,7 @@ const PropertyMatcher = () => {
                           label={p.dealer_owner_booked}
                           variant="outlined"
                           size="small"
-                          sx={{ fontWeight: 600, fontSize: '9px', height: 18 }}
+                          sx={{ fontWeight: 600, fontSize: '8px', height: 16 }}
                         />
                       )}
                     </Grid>
@@ -287,16 +299,16 @@ const PropertyMatcher = () => {
               ))}
             </Box>
           ) : (
-            <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: '16px', borderStyle: 'dashed', borderColor: '#CBD5E1' }}>
-              <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+            <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: '16px', borderStyle: 'dashed', borderColor: '#CBD5E1' }}>
+              <Typography variant="body2" sx={{ color: '#94A3B8', fontSize: '12px' }}>
                 No matching properties found.
               </Typography>
             </Paper>
           )}
         </Box>
       ) : (
-        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: '16px', borderStyle: 'dashed', borderColor: '#CBD5E1' }}>
-          <Typography variant="body2" sx={{ color: '#94A3B8' }}>
+        <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: '16px', borderStyle: 'dashed', borderColor: '#CBD5E1' }}>
+          <Typography variant="body2" sx={{ color: '#94A3B8', fontSize: '12px' }}>
             Please fill in at least one search field to see matching properties.
           </Typography>
         </Paper>
