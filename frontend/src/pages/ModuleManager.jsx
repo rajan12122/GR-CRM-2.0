@@ -260,7 +260,8 @@ const ModuleManager = () => {
     updateRecord, 
     deleteRecord,
     bulkDeleteRecord,
-    loadingData 
+    loadingData,
+    user
   } = useApp();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -358,7 +359,23 @@ const ModuleManager = () => {
     );
   }
 
-  const fields = moduleConfig.fields;
+  const fields = useMemo(() => {
+    const rawFields = moduleConfig.fields || [];
+    if (!user || user.role === 'Admin') return rawFields;
+
+    return rawFields.filter(f => {
+      let allowed = true;
+      if (metadata?.userColumnPermissions?.[user.id]?.[moduleName]) {
+        const userOverriden = metadata.userColumnPermissions[user.id][moduleName][f.name];
+        if (userOverriden !== undefined) {
+          allowed = userOverriden.includes('view');
+        }
+      } else if (metadata?.fieldPermissions?.[user.role]?.[moduleName]) {
+        allowed = metadata.fieldPermissions[user.role][moduleName].includes(f.name);
+      }
+      return allowed;
+    });
+  }, [moduleConfig, metadata, user, moduleName]);
   const records = useMemo(() => {
     const rawRecs = moduleData[moduleName] || [];
     return rawRecs.filter(r => {

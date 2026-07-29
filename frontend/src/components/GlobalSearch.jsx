@@ -25,7 +25,23 @@ import { useApp, API_BASE_URL } from '../context/AppContext';
 import { DynamicIcon } from './Sidebar';
 
 const GlobalSearch = ({ open, onClose }) => {
-  const { searchAll, fetchEntity360, metadata } = useApp();
+  const { searchAll, fetchEntity360, metadata, user } = useApp();
+
+  const isFieldAllowed = (mName, fName) => {
+    if (!user || user.role === 'Admin') return true;
+    
+    let allowed = true;
+    if (metadata?.userColumnPermissions?.[user.id]?.[mName]) {
+      const userOverriden = metadata.userColumnPermissions[user.id][mName][fName];
+      if (userOverriden !== undefined) {
+        allowed = userOverriden.includes('view');
+      }
+    } else if (metadata?.fieldPermissions?.[user.role]?.[mName]) {
+      allowed = metadata.fieldPermissions[user.role][mName].includes(fName);
+    }
+    return allowed;
+  };
+
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState({});
@@ -127,42 +143,42 @@ const GlobalSearch = ({ open, onClose }) => {
     const parts = [];
 
     if (moduleName === 'properties') {
-      if (rec.propertyType) parts.push(`Type: ${rec.propertyType}`);
-      if (rec.size) parts.push(`Size: ${rec.size}`);
-      if (rec.price) parts.push(`Price: ₹${rec.price.toLocaleString('en-IN')}`);
-      if (rec.location) parts.push(`Loc: ${rec.location}`);
-      if (rec.locality) parts.push(`Locality: ${rec.locality}`);
-      if (rec.sector_block) parts.push(`Sec/Blk: ${rec.sector_block}`);
-      if (rec.address_number) parts.push(`Addr: ${rec.address_number}`);
-      if (rec.status) parts.push(`Status: ${rec.status}`);
-      if (rec.deal_typr) parts.push(`Deal: ${rec.deal_typr}`);
-      if (rec.dealtype) parts.push(`Deal: ${rec.dealtype}`);
+      if (rec.propertyType && isFieldAllowed('properties', 'propertyType')) parts.push(`Type: ${rec.propertyType}`);
+      if (rec.size && isFieldAllowed('properties', 'size')) parts.push(`Size: ${rec.size}`);
+      if (rec.price && isFieldAllowed('properties', 'price')) parts.push(`Price: ₹${rec.price.toLocaleString('en-IN')}`);
+      if (rec.location && isFieldAllowed('properties', 'location')) parts.push(`Loc: ${rec.location}`);
+      if (rec.locality && isFieldAllowed('properties', 'locality')) parts.push(`Locality: ${rec.locality}`);
+      if (rec.sector_block && isFieldAllowed('properties', 'sector_block')) parts.push(`Sec/Blk: ${rec.sector_block}`);
+      if (rec.address_number && isFieldAllowed('properties', 'address_number')) parts.push(`Addr: ${rec.address_number}`);
+      if (rec.status && isFieldAllowed('properties', 'status')) parts.push(`Status: ${rec.status}`);
+      if (rec.deal_typr && isFieldAllowed('properties', 'deal_typr')) parts.push(`Deal: ${rec.deal_typr}`);
+      if (rec.dealtype && isFieldAllowed('properties', 'dealtype')) parts.push(`Deal: ${rec.dealtype}`);
     } else if (moduleName === 'customers') {
-      if (rec.phone) parts.push(`Ph: ${rec.phone}`);
-      if (rec.email) parts.push(rec.email);
-      if (rec.budget) parts.push(`Budget: ₹${rec.budget.toLocaleString('en-IN')}`);
-      if (rec.city) parts.push(`City: ${rec.city}`);
-      if (rec.status) parts.push(`Stage: ${rec.status}`);
+      if (rec.phone && isFieldAllowed('customers', 'phone')) parts.push(`Ph: ${rec.phone}`);
+      if (rec.email && isFieldAllowed('customers', 'email')) parts.push(rec.email);
+      if (rec.budget && isFieldAllowed('customers', 'budget')) parts.push(`Budget: ₹${rec.budget.toLocaleString('en-IN')}`);
+      if (rec.city && isFieldAllowed('customers', 'city')) parts.push(`City: ${rec.city}`);
+      if (rec.status && isFieldAllowed('customers', 'status')) parts.push(`Stage: ${rec.status}`);
     } else if (moduleName === 'employees') {
-      if (rec.role) parts.push(rec.role);
-      if (rec.phone) parts.push(`Ph: ${rec.phone}`);
-      if (rec.email) parts.push(rec.email);
-      if (rec.status) parts.push(`Status: ${rec.status}`);
+      if (rec.role && isFieldAllowed('employees', 'role')) parts.push(rec.role);
+      if (rec.phone && isFieldAllowed('employees', 'phone')) parts.push(`Ph: ${rec.phone}`);
+      if (rec.email && isFieldAllowed('employees', 'email')) parts.push(rec.email);
+      if (rec.status && isFieldAllowed('employees', 'status')) parts.push(`Status: ${rec.status}`);
     } else if (moduleName === 'leads') {
-      if (rec.phone) parts.push(`Ph: ${rec.phone}`);
-      if (rec.email) parts.push(rec.email);
-      if (rec.source) parts.push(`Src: ${rec.source}`);
-      if (rec.status) parts.push(`Status: ${rec.status}`);
+      if (rec.phone && isFieldAllowed('leads', 'phone')) parts.push(`Ph: ${rec.phone}`);
+      if (rec.email && isFieldAllowed('leads', 'email')) parts.push(rec.email);
+      if (rec.source && isFieldAllowed('leads', 'source')) parts.push(`Src: ${rec.source}`);
+      if (rec.status && isFieldAllowed('leads', 'status')) parts.push(`Status: ${rec.status}`);
     } else if (moduleName === 'dealers') {
-      if (rec.firm_name) parts.push(`Firm: ${rec.firm_name}`);
-      if (rec.person_name) parts.push(`Person: ${rec.person_name}`);
-      if (rec.contact_num) parts.push(`Ph: ${rec.contact_num}`);
-      if (rec.sector_block) parts.push(`Area/Sec/Blk: ${rec.sector_block}`);
+      if (rec.firm_name && isFieldAllowed('dealers', 'firm_name')) parts.push(`Firm: ${rec.firm_name}`);
+      if (rec.person_name && isFieldAllowed('dealers', 'person_name')) parts.push(`Person: ${rec.person_name}`);
+      if (rec.contact_num && isFieldAllowed('dealers', 'contact_num')) parts.push(`Ph: ${rec.contact_num}`);
+      if (rec.sector_block && isFieldAllowed('dealers', 'sector_block')) parts.push(`Area/Sec/Blk: ${rec.sector_block}`);
     } else {
-      if (rec.phone) parts.push(`Ph: ${rec.phone}`);
-      if (rec.email) parts.push(rec.email);
-      if (rec.price) parts.push(`₹${rec.price.toLocaleString('en-IN')}`);
-      if (rec.status) parts.push(rec.status);
+      if (rec.phone && isFieldAllowed(moduleName, 'phone')) parts.push(`Ph: ${rec.phone}`);
+      if (rec.email && isFieldAllowed(moduleName, 'email')) parts.push(rec.email);
+      if (rec.price && isFieldAllowed(moduleName, 'price')) parts.push(`₹${rec.price.toLocaleString('en-IN')}`);
+      if (rec.status && isFieldAllowed(moduleName, 'status')) parts.push(rec.status);
     }
 
     return parts.length > 0 ? parts.join(' • ') : `ID: ${rec.id}`;
@@ -369,7 +385,7 @@ const GlobalSearch = ({ open, onClose }) => {
 
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Budget Constraint & City Preference:</Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1.5 }}>
-                                  ₹{activeRecord.budget?.toLocaleString('en-IN') || 'No Limit'} in {activeRecord.city || 'Any City'}
+                                  {isFieldAllowed('customers', 'budget') ? `₹${activeRecord.budget?.toLocaleString('en-IN') || 'No Limit'}` : 'Restricted'} in {isFieldAllowed('customers', 'city') ? (activeRecord.city || 'Any City') : 'Restricted'}
                                 </Typography>
 
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Site Visits Executed ({connections.site_visits?.length || 0}):</Typography>
@@ -395,7 +411,7 @@ const GlobalSearch = ({ open, onClose }) => {
                               <Grid item xs={12}>
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Role Profile & Contact:</Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1.5 }}>
-                                  {activeRecord.role} • {activeRecord.email} • {activeRecord.phone}
+                                  {activeRecord.role} • {isFieldAllowed('employees', 'email') ? activeRecord.email : 'Restricted'} • {isFieldAllowed('employees', 'phone') ? activeRecord.phone : 'Restricted'}
                                 </Typography>
 
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Handling Customers ({connections.customers?.length || 0}):</Typography>
@@ -433,7 +449,7 @@ const GlobalSearch = ({ open, onClose }) => {
                               <Grid item xs={12}>
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Location and Parameters:</Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1.5 }}>
-                                  {activeRecord.location} • Type: {activeRecord.propertyType} • Area: {activeRecord.size} Sq.Ft.
+                                  {isFieldAllowed('properties', 'location') ? activeRecord.location : 'Restricted'} • Type: {isFieldAllowed('properties', 'propertyType') ? activeRecord.propertyType : 'Restricted'} • Area: {isFieldAllowed('properties', 'size') ? `${activeRecord.size} Sq.Ft.` : 'Restricted'}
                                 </Typography>
 
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Property View Count / Customer Visits ({connections.viewsCount || 0}):</Typography>
@@ -463,7 +479,7 @@ const GlobalSearch = ({ open, onClose }) => {
                               <Grid item xs={12}>
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Firm Name & Person Name:</Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1.5 }}>
-                                  {activeRecord.firm_name} ({activeRecord.person_name})
+                                  {isFieldAllowed('dealers', 'firm_name') ? activeRecord.firm_name : 'Restricted'} ({isFieldAllowed('dealers', 'person_name') ? activeRecord.person_name : 'Restricted'})
                                 </Typography>
 
                                 <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600 }}>Associated Properties & Inventory Listings ({connections.properties?.length || 0}):</Typography>
