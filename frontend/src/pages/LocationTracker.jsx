@@ -248,7 +248,7 @@ const LocationTracker = () => {
   }
 
   return (
-    <Box sx={{ p: 3, height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ p: 3, height: { xs: 'auto', md: 'calc(100vh - 120px)' }, display: 'flex', flexDirection: 'column', overflowY: { xs: 'auto', md: 'hidden' } }}>
       
       {/* Title */}
       <Box sx={{ mb: 3 }}>
@@ -261,10 +261,10 @@ const LocationTracker = () => {
       </Box>
 
       {/* Grid containing list and map */}
-      <Grid container spacing={3} sx={{ flexGrow: 1, minHeight: 0 }}>
+      <Grid container spacing={3} sx={{ flexGrow: 1, minHeight: 0, height: { xs: 'auto', md: '100%' } }}>
         
         {/* Left Side: Active List */}
-        <Grid item xs={12} md={4} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Grid item xs={12} md={4} sx={{ height: { xs: '400px', md: '100%' }, display: 'flex', flexDirection: 'column' }}>
           <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', height: '100%', display: 'flex', flexDirection: 'column' }}>
             <CardContent sx={{ p: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Box sx={{ p: 2.5 }}>
@@ -346,7 +346,7 @@ const LocationTracker = () => {
         </Grid>
 
         {/* Right Side: Map Container */}
-        <Grid item xs={12} md={8} sx={{ height: '100%' }}>
+        <Grid item xs={12} md={8} sx={{ height: { xs: '500px', md: '100%' } }}>
           <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', height: '100%', overflow: 'hidden', position: 'relative' }}>
             <Box 
               ref={mapRef} 
