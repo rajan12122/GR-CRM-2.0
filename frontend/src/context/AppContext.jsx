@@ -78,7 +78,11 @@ export const AppProvider = ({ children }) => {
 
     } catch (err) {
       console.error('Failed to load profile/metadata:', err);
-      logout();
+      // Only logout if the error status indicates auth credentials expired (401/403)
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        logout();
+      }
     } finally {
       setLoadingMetadata(false);
     }
@@ -352,7 +356,12 @@ export const AppProvider = ({ children }) => {
 
   const refreshMetadata = async () => {
     if (token) {
-      await loadProfileAndMetadata();
+      try {
+        const metaRes = await axios.get(`${API_BASE_URL}/metadata`);
+        setMetadata(metaRes.data);
+      } catch (err) {
+        console.error('Failed to reload metadata:', err);
+      }
     }
   };
 

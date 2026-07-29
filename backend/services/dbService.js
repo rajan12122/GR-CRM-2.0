@@ -154,12 +154,12 @@ async function writeMetadata(data) {
     ON CONFLICT (key) DO UPDATE SET value = $1;
   `, [JSON.stringify(data)]);
   
-  // Write to local file as fallback
-  try {
-    fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
-  } catch (err) {
-    // Ignore write failures to local disk on ephemeral systems
-  }
+  // Write to local file as fallback asynchronously
+  fs.writeFile(metadataPath, JSON.stringify(data, null, 2), 'utf8', (err) => {
+    if (err) {
+      console.error('Failed to write metadata fallback file:', err.message);
+    }
+  });
 }
 
 // PostgreSQL transaction wrapper
