@@ -364,7 +364,8 @@ const ModuleManager = () => {
         const converted = records.filter(r => 
           r.status === 'Converted' || 
           r.status === 'Moved to Customer' || 
-          (moduleData.customers || []).some(c => String(c.id) === String(r.id) || String(c.leadId) === String(r.id))
+          (r.leadType !== 'Seller' && r.leadType !== 'Seller Client' &&
+           (moduleData.customers || []).some(c => String(c.id) === String(r.id) || String(c.leadId) === String(r.id)))
         );
         const activeLeads = records.filter(r => 
           !converted.some(c => String(c.id) === String(r.id))
@@ -736,7 +737,8 @@ const ModuleManager = () => {
       if (moduleName === 'leads' && stackedFilters._special) {
         const isConv = rec.status === 'Converted' || 
                        rec.status === 'Moved to Customer' || 
-                       (moduleData.customers || []).some(c => String(c.id) === String(rec.id) || String(c.leadId) === String(rec.id));
+                       (rec.leadType !== 'Seller' && rec.leadType !== 'Seller Client' &&
+                        (moduleData.customers || []).some(c => String(c.id) === String(rec.id) || String(c.leadId) === String(rec.id)));
         
         if (stackedFilters._special === 'activeLeads') {
           if (isConv) return false;

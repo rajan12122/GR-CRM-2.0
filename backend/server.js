@@ -2118,7 +2118,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           }
         }
         if (payload.leadType === 'Seller') {
-          payload.status = 'Converted';
+          payload.status = payload.status || 'Open';
           payload.assignmentStatus = 'accepted';
           payload.assignmentTime = null;
           payload.droppedBy = [];
