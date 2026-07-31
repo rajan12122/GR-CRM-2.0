@@ -5403,7 +5403,7 @@ app.listen(PORT, async () => {
     const client = await pool.connect();
     try {
       // Clean up invalid test location logs that have NULL employeeIds or employeeNames from previous runs
-      await client.query('DELETE FROM location_logs WHERE "employeeId" IS NULL OR "employeeName" IS NULL OR employeeid IS NULL OR employeename IS NULL');
+      await client.query('DELETE FROM location_logs WHERE employee_id IS NULL OR employee_name IS NULL');
       dbCache = await loadTransactionDb(client);
       console.log('Successfully initialized dbCache from PostgreSQL.');
     } finally {

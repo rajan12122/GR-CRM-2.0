@@ -254,6 +254,10 @@ function getExecutor(dbOrClient) {
   return pool;
 }
 
+function normalizeKey(key) {
+  return String(key).toLowerCase().replace(/_/g, '');
+}
+
 function normalizeRow(moduleName, row) {
   if (!row) return row;
   
@@ -282,11 +286,12 @@ function normalizeRow(moduleName, row) {
     expectedKeys.add('dateTime');
   }
   
-  // Map database keys to expected keys case-insensitively
+  // Map database keys to expected keys case-insensitively and ignoring underscores
   for (const dbKey of Object.keys(row)) {
     let matchedKey = null;
+    const normDbKey = normalizeKey(dbKey);
     for (const expKey of expectedKeys) {
-      if (expKey.toLowerCase() === dbKey.toLowerCase()) {
+      if (normalizeKey(expKey) === normDbKey) {
         matchedKey = expKey;
         break;
       }
@@ -320,7 +325,7 @@ function coerceRecordValues(moduleName, data, columns) {
   
   return columns.map(col => {
     let val = data[col];
-    const fieldDef = fields.find(f => f.name.toLowerCase() === col.toLowerCase());
+    const fieldDef = fields.find(f => normalizeKey(f.name) === normalizeKey(col));
     if (fieldDef) {
       if (fieldDef.type === 'boolean' || fieldDef.type === 'checkbox') {
         if (val === '' || val === null || val === undefined) {
@@ -372,7 +377,8 @@ async function insertRecord(moduleName, data, dbOrClient) {
   
   for (const key of Object.keys(data)) {
     if (key === 'created_at' || key === 'updated_at') continue;
-    const dbCol = tableCols.find(c => c.toLowerCase() === key.toLowerCase());
+    const normKey = normalizeKey(key);
+    const dbCol = tableCols.find(c => normalizeKey(c) === normKey);
     if (dbCol) {
       columns.push(dbCol);
       coercedData[dbCol] = data[key];
@@ -401,7 +407,8 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
   
   for (const key of Object.keys(data)) {
     if (key === 'created_at' || key === 'updated_at') continue;
-    const dbCol = tableCols.find(c => c.toLowerCase() === key.toLowerCase());
+    const normKey = normalizeKey(key);
+    const dbCol = tableCols.find(c => normalizeKey(c) === normKey);
     if (dbCol) {
       columns.push(dbCol);
       coercedData[dbCol] = data[key];
