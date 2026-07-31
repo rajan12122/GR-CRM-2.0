@@ -208,7 +208,7 @@ const Salary = () => {
     if (!selectedEmployeeObj) return [];
     
     const logs = [];
-    const daysInMonth = 30; // Every month is considered 30 days
+    const daysInMonth = new Date(year, month, 0).getDate();
     const dutyHours = Number(selectedEmployeeObj.dutyHours) || 8;
 
     for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
@@ -340,7 +340,8 @@ const Salary = () => {
     if (!selectedEmployeeObj) return null;
 
     const baseSalary = Number(selectedEmployeeObj.salary) || 0;
-    const dailyRate = baseSalary / 30;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const dailyRate = baseSalary / daysInMonth;
     
     // Leaves deductions: 4 leaves permitted for free
     const paidLeavesUsed = Math.min(attendanceCounts.leaveDays, 4);
@@ -1106,7 +1107,7 @@ const Salary = () => {
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>₹{formatCurrency(payrollStats.baseSalary)}</Typography>
                 </Box>
                 <Box display="flex" justifyContent="space-between" mb={1}>
-                  <Typography variant="body2" sx={{ color: '#94A3B8' }}>Daily Rate (Salary/30)</Typography>
+                  <Typography variant="body2" sx={{ color: '#94A3B8' }}>Daily Rate (Salary/{new Date(year, month, 0).getDate()})</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>₹{formatCurrency(payrollStats.dailyRate)}</Typography>
                 </Box>
                 <Box display="flex" justifyContent="space-between" mb={1}>
@@ -1246,7 +1247,7 @@ const Salary = () => {
             <Grid item xs={6}>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, borderBottom: '1px solid #E2E8F0', pb: 0.5 }}>EARNING BREAKDOWN</Typography>
               <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography variant="body2">Daily Payout Rate (Salary/30)</Typography>
+                <Typography variant="body2">Daily Payout Rate (Salary/{new Date(year, month, 0).getDate()})</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>₹{formatCurrency(payrollStats.dailyRate)}</Typography>
               </Box>
               <Box display="flex" justifyContent="space-between" py={0.5}>

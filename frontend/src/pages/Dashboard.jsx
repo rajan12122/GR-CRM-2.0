@@ -436,7 +436,14 @@ const Dashboard = () => {
     score: leaderboardMap[rm]
   })).sort((a, b) => b.score - a.score).slice(0, 5);
   
-  const presentToday = attendance.filter(a => a.date === '2026-07-03' && (a.status === 'Present' || a.status === 'Late')).length;
+  const todayLocalStr = (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  })();
+  const presentToday = attendance.filter(a => a.date === todayLocalStr).length;
   const availableProperties = availablePropsCount;
   const pendingFollowupsToday = followUps.filter(f => f.status === 'Pending').length;
 

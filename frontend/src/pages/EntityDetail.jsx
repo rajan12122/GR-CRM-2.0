@@ -2987,8 +2987,22 @@ const EntityDetail = () => {
                             return (
                               <Paper key={index} sx={{ p: 3, border: '1px solid #E2E8F0', boxShadow: 'none', borderRadius: '12px' }}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>{log.date} ({netKm} KM Driven)</Typography>
-                                <Typography variant="body2">Punch In: <strong>{log.inTime}</strong> (Start: {log.odometerStart} KM)</Typography>
-                                <Typography variant="body2">Punch Out: <strong>{log.outTime || '---'}</strong> (End: {log.odometerEnd || '---'} KM)</Typography>
+                                <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                  Punch In: <strong>{log.inTime}</strong> (Start: {log.odometerStart} KM)
+                                  {log.odometerStartPhoto && (
+                                    <a href={log.odometerStartPhoto} target="_blank" rel="noreferrer" style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                      📷 View Photo
+                                    </a>
+                                  )}
+                                </Typography>
+                                <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
+                                  Punch Out: <strong>{log.outTime || '---'}</strong> (End: {log.odometerEnd || '---'} KM)
+                                  {log.odometerEndPhoto && (
+                                    <a href={log.odometerEndPhoto} target="_blank" rel="noreferrer" style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                      📷 View Photo
+                                    </a>
+                                  )}
+                                </Typography>
                                 <Typography variant="body2" sx={{ color: '#16A34A', mt: 1 }}>Daily Travel Allowance: ₹{dailyAllowance.toLocaleString('en-IN')} (at ₹3/KM)</Typography>
                               </Paper>
                             );
