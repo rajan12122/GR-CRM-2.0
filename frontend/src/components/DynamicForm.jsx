@@ -207,6 +207,9 @@ const DynamicForm = ({
       if (f.name === 'land_type') {
         return formData.r_c_i === 'Land';
       }
+      if (f.name === 'propertyType') {
+        return formData.r_c_i !== 'Land';
+      }
     }
     if (moduleKey === 'follow_ups') {
       if (f.name === 'queryId') return false;
@@ -1178,31 +1181,33 @@ const DynamicForm = ({
                                     </FormControl>
                                   </Grid>
 
-                                  <Grid item xs={12} sm={6}>
-                                    <FormControl fullWidth size="small">
-                                      <InputLabel>Property Type</InputLabel>
-                                      <Select
-                                        value={nestedPropertyData.propertyType || ''}
-                                        onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
-                                        label="Property Type"
-                                      >
-                                        {(() => {
-                                          const currentRCI = nestedPropertyData.r_c_i || 'Residential';
-                                          const mapping = {
-                                            Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                                            Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
-                                            Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                                            Land: []
-                                          };
-                                          const allowed = mapping[currentRCI] || [];
-                                          return [
-                                            ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
-                                            <MenuItem key="Other" value="Other">Other</MenuItem>
-                                          ];
-                                        })()}
-                                      </Select>
-                                    </FormControl>
-                                  </Grid>
+                                  {nestedPropertyData.r_c_i !== 'Land' && (
+                                    <Grid item xs={12} sm={6}>
+                                      <FormControl fullWidth size="small">
+                                        <InputLabel>Property Type</InputLabel>
+                                        <Select
+                                          value={nestedPropertyData.propertyType || ''}
+                                          onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
+                                          label="Property Type"
+                                        >
+                                          {(() => {
+                                            const currentRCI = nestedPropertyData.r_c_i || 'Residential';
+                                            const mapping = {
+                                              Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
+                                              Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
+                                              Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
+                                              Land: []
+                                            };
+                                            const allowed = mapping[currentRCI] || [];
+                                            return [
+                                              ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
+                                              <MenuItem key="Other" value="Other">Other</MenuItem>
+                                            ];
+                                          })()}
+                                        </Select>
+                                      </FormControl>
+                                    </Grid>
+                                  )}
 
                                   {nestedPropertyData.r_c_i === 'Land' && (
                                     <Grid item xs={12} sm={6}>
@@ -1846,6 +1851,9 @@ const DynamicForm = ({
                       }
                       if (f.name === 'land_type') {
                         return nestedPropertyData.r_c_i === 'Land';
+                      }
+                      if (f.name === 'propertyType') {
+                        return nestedPropertyData.r_c_i !== 'Land';
                       }
                       return true;
                     }).map(f => {
