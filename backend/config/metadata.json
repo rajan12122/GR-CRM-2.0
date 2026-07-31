@@ -113,7 +113,8 @@
         {
           "name": "leadId",
           "label": "Lead ID",
-          "type": "text",
+          "type": "ref",
+          "refModule": "leads",
           "required": false,
           "showInTable": true,
           "editable": false
