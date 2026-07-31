@@ -270,7 +270,7 @@ const DynamicTable = ({
         ...(metadata?.chips?.customerStages || []),
         ...(metadata?.chips?.buyerQueryStages || [])
       ];
-      const chipConfig = allChips.find(c => c.value === val);
+      const chipConfig = allChips.find(c => String(c.value).toLowerCase() === String(val).toLowerCase());
       return (
         <Chip 
           label={chipConfig?.label || val} 
@@ -289,7 +289,7 @@ const DynamicTable = ({
 
     // If it's a chip dropdown option, look up color in metadata
     if (field.type === 'select' && field.chipGroup && metadata?.chips[field.chipGroup]) {
-      const chipConfig = metadata.chips[field.chipGroup].find(c => c.value === val);
+      const chipConfig = metadata.chips[field.chipGroup].find(c => String(c.value).toLowerCase() === String(val).toLowerCase());
       return (
         <Chip 
           label={chipConfig?.label || val} 

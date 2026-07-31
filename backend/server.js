@@ -410,16 +410,16 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
             if (f.chipGroup === group) {
               const columnName = f.name;
               
-              // 1. Run update query in PostgreSQL
+              // 1. Run update query in PostgreSQL case-insensitively
               await client.query(
-                `UPDATE ${moduleKey} SET "${columnName}" = $1 WHERE "${columnName}" = $2`,
+                `UPDATE ${moduleKey} SET "${columnName}" = $1 WHERE LOWER("${columnName}") = LOWER($2)`,
                 [newValue, oldValue]
               );
 
-              // 2. Update in-memory dbCache
+              // 2. Update in-memory dbCache case-insensitively
               if (dbCache && dbCache[moduleKey]) {
                 dbCache[moduleKey].forEach(rec => {
-                  if (rec[columnName] === oldValue) {
+                  if (rec[columnName] && String(rec[columnName]).toLowerCase() === oldValue.toLowerCase()) {
                     rec[columnName] = newValue;
                   }
                 });
