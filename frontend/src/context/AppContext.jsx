@@ -228,14 +228,21 @@ export const AppProvider = ({ children }) => {
       // Set Axios auth header
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
+      // 1. Verify token validity and fetch metadata in parallel
+      const [userRes, metaRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/auth/me`),
+        axios.get(`${API_BASE_URL}/metadata`)
+      ]);
+
+      setUser(userRes.data);
+      setMetadata(metaRes.data);
+
+      // Unblock the app startup immediately so the UI shell mounts
+      setLoadingMetadata(false);
+
+      // 2. Preload secondary tables in the background asynchronously
       const modulesToPreload = ['employees', 'customers', 'properties', 'dealers'];
-
-      // 1. Verify token validity by fetching user profile first
-      const userRes = await axios.get(`${API_BASE_URL}/auth/me`);
-
-      // 2. Fetch the rest of the metadata and lookup modules in parallel
-      const [metaRes, preloadResults, logsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/metadata`),
+      Promise.all([
         Promise.all(
           modulesToPreload.map(async (m) => {
             try {
@@ -248,17 +255,16 @@ export const AppProvider = ({ children }) => {
           })
         ),
         axios.get(`${API_BASE_URL}/data/activity_logs`).catch(() => ({ data: [] }))
-      ]);
-
-      setUser(userRes.data);
-      setMetadata(metaRes.data);
-
-      const loaded = {};
-      preloadResults.forEach(({ module, data }) => {
-        loaded[module] = data;
+      ]).then(([preloadResults, logsRes]) => {
+        const loaded = {};
+        preloadResults.forEach(({ module, data }) => {
+          loaded[module] = data;
+        });
+        setModuleData(prev => ({ ...prev, ...loaded }));
+        setActivityLogs(logsRes.data || []);
+      }).catch(err => {
+        console.error('Background preloading failed:', err);
       });
-      setModuleData(prev => ({ ...prev, ...loaded }));
-      setActivityLogs(logsRes.data || []);
 
     } catch (err) {
       console.error('Failed to load profile/metadata:', err);
@@ -267,7 +273,6 @@ export const AppProvider = ({ children }) => {
       if (status === 401 || status === 403) {
         logout();
       }
-    } finally {
       setLoadingMetadata(false);
     }
   };

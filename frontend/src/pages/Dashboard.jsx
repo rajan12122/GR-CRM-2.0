@@ -53,7 +53,7 @@ const Dashboard = () => {
     logEmployeeLocation
   } = useApp();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [swiperIndex, setSwiperIndex] = useState(0);
 
   // AI Briefing states
@@ -509,14 +509,7 @@ const Dashboard = () => {
     return list.sort((a, b) => a.time.localeCompare(b.time));
   }, [todaysFollowups, siteVisits, customers]);
 
-  if (loading) {
-    return (
-      <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh', gap: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600, color: '#475569' }}>Loading Enterprise Dashboard...</Typography>
-        <Typography variant="body2" sx={{ color: '#94A3B8' }}>Populating metrics, pipelines, and activities.</Typography>
-      </Box>
-    );
-  }
+
 
   return (
     <Box sx={{ p: { xs: 1.5, md: 3 }, pb: '100px' }}>
