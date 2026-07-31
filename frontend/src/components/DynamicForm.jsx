@@ -211,6 +211,9 @@ const DynamicForm = ({
         return formData.r_c_i !== 'Land';
       }
     }
+    if (moduleKey === 'wanted_properties') {
+      if (f.name === 'matchedPropertyId') return false;
+    }
     if (moduleKey === 'follow_ups') {
       if (f.name === 'queryId') return false;
       if (f.name === 'pipelineAction') {
