@@ -1080,7 +1080,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
   // Auto-complete call follow-up if pitched via call
   if (p.pitchMethod === 'Call') {
     await client.query(
-      `UPDATE follow_ups SET status = $1, remarks = concat(remarks, $2) WHERE "customerId" = $3 AND status <> $4`,
+      `UPDATE follow_ups SET status = $1, remarks = concat(remarks, $2::text) WHERE "customerId" = $3 AND status <> $4`,
       ['Completed', `\n[System: Auto-completed call follow-up via logged Call Pitch ${p.id}]`, p.customerId, 'Completed']
     );
     if (cacheMutations) {
