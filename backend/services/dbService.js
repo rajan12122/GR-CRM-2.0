@@ -254,17 +254,64 @@ function getExecutor(dbOrClient) {
   return pool;
 }
 
+function normalizeRow(moduleName, row) {
+  if (!row) return row;
+  
+  const metadata = readMetadata();
+  const normalized = {};
+  
+  // 1. Get all expected keys for this module
+  const expectedKeys = new Set(['id', 'created_at', 'updated_at']);
+  
+  if (metadata.modules[moduleName]) {
+    const fields = metadata.modules[moduleName].fields || [];
+    fields.forEach(f => expectedKeys.add(f.name));
+  }
+  
+  // Custom non-metadata modules mapping
+  if (moduleName === 'location_logs') {
+    expectedKeys.add('employeeId');
+    expectedKeys.add('employeeName');
+    expectedKeys.add('latitude');
+    expectedKeys.add('longitude');
+    expectedKeys.add('status');
+    expectedKeys.add('timestamp');
+  } else if (moduleName === 'activity_logs') {
+    expectedKeys.add('employeeName');
+    expectedKeys.add('action');
+    expectedKeys.add('dateTime');
+  }
+  
+  // Map database keys to expected keys case-insensitively
+  for (const dbKey of Object.keys(row)) {
+    let matchedKey = null;
+    for (const expKey of expectedKeys) {
+      if (expKey.toLowerCase() === dbKey.toLowerCase()) {
+        matchedKey = expKey;
+        break;
+      }
+    }
+    if (matchedKey) {
+      normalized[matchedKey] = row[dbKey];
+    } else {
+      normalized[dbKey] = row[dbKey];
+    }
+  }
+  
+  return normalized;
+}
+
 // Granular database APIs
 async function getRecords(moduleName, dbOrClient) {
   const executor = getExecutor(dbOrClient);
   const res = await executor.query(`SELECT * FROM "${moduleName}"`);
-  return res.rows;
+  return res.rows.map(row => normalizeRow(moduleName, row));
 }
 
 async function getRecord(moduleName, id, dbOrClient) {
   const executor = getExecutor(dbOrClient);
   const res = await executor.query(`SELECT * FROM "${moduleName}" WHERE id = $1`, [id]);
-  return res.rows[0] || null;
+  return res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
 }
 
 function coerceRecordValues(moduleName, data, columns) {
@@ -273,7 +320,7 @@ function coerceRecordValues(moduleName, data, columns) {
   
   return columns.map(col => {
     let val = data[col];
-    const fieldDef = fields.find(f => f.name === col);
+    const fieldDef = fields.find(f => f.name.toLowerCase() === col.toLowerCase());
     if (fieldDef) {
       if (fieldDef.type === 'boolean' || fieldDef.type === 'checkbox') {
         if (val === '' || val === null || val === undefined) {
@@ -320,11 +367,18 @@ async function getTableColumns(moduleName, executor) {
 async function insertRecord(moduleName, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
   const tableCols = await getTableColumns(moduleName, executor);
-  const columns = Object.keys(data).filter(col => 
-    col !== 'created_at' && 
-    col !== 'updated_at' && 
-    tableCols.includes(col)
-  );
+  const columns = [];
+  const coercedData = {};
+  
+  for (const key of Object.keys(data)) {
+    if (key === 'created_at' || key === 'updated_at') continue;
+    const dbCol = tableCols.find(c => c.toLowerCase() === key.toLowerCase());
+    if (dbCol) {
+      columns.push(dbCol);
+      coercedData[dbCol] = data[key];
+    }
+  }
+
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
   const colNames = columns.map(c => `"${c}"`).join(', ');
 
@@ -333,20 +387,27 @@ async function insertRecord(moduleName, data, dbOrClient) {
     VALUES (${placeholders}, now())
     RETURNING *;
   `;
-  const values = coerceRecordValues(moduleName, data, columns);
+  const values = coerceRecordValues(moduleName, coercedData, columns);
 
   const res = await executor.query(sql, values);
-  return res.rows[0];
+  return res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
 }
 
 async function updateRecord(moduleName, id, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
   const tableCols = await getTableColumns(moduleName, executor);
-  const columns = Object.keys(data).filter(col => 
-    col !== 'created_at' && 
-    col !== 'updated_at' && 
-    tableCols.includes(col)
-  );
+  const columns = [];
+  const coercedData = {};
+  
+  for (const key of Object.keys(data)) {
+    if (key === 'created_at' || key === 'updated_at') continue;
+    const dbCol = tableCols.find(c => c.toLowerCase() === key.toLowerCase());
+    if (dbCol) {
+      columns.push(dbCol);
+      coercedData[dbCol] = data[key];
+    }
+  }
+
   if (columns.length === 0) return getRecord(moduleName, id, executor);
 
   const setClauses = columns.map((col, i) => `"${col}" = $${i + 2}`).join(', ');
@@ -356,10 +417,10 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
     WHERE id = $1
     RETURNING *;
   `;
-  const values = [id, ...coerceRecordValues(moduleName, data, columns)];
+  const values = [id, ...coerceRecordValues(moduleName, coercedData, columns)];
 
   const res = await executor.query(sql, values);
-  return res.rows[0];
+  return res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
 }
 
 async function deleteRecord(moduleName, id, dbOrClient) {
