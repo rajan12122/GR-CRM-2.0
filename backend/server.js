@@ -3911,7 +3911,7 @@ function ipRateLimiter(windowMs, maxRequests) {
 
 // Public Customer Intake Form Submission (Rate-limited, validated, and anti-spam checked)
 app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
-  const { website_url, name, phone, locality, sector, propertyType, optionType, size, plc, budget, queryType = 'Buy Property' } = req.body;
+  const { website_url, name, phone, locality, sector, propertyType, optionType, size, plc, budget, queryType = 'Buy Property', landType } = req.body;
   
   // 1. Honeypot check (Bots fill this invisible input)
   if (website_url) {
@@ -3960,7 +3960,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
       locality: locality || '',
       sector_block: sector || '',
       size: size || '',
-      remarks: `Auto-created query from public requirement form (Duplicate check match). PLC preferred: ${plc || 'None'}`
+      remarks: `Auto-created query from public requirement form (Duplicate check match). PLC preferred: ${plc || 'None'}${landType ? ` • Land Type: ${landType}` : ''}`
     };
     
     if (!db.queries) db.queries = [];
@@ -4030,7 +4030,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res
     locality: locality || '',
     sector_block: sector || '',
     size: size || '',
-    remarks: `Auto-created query from public requirement form. PLC preferred: ${plc || 'None'}`
+    remarks: `Auto-created query from public requirement form. PLC preferred: ${plc || 'None'}${landType ? ` • Land Type: ${landType}` : ''}`
   };
   if (!db.queries) db.queries = [];
   db.queries.push(newQuery);
