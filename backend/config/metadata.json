@@ -502,6 +502,15 @@
           "chipGroup": "propertyTypes"
         },
         {
+          "name": "land_type",
+          "label": "Land Type",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "landTypes"
+        },
+        {
           "name": "no_of_floors",
           "label": "Number of Floors",
           "type": "text",
@@ -2673,6 +2682,23 @@
         "value": "LOI",
         "label": "LOI",
         "color": "#EC4899"
+      }
+    ],
+    "landTypes": [
+      {
+        "value": "Gamada Aquired Land",
+        "label": "Gamada Aquired Land",
+        "color": "#3B82F6"
+      },
+      {
+        "value": "private",
+        "label": "Private",
+        "color": "#10B981"
+      },
+      {
+        "value": "others",
+        "label": "Others",
+        "color": "#6B7280"
       }
     ],
     "propertyStatus": [

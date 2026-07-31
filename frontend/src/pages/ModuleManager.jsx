@@ -451,8 +451,8 @@ const ModuleManager = () => {
         );
 
         return [
-          createCardObj('Total Leads', activeLeads.length, 'Users', '#3B82F6', 'Active leads', stackedFilters._special === 'activeLeads', () => {
-            setStackedFilters({ _special: 'activeLeads' });
+          createCardObj('Total Leads', total, 'Users', '#3B82F6', 'Total leads', Object.keys(stackedFilters).length === 0 || stackedFilters._special === 'allLeads', () => {
+            setStackedFilters({ _special: 'allLeads' });
           }),
           createCardObj('New Leads', fresh.length, 'CheckCircle', '#22C55E', 'Created today', stackedFilters._special === 'newLeads', () => {
             setStackedFilters({ _special: 'newLeads' });
@@ -809,6 +809,9 @@ const ModuleManager = () => {
         
         if (stackedFilters._special === 'activeLeads') {
           if (isConv) return false;
+        }
+        if (stackedFilters._special === 'allLeads') {
+          // Show all leads (do not filter out)
         }
         if (stackedFilters._special === 'newLeads') {
           const isNew = (rec.dateAdded && rec.dateAdded === todayStr) ||

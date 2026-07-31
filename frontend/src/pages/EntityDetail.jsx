@@ -3685,7 +3685,7 @@ const EntityDetail = () => {
                       {(() => {
                         const mapping = {
                           Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                          Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot'],
+                          Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
                           Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
                           Land: []
                         };
@@ -4211,7 +4211,7 @@ const EntityDetail = () => {
                               const currentRCI = nestedPropertyData.r_c_i || 'Residential';
                               const mapping = {
                                 Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                                Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot'],
+                                Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
                                 Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
                                 Land: []
                               };
@@ -4224,6 +4224,23 @@ const EntityDetail = () => {
                           </Select>
                         </FormControl>
                       </Grid>
+
+                      {nestedPropertyData.r_c_i === 'Land' && (
+                        <Grid item xs={12} sm={6}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Land Type</InputLabel>
+                            <Select
+                              value={nestedPropertyData.land_type || ''}
+                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, land_type: e.target.value }))}
+                              label="Land Type"
+                            >
+                              <MenuItem value="Gamada Aquired Land">Gamada Aquired Land</MenuItem>
+                              <MenuItem value="private">Private</MenuItem>
+                              <MenuItem value="others">Others</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                      )}
 
                       {nestedPropertyData.propertyType === 'Showroom' && (
                         <Grid item xs={12} sm={6}>

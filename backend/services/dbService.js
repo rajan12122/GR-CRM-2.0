@@ -125,6 +125,11 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "droppedBy" JSONB DEFAULT '[]';
     `);
 
+    // Ensure land_type column exists in properties table
+    await client.query(`
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS "land_type" TEXT;
+    `);
+
     // Auto-create missing tables for modules in metadata
     await ensureModuleTablesExist(client);
 
