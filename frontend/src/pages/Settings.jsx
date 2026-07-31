@@ -158,11 +158,11 @@ const Settings = () => {
   const [editingField, setEditingField] = useState(null);
   const [draggedIndex, setDraggedIndex] = useState(null);
 
-  // Chip Add Form state
   const [newChipVal, setNewChipVal] = useState('');
   const [newChipLabel, setNewChipLabel] = useState('');
   const [newChipColor, setNewChipColor] = useState('#2563EB');
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingChipIndex, setEditingChipIndex] = useState(null);
 
   if (!metadata) return null;
 
@@ -407,27 +407,54 @@ const Settings = () => {
       updated.chips[selectedChipGroup] = [];
     }
 
-    // Check duplicate
-    if (updated.chips[selectedChipGroup].some(c => c.value === newChipVal)) {
-      showStatus('error', 'Option value already exists.');
-      return;
-    }
+    const choices = updated.chips[selectedChipGroup];
 
-    updated.chips[selectedChipGroup].push({
-      value: newChipVal.trim(),
-      label: newChipLabel.trim(),
-      color: newChipColor
-    });
+    if (editingChipIndex !== null && editingChipIndex !== undefined) {
+      if (choices.some((c, idx) => idx !== editingChipIndex && c.value === newChipVal.trim())) {
+        showStatus('error', 'Option value already exists.');
+        return;
+      }
+      choices[editingChipIndex] = {
+        value: newChipVal.trim(),
+        label: newChipLabel.trim(),
+        color: newChipColor
+      };
+    } else {
+      if (choices.some(c => c.value === newChipVal.trim())) {
+        showStatus('error', 'Option value already exists.');
+        return;
+      }
+      choices.push({
+        value: newChipVal.trim(),
+        label: newChipLabel.trim(),
+        color: newChipColor
+      });
+    }
 
     const res = await saveMetadata(updated);
     if (res.success) {
-      showStatus('success', `Added dropdown option '${newChipLabel}' successfully.`);
+      showStatus('success', editingChipIndex !== null ? 'Dropdown option updated successfully.' : `Added dropdown option '${newChipLabel}' successfully.`);
       setNewChipVal('');
       setNewChipLabel('');
       setNewChipColor('#2563EB');
+      setEditingChipIndex(null);
     } else {
       showStatus('error', res.message);
     }
+  };
+
+  const handleStartEditChip = (chip, index) => {
+    setNewChipVal(chip.value);
+    setNewChipLabel(chip.label);
+    setNewChipColor(chip.color || '#2563EB');
+    setEditingChipIndex(index);
+  };
+
+  const handleCancelEditChip = () => {
+    setNewChipVal('');
+    setNewChipLabel('');
+    setNewChipColor('#2563EB');
+    setEditingChipIndex(null);
   };
 
   const handleDeleteChip = async (val) => {
@@ -437,6 +464,7 @@ const Settings = () => {
       const res = await saveMetadata(updated);
       if (res.success) {
         showStatus('success', 'Dropdown option removed.');
+        setEditingChipIndex(null);
       } else {
         showStatus('error', res.message);
       }
@@ -460,7 +488,9 @@ const Settings = () => {
 
     updated.chips[groupName] = array;
     const res = await saveMetadata(updated);
-    if (!res.success) {
+    if (res.success) {
+      setEditingChipIndex(null);
+    } else {
       showStatus('error', res.message);
     }
   };
@@ -1074,7 +1104,10 @@ const Settings = () => {
                     <Select
                       label="Select Chip Category"
                       value={selectedChipGroup}
-                      onChange={(e) => setSelectedChipGroup(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedChipGroup(e.target.value);
+                        handleCancelEditChip();
+                      }}
                     >
                       {Object.keys(metadata.chips).map(group => (
                         <MenuItem key={group} value={group}>{group}</MenuItem>
@@ -1142,13 +1175,22 @@ const Settings = () => {
                               </Box>
                             </TableCell>
                             <TableCell align="right">
-                              <IconButton 
-                                size="small" 
-                                color="error" 
-                                onClick={() => handleDeleteChip(chip.value)}
-                              >
-                                <Icons.Trash2 size={16} />
-                              </IconButton>
+                              <Box display="flex" justifyContent="flex-end" gap={0.5}>
+                                <IconButton 
+                                  size="small" 
+                                  color="primary" 
+                                  onClick={() => handleStartEditChip(chip, index)}
+                                >
+                                  <Icons.Edit size={16} />
+                                </IconButton>
+                                <IconButton 
+                                  size="small" 
+                                  color="error" 
+                                  onClick={() => handleDeleteChip(chip.value)}
+                                >
+                                  <Icons.Trash2 size={16} />
+                                </IconButton>
+                              </Box>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1159,47 +1201,53 @@ const Settings = () => {
 
                 <Divider sx={{ mb: 3 }} />
 
-                {/* Form to add choice */}
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>Add Dropdown Choice</Typography>
-                <Box component="form" onSubmit={handleAddChip}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={4}>
-                      <TextField 
-                        label="Display Title (e.g. Dealer)" 
-                        fullWidth
-                        size="small"
-                        value={newChipLabel}
-                        onChange={(e)=>handleChipLabelChange(e.target.value)}
-                        required
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField 
-                        label="API value (lowercase, no spaces, e.g. dealer)" 
-                        fullWidth
-                        size="small"
-                        value={newChipVal}
-                        onChange={(e)=>setNewChipVal(e.target.value)}
-                        required
-                      />
-                    </Grid>
-                    <Grid item xs={3}>
-                      <TextField 
-                        type="color"
-                        label="Chip Hex Color" 
-                        fullWidth
-                        size="small"
-                        value={newChipColor}
-                        onChange={(e)=>setNewChipColor(e.target.value)}
-                      />
-                    </Grid>
-                    <Grid item xs={1} display="flex" alignItems="flex-end">
-                      <Button type="submit" variant="contained" fullWidth sx={{ height: 40, p: 0 }}>
-                        <Icons.Plus size={18} />
-                      </Button>
-                    </Grid>
-                  </Grid>
-                </Box>
+                 <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>
+                   {editingChipIndex !== null ? 'Edit Dropdown Choice' : 'Add Dropdown Choice'}
+                 </Typography>
+                 <Box component="form" onSubmit={handleAddChip}>
+                   <Grid container spacing={2}>
+                     <Grid item xs={editingChipIndex !== null ? 4 : 4}>
+                       <TextField 
+                         label="Display Title (e.g. Dealer)" 
+                         fullWidth
+                         size="small"
+                         value={newChipLabel}
+                         onChange={(e)=>handleChipLabelChange(e.target.value)}
+                         required
+                       />
+                     </Grid>
+                     <Grid item xs={editingChipIndex !== null ? 3.5 : 4}>
+                       <TextField 
+                         label="API value (lowercase, no spaces, e.g. dealer)" 
+                         fullWidth
+                         size="small"
+                         value={newChipVal}
+                         onChange={(e)=>setNewChipVal(e.target.value)}
+                         required
+                       />
+                     </Grid>
+                     <Grid item xs={editingChipIndex !== null ? 2.5 : 3}>
+                       <TextField 
+                         type="color"
+                         label="Chip Hex Color" 
+                         fullWidth
+                         size="small"
+                         value={newChipColor}
+                         onChange={(e)=>setNewChipColor(e.target.value)}
+                       />
+                     </Grid>
+                     <Grid item xs={editingChipIndex !== null ? 2 : 1} display="flex" alignItems="flex-end" gap={1}>
+                       <Button type="submit" variant="contained" fullWidth sx={{ height: 40, p: 0 }}>
+                         {editingChipIndex !== null ? <Icons.Save size={18} /> : <Icons.Plus size={18} />}
+                       </Button>
+                       {editingChipIndex !== null && (
+                         <Button variant="outlined" color="secondary" onClick={handleCancelEditChip} fullWidth sx={{ height: 40, p: 0 }}>
+                           <Icons.X size={18} />
+                         </Button>
+                       )}
+                     </Grid>
+                   </Grid>
+                 </Box>
 
                 <Divider sx={{ my: 4 }} />
 
