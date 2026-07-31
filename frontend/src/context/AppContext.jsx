@@ -76,6 +76,22 @@ export const AppProvider = ({ children }) => {
             console.warn("GPS initial lock weak/delay:", err);
             if (err.code === 1) {
               setSharingError("Failed to lock location. Please enable GPS permissions.");
+            } else {
+              // Retry with high accuracy disabled (Wi-Fi/IP positioning)
+              console.log("Retrying location capture with standard accuracy fallback...");
+              navigator.geolocation.getCurrentPosition(
+                async (pos2) => {
+                  if (pos2) {
+                    setSharingError("");
+                    await logEmployeeLocation(pos2.coords.latitude, pos2.coords.longitude, 'sharing');
+                  }
+                },
+                (err2) => {
+                  console.warn("Standard accuracy fallback also failed:", err2);
+                  setSharingError("GPS lock timeout. Please check device location settings.");
+                },
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+              );
             }
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
