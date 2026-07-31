@@ -707,6 +707,30 @@
           "editable": true
         },
         {
+          "name": "dealerContactName",
+          "label": "Dealer Contact Name",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "dealerFirmName",
+          "label": "Dealer Firm Name",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "dealerAddress",
+          "label": "Dealer Address",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
           "name": "dealerContactNum",
           "label": "Dealer Contact Number",
           "type": "text",

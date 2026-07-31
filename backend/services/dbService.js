@@ -130,6 +130,17 @@ async function initializeMetadata() {
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS "land_type" TEXT;
     `);
 
+    // Ensure new dealer info columns exist in wanted_properties table
+    await client.query(`
+      ALTER TABLE wanted_properties ADD COLUMN IF NOT EXISTS "dealerContactName" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE wanted_properties ADD COLUMN IF NOT EXISTS "dealerFirmName" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE wanted_properties ADD COLUMN IF NOT EXISTS "dealerAddress" TEXT;
+    `);
+
     // Auto-create missing tables for modules in metadata
     await ensureModuleTablesExist(client);
 

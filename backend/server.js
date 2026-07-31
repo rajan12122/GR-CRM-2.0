@@ -1882,12 +1882,18 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
 
         if (dealer) {
           payload.dealerId = dealer.id;
+          if (payload.dealerContactName) dealer.person_name = payload.dealerContactName;
+          if (payload.dealerFirmName) dealer.firm_name = payload.dealerFirmName;
+          if (payload.dealerAddress) dealer.address = payload.dealerAddress;
         } else {
           const nextDealerId = generateNextId(db, 'dealers', 'DEAL');
           const newDealer = {
             id: nextDealerId,
             contact_num: dealerContactNum,
-            firm_name: "Unverified — Auto-created from Wanted Property",
+            person_name: payload.dealerContactName || "Unverified — Auto-created from Wanted Property",
+            firm_name: payload.dealerFirmName || "Unverified — Auto-created from Wanted Property",
+            address: payload.dealerAddress || "",
+            sector_block: "Auto-created",
             dateAdded: new Date().toISOString().split('T')[0]
           };
           db.dealers.push(newDealer);
@@ -2339,6 +2345,38 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
       if (module === 'properties') {
         await handlePropertyDealerAssociation(payload, client);
+      }
+
+      if (module === 'wanted_properties') {
+        const dealerContactNum = String(payload.dealerContactNum || '').trim();
+        if (dealerContactNum) {
+          db.dealers = db.dealers || [];
+          let dealer = db.dealers.find(d => {
+            const num1 = String(d.contact_num || '').trim().replace(/[^0-9]/g, '');
+            const num2 = dealerContactNum.replace(/[^0-9]/g, '');
+            return num1 === num2 && num1 !== '';
+          });
+
+          if (dealer) {
+            payload.dealerId = dealer.id;
+            if (payload.dealerContactName) dealer.person_name = payload.dealerContactName;
+            if (payload.dealerFirmName) dealer.firm_name = payload.dealerFirmName;
+            if (payload.dealerAddress) dealer.address = payload.dealerAddress;
+          } else {
+            const nextDealerId = generateNextId(db, 'dealers', 'DEAL');
+            const newDealer = {
+              id: nextDealerId,
+              contact_num: dealerContactNum,
+              person_name: payload.dealerContactName || "Unverified — Auto-created from Wanted Property",
+              firm_name: payload.dealerFirmName || "Unverified — Auto-created from Wanted Property",
+              address: payload.dealerAddress || "",
+              sector_block: "Auto-created",
+              dateAdded: new Date().toISOString().split('T')[0]
+            };
+            db.dealers.push(newDealer);
+            payload.dealerId = nextDealerId;
+          }
+        }
       }
 
       // Auto-update last_updated date on edits
