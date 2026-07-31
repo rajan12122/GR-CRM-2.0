@@ -178,7 +178,7 @@ const LocationTracker = () => {
       } else {
         // Create premium custom pin icon
         const customIcon = L.divIcon({
-          html: `<div class="custom-pin"><span class="pin-initial">${emp.employeeName.charAt(0)}</span></div>`,
+          html: `<div class="custom-pin"><span class="pin-initial">${(emp.employeeName || 'U').charAt(0)}</span></div>`,
           className: 'custom-div-icon',
           iconSize: [36, 36],
           iconAnchor: [18, 36]
@@ -188,7 +188,7 @@ const LocationTracker = () => {
           .addTo(mapInstanceRef.current)
           .bindPopup(`
             <div style="font-family: Poppins, sans-serif; padding: 4px;">
-              <strong style="color:#0F172A;font-size:13px;">${emp.employeeName}</strong><br/>
+              <strong style="color:#0F172A;font-size:13px;">${emp.employeeName || 'Unknown'}</strong><br/>
               <span style="color:#64748B;font-size:11px;">Status: Sharing Location 📡</span><br/>
               <span style="color:#94A3B8;font-size:10px;">Last Active: ${new Date(emp.timestamp).toLocaleTimeString()}</span>
             </div>
@@ -303,13 +303,13 @@ const LocationTracker = () => {
                         >
                           <ListItemAvatar>
                             <Avatar sx={{ backgroundColor: '#2563EB', fontWeight: 800 }}>
-                              {emp.employeeName.charAt(0)}
+                              {(emp.employeeName || 'U').charAt(0)}
                             </Avatar>
                           </ListItemAvatar>
                           <ListItemText 
                             primary={
                               <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0F172A' }}>
-                                {emp.employeeName}
+                                {emp.employeeName || 'Unknown'}
                               </Typography>
                             }
                             secondary={
