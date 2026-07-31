@@ -564,9 +564,10 @@ async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
 
   // Tables to sync
   const tables = [
-    // 'employees', 'attendance', 'location_logs', <-- Excluded in Phase 1 (migrated to direct-SQL)
-    'customers', 'leads', 'properties', 'projects', 'site_visits', 
-    'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals', 
+    // 'employees', 'attendance', 'location_logs', <-- Excluded in Phase 1
+    // 'customers', 'leads', 'queries', 'follow_ups', <-- Excluded in Phase 2
+    'properties', 'projects', 'site_visits', 
+    'remarks', 'documents', 'dealers', 'deals', 
     'property_pitch_history', 'dealer_calls', 'activity_logs',
     'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
     'salaries', 'reminders', 'project_history', 'property_history',

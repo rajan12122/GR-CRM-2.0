@@ -772,129 +772,184 @@ function handleDealerVisitAssignment(payload, db, req, oldPayload = null) {
   }
 }
 
-function convertLeadToCustomer(leadId, db, remarks = '') {
+async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
   if (!leadId || !leadId.startsWith('LEAD-')) return null;
 
-  const lead = (db.leads || []).find(l => String(l.id) === String(leadId));
-  if (!lead) return null;
-
-  const cleanPhone = String(lead.phone || '').trim();
-  let existingCust = (db.customers || []).find(c => c.phone && String(c.phone).trim() === cleanPhone);
-
-  if (!existingCust) {
-    const custId = generateNextId(db, 'customers', 'CUST');
-    existingCust = {
-      id: custId,
-      name: lead.name,
-      email: lead.email || '',
-      phone: lead.phone,
-      stage: 'Converted Buyer Deal Closed',
-      assignedEmployeeId: lead.assignedEmployeeId || 'EMP-001',
-      budget: lead.budget || '',
-      city: lead.locality || '',
-      requirements: lead.remarks || remarks || `Converted from Lead ${leadId}`,
-      dateAdded: new Date().toISOString().split('T')[0]
-    };
-    db.customers = db.customers || [];
-    db.customers.push(existingCust);
-    try { syncToSheets('customers'); } catch(e) {}
+  const isOuterTransaction = !!dbOrClient;
+  const client = dbOrClient || (await pool.connect());
+  
+  if (!isOuterTransaction) {
+    await client.query('BEGIN');
   }
 
-  // Mark lead status as Converted
-  lead.status = 'Converted';
-  try { syncToSheets('leads'); } catch(e) {}
-
-  // Update references across all database tables to preserve history and log mappings
-  const newCustId = existingCust.id;
-
-  // 1. Follow-ups
-  db.follow_ups = (db.follow_ups || []).map(f => {
-    if (String(f.customerId) === String(leadId)) {
-      return { ...f, customerId: newCustId };
+  try {
+    const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    const lead = leadRes.rows[0];
+    if (!lead) {
+      if (!isOuterTransaction) await client.query('ROLLBACK');
+      return null;
     }
-    return f;
-  });
-  try { syncToSheets('follow_ups'); } catch(e) {}
 
-  // 2. Queries
-  db.queries = (db.queries || []).map(q => {
-    if (String(q.customerId) === String(leadId)) {
-      return { ...q, customerId: newCustId };
+    const cleanPhone = String(lead.phone || '').trim();
+    const custRes = await client.query('SELECT * FROM customers WHERE phone = $1', [cleanPhone]);
+    let existingCust = custRes.rows[0];
+
+    const cacheMutations = [];
+
+    if (!existingCust) {
+      const custId = await generateNextIdAsync(client, 'customers');
+      const newCust = {
+        id: custId,
+        leadId: leadId,
+        name: lead.name,
+        email: lead.email || '',
+        phone: lead.phone,
+        stage: 'Converted Buyer Deal Closed',
+        assignedEmployeeId: lead.assignedEmployeeId || 'EMP-001',
+        budget: lead.budget || '',
+        city: lead.locality || '',
+        requirements: lead.remarks || remarks || `Converted from Lead ${leadId}`,
+        dateAdded: new Date().toISOString().split('T')[0]
+      };
+      
+      const insertedCust = await insertRecord('customers', newCust, client);
+      existingCust = insertedCust;
+
+      cacheMutations.push(() => {
+        if (dbCache) {
+          if (!dbCache.customers) dbCache.customers = [];
+          dbCache.customers.push(insertedCust);
+        }
+      });
     }
-    return q;
-  });
-  try { syncToSheets('queries'); } catch(e) {}
 
-  // 3. Site visits
-  db.site_visits = (db.site_visits || []).map(sv => {
-    if (String(sv.customerId) === String(leadId)) {
-      return { ...sv, customerId: newCustId };
+    await updateRecord('leads', leadId, { status: 'Converted' }, client);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.leads) {
+        const cachedLead = dbCache.leads.find(l => String(l.id) === String(leadId));
+        if (cachedLead) cachedLead.status = 'Converted';
+      }
+    });
+
+    const newCustId = existingCust.id;
+
+    await client.query('UPDATE follow_ups SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.follow_ups) {
+        dbCache.follow_ups.forEach(f => {
+          if (String(f.customerId) === String(leadId)) f.customerId = newCustId;
+        });
+      }
+    });
+
+    await client.query('UPDATE queries SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.queries) {
+        dbCache.queries.forEach(q => {
+          if (String(q.customerId) === String(leadId)) q.customerId = newCustId;
+        });
+      }
+    });
+
+    await client.query('UPDATE site_visits SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.site_visits) {
+        dbCache.site_visits.forEach(sv => {
+          if (String(sv.customerId) === String(leadId)) sv.customerId = newCustId;
+        });
+      }
+    });
+
+    await client.query('UPDATE sales SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.sales) {
+        dbCache.sales.forEach(s => {
+          if (String(s.customerId) === String(leadId)) s.customerId = newCustId;
+        });
+      }
+    });
+
+    await client.query('UPDATE property_pitch_history SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.property_pitch_history) {
+        dbCache.property_pitch_history.forEach(p => {
+          if (String(p.customerId) === String(leadId)) p.customerId = newCustId;
+        });
+      }
+    });
+
+    await client.query('UPDATE properties SET current_owner_id = $1 WHERE current_owner_id = $2', [newCustId, leadId]);
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.properties) {
+        dbCache.properties.forEach(p => {
+          if (String(p.current_owner_id) === String(leadId)) p.current_owner_id = newCustId;
+        });
+      }
+    });
+
+    if (!isOuterTransaction) {
+      await client.query('COMMIT');
     }
-    return sv;
-  });
-  try { syncToSheets('site_visits'); } catch(e) {}
 
-  // 4. Sales Bookings
-  db.sales = (db.sales || []).map(s => {
-    if (String(s.customerId) === String(leadId)) {
-      return { ...s, customerId: newCustId };
+    cacheMutations.forEach(mutate => mutate());
+
+    try { syncToSheets('customers'); } catch(e) {}
+    try { syncToSheets('leads'); } catch(e) {}
+    try { syncToSheets('follow_ups'); } catch(e) {}
+    try { syncToSheets('queries'); } catch(e) {}
+    try { syncToSheets('site_visits'); } catch(e) {}
+    try { syncToSheets('sales'); } catch(e) {}
+    try { syncToSheets('property_pitch_history'); } catch(e) {}
+    try { syncToSheets('properties'); } catch(e) {}
+
+    return existingCust;
+  } catch (err) {
+    if (!isOuterTransaction) {
+      await client.query('ROLLBACK');
     }
-    return s;
-  });
-  try { syncToSheets('sales'); } catch(e) {}
-
-  // 5. Property Pitch History
-  db.property_pitch_history = (db.property_pitch_history || []).map(p => {
-    if (String(p.customerId) === String(leadId)) {
-      return { ...p, customerId: newCustId };
+    throw err;
+  } finally {
+    if (!isOuterTransaction) {
+      client.release();
     }
-    return p;
-  });
-  try { syncToSheets('property_pitch_history'); } catch(e) {}
-
-  // 6. Properties Ownership
-  db.properties = (db.properties || []).map(prop => {
-    if (String(prop.current_owner_id) === String(leadId)) {
-      return { ...prop, current_owner_id: newCustId };
-    }
-    return prop;
-  });
-  try { syncToSheets('properties'); } catch(e) {}
-
-  writeDb(db);
-  return existingCust;
+  }
 }
 
-function handleDealStatusChange(d, db, req) {
+async function handleDealStatusChange(d, dbOrClient, req, cacheMutations) {
   if (!d.id || d.status !== 'Closed') return;
   
-  // Convert Lead to Customer if Deal closed for a Lead ID
+  const client = dbOrClient || pool;
+  
   if (d.customerId && String(d.customerId).startsWith('LEAD-')) {
-    const cust = convertLeadToCustomer(d.customerId, db, `Converted via Closed Deal ${d.id}`);
+    const cust = await convertLeadToCustomer(d.customerId, client, `Converted via Closed Deal ${d.id}`);
     if (cust) {
       d.customerId = cust.id;
     }
   }
 
-  db.properties = db.properties || [];
-  const propIndex = db.properties.findIndex(p => String(p.id) === String(d.propertyId));
-  if (propIndex !== -1) {
-    const prop = db.properties[propIndex];
-    
+  const propRes = await client.query('SELECT * FROM properties WHERE id = $1', [d.propertyId]);
+  const prop = propRes.rows[0];
+  if (prop) {
     const prevOwnerId = prop.current_owner_id || d.sellerCustomerId || '';
     const prevOwnerName = prop.contact_person_name || '';
     
-    const buyerCust = (db.customers || []).find(c => String(c.id) === String(d.customerId));
-    const buyerName = buyerCust ? buyerCust.name : (d.customerId || 'Unknown');
+    let buyerName = d.customerId || 'Unknown';
+    const buyerRes = await client.query('SELECT name FROM customers WHERE id = $1', [d.customerId]);
+    if (buyerRes.rows[0]) {
+      buyerName = buyerRes.rows[0].name;
+    }
     
-    const emp = (db.employees || []).find(e => String(e.id) === String(d.employeeId));
-    const empName = emp ? emp.name : 'Unknown Employee';
+    let empName = 'Unknown Employee';
+    const empRes = await client.query('SELECT name FROM employees WHERE id = $1', [d.employeeId]);
+    if (empRes.rows[0]) {
+      empName = empRes.rows[0].name;
+    }
     
-    prop.owner_history = prop.owner_history || [];
+    const ownerHistory = prop.owner_history || [];
     if (prevOwnerId || prevOwnerName) {
-      const hasHistory = prop.owner_history.some(h => String(h.dealId) === String(d.id));
+      const hasHistory = ownerHistory.some(h => String(h.dealId) === String(d.id));
       if (!hasHistory) {
-        prop.owner_history.push({
+        ownerHistory.push({
           dealId: d.id,
           ownerId: prevOwnerId || 'N/A',
           ownerName: prevOwnerName || 'Previous Owner',
@@ -908,32 +963,50 @@ function handleDealStatusChange(d, db, req) {
       }
     }
     
-    prop.current_owner_id = d.customerId;
-    prop.status = 'Property Registered/Sold Out';
-    
-    prop.ownership_documents = prop.ownership_documents || { old_owner: [], new_owner: [] };
-    if (prop.ownership_documents.new_owner && prop.ownership_documents.new_owner.length > 0) {
-      prop.ownership_documents.old_owner = [
-        ...(prop.ownership_documents.old_owner || []),
-        ...prop.ownership_documents.new_owner
+    const ownershipDocuments = prop.ownership_documents || { old_owner: [], new_owner: [] };
+    if (ownershipDocuments.new_owner && ownershipDocuments.new_owner.length > 0) {
+      ownershipDocuments.old_owner = [
+        ...(ownershipDocuments.old_owner || []),
+        ...ownershipDocuments.new_owner
       ];
     }
     
-    prop.ownership_documents.new_owner = [];
+    ownershipDocuments.new_owner = [];
     if (d.documents) {
-      prop.ownership_documents.new_owner = Array.isArray(d.documents) 
+      ownershipDocuments.new_owner = Array.isArray(d.documents) 
         ? d.documents 
         : [d.documents];
     }
     
-    prop.timeline = prop.timeline || [];
-    prop.timeline.push({
+    const timeline = prop.timeline || [];
+    timeline.push({
       date: new Date().toLocaleDateString('en-IN'),
       event: 'Ownership Changed (Deal Closed)',
       details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${d.salePrice} (Closed by Employee: ${empName})`
     });
     
-    db.properties[propIndex] = prop;
+    await client.query(
+      'UPDATE properties SET current_owner_id = $1, status = $2, ownership_documents = $3, owner_history = $4, timeline = $5 WHERE id = $6',
+      [d.customerId, 'Property Registered/Sold Out', JSON.stringify(ownershipDocuments), JSON.stringify(ownerHistory), JSON.stringify(timeline), d.propertyId]
+    );
+
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.properties) {
+          const pIdx = dbCache.properties.findIndex(x => String(x.id) === String(d.propertyId));
+          if (pIdx !== -1) {
+            dbCache.properties[pIdx] = {
+              ...dbCache.properties[pIdx],
+              current_owner_id: d.customerId,
+              status: 'Property Registered/Sold Out',
+              ownership_documents: ownershipDocuments,
+              owner_history: ownerHistory,
+              timeline: timeline
+            };
+          }
+        }
+      });
+    }
     
     if (d.employeeId) {
       setTimeout(() => {
@@ -944,18 +1017,25 @@ function handleDealStatusChange(d, db, req) {
       }, 500);
     }
     
-    db.activity_logs = db.activity_logs || [];
-    db.activity_logs.unshift({
+    const log = {
       id: generateUniqueId('LOG'),
       employeeName: req.user ? req.user.name : 'System',
       action: `Deal ${d.id} closed. Ownership of Property ${d.propertyId} transferred to Customer ${d.customerId}.`,
       dateTime: new Date().toLocaleString()
-    });
+    };
+    await insertRecord('activity_logs', log, client);
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      });
+    }
     
-    writeDb(db);
     try { syncToSheets('properties'); } catch(e) {}
   }
 }
+
 
 function parsePriceToNumeric(priceStr) {
   if (!priceStr) return 0;
@@ -1233,15 +1313,22 @@ function handlePitchStatusChange(p, db, req) {
   try { syncToSheets('follow_ups'); } catch(e) {}
 }
 
-function handleLeadStatusChange(lead, db, req) {
+async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
   if (lead.leadType === 'Seller') {
-    const cleanPhone = String(lead.phone).trim();
-    let existingCust = (db.customers || []).find(c => String(c.leadId) === String(lead.id) || (c.phone && String(c.phone).trim() === cleanPhone));
+    const client = dbOrClient || pool;
+    const cleanPhone = String(lead.phone || '').trim();
     
+    let custRes;
+    if (lead.id) {
+      custRes = await client.query('SELECT * FROM customers WHERE "leadId" = $1 OR (phone = $2 AND $2 <> \'\')', [lead.id, cleanPhone]);
+    } else {
+      custRes = await client.query('SELECT * FROM customers WHERE phone = $1 AND $1 <> \'\'', [cleanPhone]);
+    }
+    let existingCust = custRes.rows[0];
     const leadDemand = lead.demand || lead.budget || '';
 
     if (!existingCust) {
-      const custId = generateNextId(db, 'customers', 'CUST');
+      const custId = await generateNextIdAsync(client, 'customers');
       existingCust = {
         id: custId,
         leadId: lead.id,
@@ -1255,38 +1342,65 @@ function handleLeadStatusChange(lead, db, req) {
         requirements: lead.remarks || 'Converted direct property seller.',
         dateAdded: new Date().toISOString().split('T')[0]
       };
-      db.customers = db.customers || [];
-      db.customers.push(existingCust);
-      try { syncToSheets('customers'); } catch(e) {}
+      const insertedCust = await insertRecord('customers', existingCust, client);
+      existingCust = insertedCust;
+
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache) {
+            if (!dbCache.customers) dbCache.customers = [];
+            dbCache.customers.push(insertedCust);
+          }
+        });
+      }
     } else {
-      existingCust.budget = leadDemand;
-      existingCust.city = lead.locality || existingCust.city || '';
-      try { syncToSheets('customers'); } catch(e) {}
+      const updatedCust = await updateRecord('customers', existingCust.id, {
+        budget: leadDemand,
+        city: lead.locality || existingCust.city || ''
+      }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.customers) {
+            const idx = dbCache.customers.findIndex(x => String(x.id) === String(existingCust.id));
+            if (idx !== -1) dbCache.customers[idx] = updatedCust;
+          }
+        });
+      }
     }
 
-    db.properties = db.properties || [];
     let existingProp = null;
     if (lead.propertyId) {
-      existingProp = db.properties.find(p => String(p.id) === String(lead.propertyId));
+      const propRes = await client.query('SELECT * FROM properties WHERE id = $1', [lead.propertyId]);
+      existingProp = propRes.rows[0];
     }
     if (!existingProp) {
-      existingProp = db.properties.find(p => p.linkedLeadId === lead.id || String(p.booked_by_customer_id) === String(existingCust.id));
+      const propRes = await client.query('SELECT * FROM properties WHERE "linkedLeadId" = $1 OR "booked_by_customer_id" = $2', [lead.id, existingCust.id]);
+      existingProp = propRes.rows[0];
     }
 
     if (existingProp) {
-      existingProp.current_owner_id = existingCust.id;
-      existingProp.booked_by_customer_id = existingCust.id;
-      existingProp.linkedLeadId = lead.id;
-      existingProp.demand = leadDemand || existingProp.demand || '';
-      existingProp.locality = lead.locality || existingProp.locality || '';
-      existingProp.sector_block = lead.sector_block || existingProp.sector_block || '';
-      existingProp.size = lead.size || existingProp.size || '';
-      existingProp.propertyType = lead.propertyType || existingProp.propertyType || '';
-      existingProp.r_c_i = lead.r_c_i || existingProp.r_c_i || 'Residential';
-      try { syncToSheets('properties'); } catch(e) {}
+      const updatedProp = await updateRecord('properties', existingProp.id, {
+        current_owner_id: existingCust.id,
+        booked_by_customer_id: existingCust.id,
+        linkedLeadId: lead.id,
+        demand: leadDemand || existingProp.demand || '',
+        locality: lead.locality || existingProp.locality || '',
+        sector_block: lead.sector_block || existingProp.sector_block || '',
+        size: lead.size || existingProp.size || '',
+        propertyType: lead.propertyType || existingProp.propertyType || '',
+        r_c_i: lead.r_c_i || existingProp.r_c_i || 'Residential'
+      }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.properties) {
+            const idx = dbCache.properties.findIndex(x => String(x.id) === String(existingProp.id));
+            if (idx !== -1) dbCache.properties[idx] = updatedProp;
+          }
+        });
+      }
     } else {
-      const propId = generateNextId(db, 'properties', 'PROP');
-      existingProp = {
+      const propId = await generateNextIdAsync(client, 'properties');
+      const newProp = {
         id: propId,
         linkedLeadId: lead.id,
         status: 'Available',
@@ -1305,15 +1419,24 @@ function handleLeadStatusChange(lead, db, req) {
         lead_source: lead.source || 'Direct',
         initial_notes: lead.remarks || 'Auto-created from seller lead'
       };
-      db.properties.push(existingProp);
+      const insertedProp = await insertRecord('properties', newProp, client);
       lead.propertyId = propId;
-      try { syncToSheets('properties'); } catch(e) {}
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache) {
+            if (!dbCache.properties) dbCache.properties = [];
+            dbCache.properties.push(insertedProp);
+          }
+        });
+      }
     }
   }
 }
 
-function syncPropertyDetailsUniversally(propId, db) {
-  const prop = (db.properties || []).find(p => String(p.id) === String(propId));
+async function syncPropertyDetailsUniversally(propId, dbOrClient, cacheMutations) {
+  const client = dbOrClient || pool;
+  const propRes = await client.query('SELECT * FROM properties WHERE id = $1', [propId]);
+  const prop = propRes.rows[0];
   if (!prop) return;
 
   const fieldsToSync = {
@@ -1325,202 +1448,259 @@ function syncPropertyDetailsUniversally(propId, db) {
     demand: prop.demand || ''
   };
 
-  // 1. Sync to Leads (if this property belongs to a lead or is linked)
-  (db.leads || []).forEach(lead => {
-    if (String(lead.propertyId) === String(propId) || String(lead.id) === String(prop.linkedLeadId)) {
-      lead.r_c_i = fieldsToSync.r_c_i;
-      lead.propertyType = fieldsToSync.propertyType;
-      lead.locality = fieldsToSync.locality;
-      lead.sector_block = fieldsToSync.sector_block;
-      lead.size = fieldsToSync.size;
-      lead.demand = fieldsToSync.demand;
-      lead.budget = fieldsToSync.demand; // Also update budget if it's a seller lead
-    }
-  });
+  await client.query(
+    'UPDATE leads SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7 OR id = $8',
+    [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId, prop.linkedLeadId]
+  );
+  if (cacheMutations) {
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.leads) {
+        dbCache.leads.forEach(l => {
+          if (String(l.propertyId) === String(propId) || String(l.id) === String(prop.linkedLeadId)) {
+            l.r_c_i = fieldsToSync.r_c_i;
+            l.propertyType = fieldsToSync.propertyType;
+            l.locality = fieldsToSync.locality;
+            l.sector_block = fieldsToSync.sector_block;
+            l.size = fieldsToSync.size;
+            l.demand = fieldsToSync.demand;
+            l.budget = fieldsToSync.demand;
+          }
+        });
+      }
+    });
+  }
 
-  // 2. Sync to Customers
-  (db.customers || []).forEach(cust => {
-    if (String(cust.id) === String(prop.current_owner_id) || String(cust.id) === String(prop.booked_by_customer_id)) {
-      cust.city = fieldsToSync.locality;
-      cust.budget = fieldsToSync.demand;
-    }
-  });
+  await client.query(
+    'UPDATE customers SET city = $1, budget = $2 WHERE id = $3 OR id = $4',
+    [fieldsToSync.locality, fieldsToSync.demand, prop.current_owner_id, prop.booked_by_customer_id]
+  );
+  if (cacheMutations) {
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.customers) {
+        dbCache.customers.forEach(c => {
+          if (String(c.id) === String(prop.current_owner_id) || String(c.id) === String(prop.booked_by_customer_id)) {
+            c.city = fieldsToSync.locality;
+            c.budget = fieldsToSync.demand;
+          }
+        });
+      }
+    });
+  }
 
-  // 3. Sync to Queries
-  (db.queries || []).forEach(q => {
-    if (String(q.propertyId) === String(propId)) {
-      q.r_c_i = fieldsToSync.r_c_i;
-      q.propertyType = fieldsToSync.propertyType;
-      q.locality = fieldsToSync.locality;
-      q.sector_block = fieldsToSync.sector_block;
-      q.size = fieldsToSync.size;
-      q.demand = fieldsToSync.demand;
-      q.budget = fieldsToSync.demand;
-    }
-  });
+  await client.query(
+    'UPDATE queries SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7',
+    [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId]
+  );
+  if (cacheMutations) {
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.queries) {
+        dbCache.queries.forEach(q => {
+          if (String(q.propertyId) === String(propId)) {
+            q.r_c_i = fieldsToSync.r_c_i;
+            q.propertyType = fieldsToSync.propertyType;
+            q.locality = fieldsToSync.locality;
+            q.sector_block = fieldsToSync.sector_block;
+            q.size = fieldsToSync.size;
+            q.demand = fieldsToSync.demand;
+            q.budget = fieldsToSync.demand;
+          }
+        });
+      }
+    });
+  }
 
-  // 4. Sync to Follow Ups
-  (db.follow_ups || []).forEach(f => {
-    if (String(f.pitchedPropertyId) === String(propId)) {
-      f.pitchPrice = fieldsToSync.demand;
-    }
-  });
+  await client.query(
+    'UPDATE follow_ups SET "pitchPrice" = $1 WHERE "pitchedPropertyId" = $2',
+    [fieldsToSync.demand, propId]
+  );
+  if (cacheMutations) {
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.follow_ups) {
+        dbCache.follow_ups.forEach(f => {
+          if (String(f.pitchedPropertyId) === String(propId)) {
+            f.pitchPrice = fieldsToSync.demand;
+          }
+        });
+      }
+    });
+  }
 }
 
-function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmployeeId, db) {
+async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmployeeId, dbOrClient, cacheMutations) {
   if (!newEmployeeId) return;
-  
-  let leadId = '';
-  let custId = '';
-  let phones = new Set();
-  let emails = new Set();
 
+  const client = dbOrClient || pool;
+  let lead = null;
+  let customer = null;
+  
   if (sourceModule === 'leads') {
-    leadId = String(recordId);
-    const lead = (db.leads || []).find(l => String(l.id) === leadId);
+    const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [recordId]);
+    lead = leadRes.rows[0];
     if (lead) {
-      if (lead.phone) phones.add(String(lead.phone).trim());
-      if (lead.email) emails.add(String(lead.email).trim().toLowerCase());
-      const cust = (db.customers || []).find(c => String(c.leadId) === leadId || (lead.phone && String(c.phone).trim() === String(lead.phone).trim()));
-      if (cust) {
-        custId = String(cust.id);
-        if (cust.phone) phones.add(String(cust.phone).trim());
-        if (cust.email) emails.add(String(cust.email).trim().toLowerCase());
-      }
+      const custRes = await client.query('SELECT * FROM customers WHERE "leadId" = $1 OR (phone = $2 AND $2 <> \'\')', [lead.id, lead.phone]);
+      customer = custRes.rows[0];
     }
   } else if (sourceModule === 'customers') {
-    custId = String(recordId);
-    const cust = (db.customers || []).find(c => String(c.id) === custId);
-    if (cust) {
-      if (cust.phone) phones.add(String(cust.phone).trim());
-      if (cust.email) emails.add(String(cust.email).trim().toLowerCase());
-      leadId = cust.leadId ? String(cust.leadId) : '';
-      const lead = (db.leads || []).find(l => String(l.id) === leadId || (cust.phone && String(l.phone).trim() === String(cust.phone).trim()));
-      if (lead) {
-        leadId = String(lead.id);
-        if (lead.phone) phones.add(String(lead.phone).trim());
-        if (lead.email) emails.add(String(lead.email).trim().toLowerCase());
-      }
+    const custRes = await client.query('SELECT * FROM customers WHERE id = $1', [recordId]);
+    customer = custRes.rows[0];
+    if (customer) {
+      const leadRes = await client.query('SELECT * FROM leads WHERE id = $1 OR (phone = $2 AND $2 <> \'\')', [customer.leadId, customer.phone]);
+      lead = leadRes.rows[0];
     }
   } else if (sourceModule === 'follow_ups') {
-    const fup = (db.follow_ups || []).find(f => String(f.id) === String(recordId));
+    const fupRes = await client.query('SELECT "customerId" FROM follow_ups WHERE id = $1', [recordId]);
+    const fup = fupRes.rows[0];
     if (fup) {
-      const targetId = String(fup.customerId);
+      const targetId = fup.customerId;
       if (targetId.startsWith('LEAD-')) {
-        leadId = targetId;
-        const lead = (db.leads || []).find(l => String(l.id) === leadId);
+        const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [targetId]);
+        lead = leadRes.rows[0];
         if (lead) {
-          if (lead.phone) phones.add(String(lead.phone).trim());
-          if (lead.email) emails.add(String(lead.email).trim().toLowerCase());
+          const custRes = await client.query('SELECT * FROM customers WHERE "leadId" = $1 OR (phone = $2 AND $2 <> \'\')', [lead.id, lead.phone]);
+          customer = custRes.rows[0];
         }
       } else if (targetId.startsWith('CUST-')) {
-        custId = targetId;
-        const cust = (db.customers || []).find(c => String(c.id) === custId);
-        if (cust) {
-          if (cust.phone) phones.add(String(cust.phone).trim());
-          if (cust.email) emails.add(String(cust.email).trim().toLowerCase());
-          if (cust.leadId) leadId = String(cust.leadId);
+        const custRes = await client.query('SELECT * FROM customers WHERE id = $1', [targetId]);
+        customer = custRes.rows[0];
+        if (customer) {
+          const leadRes = await client.query('SELECT * FROM leads WHERE id = $1 OR (phone = $2 AND $2 <> \'\')', [customer.leadId, customer.phone]);
+          lead = leadRes.rows[0];
         }
       }
     }
   }
 
-  const matchClient = (idField, phoneField) => {
-    const idStr = String(idField || '');
-    const phoneStr = String(phoneField || '').trim();
-    if (leadId && idStr === leadId) return true;
-    if (custId && idStr === custId) return true;
-    if (phoneStr && phones.has(phoneStr)) return true;
-    return false;
-  };
+  const leadId = lead ? lead.id : '';
+  const custId = customer ? customer.id : '';
+  const phones = [];
+  if (lead && lead.phone) phones.push(lead.phone.trim());
+  if (customer && customer.phone) phones.push(customer.phone.trim());
+  
+  if (!leadId && !custId && phones.length === 0) return;
 
-  let updated = false;
-
-  (db.leads || []).forEach(l => {
-    if (matchClient(l.id, l.phone)) {
-      if (l.assignedEmployeeId !== newEmployeeId) {
-        l.assignedEmployeeId = newEmployeeId;
-        updated = true;
-      }
+  if (leadId || phones.length > 0) {
+    await client.query(
+      'UPDATE leads SET "assignedEmployeeId" = $1 WHERE id = $2 OR (phone = ANY($3) AND $3 <> \'{}\')',
+      [newEmployeeId, leadId, phones]
+    );
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.leads) {
+          dbCache.leads.forEach(l => {
+            if (l.id === leadId || (l.phone && phones.includes(String(l.phone).trim()))) {
+              l.assignedEmployeeId = newEmployeeId;
+            }
+          });
+        }
+      });
     }
-  });
+  }
 
-  (db.customers || []).forEach(c => {
-    if (matchClient(c.id, c.phone) || (leadId && String(c.leadId) === leadId)) {
-      if (c.assignedEmployeeId !== newEmployeeId) {
-        c.assignedEmployeeId = newEmployeeId;
-        updated = true;
-      }
+  if (custId || leadId || phones.length > 0) {
+    await client.query(
+      'UPDATE customers SET "assignedEmployeeId" = $1 WHERE id = $2 OR "leadId" = $3 OR (phone = ANY($4) AND $4 <> \'{}\')',
+      [newEmployeeId, custId, leadId, phones]
+    );
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.customers) {
+          dbCache.customers.forEach(c => {
+            if (c.id === custId || c.leadId === leadId || (c.phone && phones.includes(String(c.phone).trim()))) {
+              c.assignedEmployeeId = newEmployeeId;
+            }
+          });
+        }
+      });
     }
-  });
+  }
 
-  (db.follow_ups || []).forEach(f => {
-    if (matchClient(f.customerId, '')) {
-      if (f.employeeId !== newEmployeeId) {
-        f.employeeId = newEmployeeId;
-        updated = true;
-      }
+  if (custId || leadId) {
+    await client.query(
+      'UPDATE follow_ups SET "employeeId" = $1 WHERE "customerId" = $2 OR "customerId" = $3',
+      [newEmployeeId, custId, leadId]
+    );
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.follow_ups) {
+          dbCache.follow_ups.forEach(f => {
+            if (f.customerId === custId || f.customerId === leadId) {
+              f.employeeId = newEmployeeId;
+            }
+          });
+        }
+      });
     }
-  });
+  }
 
-  (db.queries || []).forEach(q => {
-    if (matchClient(q.customerId, '')) {
-      if (q.assignedEmployeeId !== newEmployeeId) {
-        q.assignedEmployeeId = newEmployeeId;
-        updated = true;
-      }
+  if (custId || leadId) {
+    await client.query(
+      'UPDATE queries SET "assignedEmployeeId" = $1 WHERE "customerId" = $2 OR "customerId" = $3',
+      [newEmployeeId, custId, leadId]
+    );
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.queries) {
+          dbCache.queries.forEach(q => {
+            if (q.customerId === custId || q.customerId === leadId) {
+              q.assignedEmployeeId = newEmployeeId;
+            }
+          });
+        }
+      });
     }
-  });
+  }
 
-  (db.site_visits || []).forEach(s => {
-    if (matchClient(s.customerId, '')) {
-      if (s.employeeId !== newEmployeeId) {
-        s.employeeId = newEmployeeId;
-        updated = true;
-      }
+  if (custId || leadId) {
+    await client.query(
+      'UPDATE site_visits SET "employeeId" = $1 WHERE "customerId" = $2 OR "customerId" = $3',
+      [newEmployeeId, custId, leadId]
+    );
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.site_visits) {
+          dbCache.site_visits.forEach(s => {
+            if (s.customerId === custId || s.customerId === leadId) {
+              s.employeeId = newEmployeeId;
+            }
+          });
+        }
+      });
     }
-  });
-
-  if (updated) {
-    try { syncToSheets('leads'); } catch(e) {}
-    try { syncToSheets('customers'); } catch(e) {}
-    try { syncToSheets('follow_ups'); } catch(e) {}
-    try { syncToSheets('queries'); } catch(e) {}
-    try { syncToSheets('site_visits'); } catch(e) {}
   }
 }
 
-function handleFollowUpPipelineAction(f, db, req) {
+async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) {
   if (!f.pipelineAction) return;
 
   const action = f.pipelineAction;
-  const customerId = f.customerId; // This can be LEAD-... or CUST-...
+  const customerId = f.customerId; 
   const queryId = f.queryId;
+  const client = dbOrClient || pool;
 
-  // Auto-create Site Visit if stage is Site Visit Arranged / Scheduled
   const isSiteVisitStage = action === 'Site Visit Arranged' || action === 'Site Visit' || action === 'Site Visit Scheduled' || action === 'Lead_VisitScheduled';
   if (isSiteVisitStage) {
-    let existingVisit = (db.site_visits || []).find(sv => sv.linkedFollowUpId === f.id || (sv.customerId === customerId && sv.propertyId === (f.pitchedPropertyId || 'PROP-001') && sv.date === (f.date || new Date().toLocaleDateString('en-IN'))));
+    const visitRes = await client.query(
+      'SELECT * FROM site_visits WHERE "linkedFollowUpId" = $1 OR ("customerId" = $2 AND "propertyId" = $3 AND date = $4)',
+      [f.id, customerId, f.pitchedPropertyId || 'PROP-001', f.date || new Date().toLocaleDateString('en-IN')]
+    );
+    const existingVisit = visitRes.rows[0];
+    
     if (existingVisit) {
-      let changed = false;
-      if (existingVisit.date !== f.date) {
-        existingVisit.date = f.date;
-        changed = true;
-      }
-      if (existingVisit.propertyId !== (f.pitchedPropertyId || 'PROP-001')) {
-        existingVisit.propertyId = f.pitchedPropertyId || 'PROP-001';
-        changed = true;
-      }
-      if (existingVisit.employeeId !== f.employeeId) {
-        existingVisit.employeeId = f.employeeId;
-        changed = true;
-      }
-      if (changed) {
-        writeDb(db);
-        try { syncToSheets('site_visits'); } catch(e) {}
+      const updatedVisit = await updateRecord('site_visits', existingVisit.id, {
+        date: f.date || existingVisit.date,
+        propertyId: f.pitchedPropertyId || 'PROP-001',
+        employeeId: f.employeeId || existingVisit.employeeId
+      }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.site_visits) {
+            const idx = dbCache.site_visits.findIndex(x => String(x.id) === String(existingVisit.id));
+            if (idx !== -1) dbCache.site_visits[idx] = updatedVisit;
+          }
+        });
       }
     } else {
-      const visitId = generateNextId(db, 'site_visits', 'VISIT');
+      const visitId = await generateNextIdAsync(client, 'site_visits');
       const newVisit = {
         id: visitId,
         customerId: customerId,
@@ -1532,46 +1712,52 @@ function handleFollowUpPipelineAction(f, db, req) {
         remarks: f.remarks || `Automatically created from Follow-Up ${f.id} stage: ${action}.`,
         linkedFollowUpId: f.id
       };
-      db.site_visits = db.site_visits || [];
-      db.site_visits.push(newVisit);
-      writeDb(db);
-      try { syncToSheets('site_visits'); } catch(e) {}
+      const insertedVisit = await insertRecord('site_visits', newVisit, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache) {
+            if (!dbCache.site_visits) dbCache.site_visits = [];
+            dbCache.site_visits.push(insertedVisit);
+          }
+        });
+      }
     }
   } else {
-    // If the stage was changed away from Site Visit, delete any site visit linked to this follow-up!
-    const originalLen = (db.site_visits || []).length;
-    db.site_visits = (db.site_visits || []).filter(sv => sv.linkedFollowUpId !== f.id);
-    if ((db.site_visits || []).length !== originalLen) {
-      writeDb(db);
-      try { syncToSheets('site_visits'); } catch(e) {}
+    await client.query('DELETE FROM site_visits WHERE "linkedFollowUpId" = $1', [f.id]);
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.site_visits) {
+          dbCache.site_visits = dbCache.site_visits.filter(sv => sv.linkedFollowUpId !== f.id);
+        }
+      });
     }
   }
 
-  // Check if we should trigger deal conversion (e.g. stage is Closed or Booked)
   const isClosedDeal = action === 'Closed' || action === 'Booked' || action === 'Query_ClosedWon' || action === 'Deal Closed' || action === 'Property Registered/Sold Out' || action === 'Property Booked';
 
   if (isClosedDeal) {
-    // 1. If customerId is a Lead, convert to Customer first
     let finalCustomerId = customerId;
     if (customerId && String(customerId).startsWith('LEAD-')) {
-      const cust = convertLeadToCustomer(customerId, db, `Converted via Follow-Up close action.`);
+      const cust = await convertLeadToCustomer(customerId, client, `Converted via Follow-Up close action.`);
       if (cust) {
         finalCustomerId = cust.id;
       }
     }
 
-    // 2. Insert new Deal closed if not exists
     const propId = f.pitchedPropertyId || 'PROP-001';
-    db.deals = db.deals || [];
-    const existingDeal = db.deals.find(d => 
-      String(d.propertyId) === String(propId) && 
-      String(d.customerId) === String(finalCustomerId)
+    
+    const dealRes = await client.query(
+      'SELECT * FROM deals WHERE "propertyId" = $1 AND "customerId" = $2',
+      [propId, finalCustomerId]
     );
+    const existingDeal = dealRes.rows[0];
 
     if (!existingDeal) {
-      const dealId = generateNextId(db, 'deals', 'DEAL');
-      const prop = (db.properties || []).find(pr => String(pr.id) === String(propId));
+      const dealId = await generateNextIdAsync(client, 'deals');
+      const propRes = await client.query('SELECT demand, current_owner_id FROM properties WHERE id = $1', [propId]);
+      const prop = propRes.rows[0];
       const sellerId = prop ? (prop.current_owner_id || '') : '';
+      
       const newDeal = {
         id: dealId,
         customerId: finalCustomerId,
@@ -1583,52 +1769,83 @@ function handleFollowUpPipelineAction(f, db, req) {
         purchasePrice: prop ? (prop.demand || '') : '',
         registrationDate: new Date().toISOString().split('T')[0]
       };
-      db.deals.push(newDeal);
-      handleDealStatusChange(newDeal, db, req);
-      writeDb(db);
-      try { syncToSheets('deals'); } catch(e) {}
+      
+      const insertedDeal = await insertRecord('deals', newDeal, client);
+      
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache) {
+            if (!dbCache.deals) dbCache.deals = [];
+            dbCache.deals.push(insertedDeal);
+          }
+        });
+      }
+      
+      await handleDealStatusChange(insertedDeal, client, req, cacheMutations);
     } else {
-      // Sync/update property ownership even if deal already existed (idempotence)
-      handleDealStatusChange(existingDeal, db, req);
-      writeDb(db);
-      try { syncToSheets('deals'); } catch(e) {}
+      await handleDealStatusChange(existingDeal, client, req, cacheMutations);
     }
   }
 
-  // Always update linked lead or query stage dynamically
   if (queryId) {
-    const q = (db.queries || []).find(x => String(x.id) === String(queryId));
+    const qRes = await client.query('SELECT * FROM queries WHERE id = $1', [queryId]);
+    const q = qRes.rows[0];
     if (q) {
       q.stage = action;
-      // If it is closed won/approved, normalize statuses
       if (action === 'Closed' || action === 'Deal Closed' || action === 'Property Registered/Sold Out' || action === 'Query_ClosedWon') {
         q.status = 'Closed';
       } else if (action === 'Requirement Verified' || action === 'Query_Approved') {
         q.status = 'Approved';
       }
-      handleQueryStageChange(q, db, req);
-      writeDb(db);
-      try { syncToSheets('queries'); } catch(e) {}
+      
+      const updatedQ = await updateRecord('queries', q.id, { stage: q.stage, status: q.status }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.queries) {
+            const idx = dbCache.queries.findIndex(x => String(x.id) === String(q.id));
+            if (idx !== -1) dbCache.queries[idx] = updatedQ;
+          }
+        });
+      }
+      
+      await handleQueryStageChange(updatedQ, client, req, cacheMutations);
     }
   } else if (customerId && String(customerId).startsWith('LEAD-')) {
-    const lead = (db.leads || []).find(l => String(l.id) === String(customerId));
+    const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [customerId]);
+    const lead = leadRes.rows[0];
     if (lead) {
+      let leadStatus = lead.status;
       if (action === 'Lost' || action === 'Lost Lead') {
-        lead.status = 'Junk';
+        leadStatus = 'Junk';
       } else if (action === 'Closed' || action === 'Deal Closed' || action === 'Property Registered/Sold Out' || action === 'Booked' || action === 'Property Booked') {
-        lead.status = 'Converted';
+        leadStatus = 'Converted';
       } else {
-        lead.status = action;
+        leadStatus = action;
       }
-      writeDb(db);
-      try { syncToSheets('leads'); } catch(e) {}
+      
+      const updatedLead = await updateRecord('leads', lead.id, { status: leadStatus }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.leads) {
+            const idx = dbCache.leads.findIndex(x => String(x.id) === String(lead.id));
+            if (idx !== -1) dbCache.leads[idx] = updatedLead;
+          }
+        });
+      }
     }
   } else if (customerId && String(customerId).startsWith('CUST-')) {
-    const cust = (db.customers || []).find(c => String(c.id) === String(customerId));
+    const custRes = await client.query('SELECT * FROM customers WHERE id = $1', [customerId]);
+    const cust = custRes.rows[0];
     if (cust) {
-      cust.stage = action;
-      writeDb(db);
-      try { syncToSheets('customers'); } catch(e) {}
+      const updatedCust = await updateRecord('customers', cust.id, { stage: action }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.customers) {
+            const idx = dbCache.customers.findIndex(x => String(x.id) === String(cust.id));
+            if (idx !== -1) dbCache.customers[idx] = updatedCust;
+          }
+        });
+      }
     }
   }
 }
@@ -1967,7 +2184,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
-  if (module === 'employees' || module === 'attendance') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -1976,12 +2193,111 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         dateTime: new Date().toLocaleString()
       };
 
+      const cacheMutations = [];
+
       const inserted = await runTransaction(async (client) => {
         if (!payload.id) {
           payload.id = await generateNextIdAsync(client, module);
         }
         log.action = `Created record ${payload.id} in ${module}`;
+
+        // Lead specific pre-insert automation
+        if (module === 'leads') {
+          if (payload.propertyId && !payload.demand) {
+            const propRes = await client.query('SELECT demand FROM properties WHERE id = $1', [payload.propertyId]);
+            if (propRes.rows[0]) {
+              payload.demand = propRes.rows[0].demand || '';
+            }
+          }
+          if (payload.leadType === 'Seller') {
+            payload.status = payload.status || 'Open';
+            payload.assignmentStatus = 'accepted';
+            payload.assignmentTime = null;
+            payload.droppedBy = [];
+          } else {
+            payload.assignmentStatus = 'pending';
+            payload.assignmentTime = new Date().toISOString();
+            payload.droppedBy = [];
+          }
+          
+          if (payload.assignedEmployeeId) {
+            setTimeout(() => {
+              notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: payload.id, leadName: payload.name || payload.person_name || 'New Lead' });
+            }, 500);
+          }
+        }
+
+        // Query specific pre-insert automation
+        if (module === 'queries') {
+          if (!payload.status) {
+            payload.status = 'Pending Approval';
+          }
+          if (payload.assignedEmployeeId) {
+            const currentStatus = payload.status;
+            setTimeout(() => {
+              if (currentStatus === 'Approved') {
+                notifyUser(payload.assignedEmployeeId, 'query-approved', {
+                  queryId: payload.id,
+                  message: `Your Property Query ${payload.id} has been Approved.`
+                });
+              } else {
+                notifyUser(payload.assignedEmployeeId, 'query-assigned', {
+                  queryId: payload.id,
+                  message: `New Query ${payload.id} assigned to you for approval.`
+                });
+              }
+            }, 500);
+          }
+        }
+
+        // Insert record
         const rec = await insertRecord(module, payload, client);
+
+        // Query specific post-insert automation
+        if (module === 'queries') {
+          await handleQueryStageChange(payload, client, req, cacheMutations);
+
+          if (payload.queryType === 'Buy Property' && String(payload.customerId).startsWith('LEAD')) {
+            const followUpId = await generateNextIdAsync(client, 'follow_ups');
+            const newFollowUp = {
+              id: followUpId,
+              customerId: payload.customerId,
+              queryId: payload.id,
+              employeeId: payload.assignedEmployeeId || 'EMP-001',
+              date: new Date().toLocaleDateString('en-IN'),
+              time: '12:00 PM',
+              status: 'Pending Call',
+              pipelineAction: 'Fresh Lead',
+              remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
+            };
+            const insertedFollowUp = await insertRecord('follow_ups', newFollowUp, client);
+            cacheMutations.push(() => {
+              if (dbCache) {
+                if (!dbCache.follow_ups) dbCache.follow_ups = [];
+                dbCache.follow_ups.push(insertedFollowUp);
+              }
+            });
+            try { syncToSheets('follow_ups'); } catch(e) {}
+          }
+        }
+
+        // Lead specific post-insert automation
+        if (module === 'leads') {
+          await handleLeadStatusChange(payload, client, req, cacheMutations);
+          
+          if (payload.assignmentStatus === 'accepted' && payload.leadType !== 'Seller') {
+            await createFollowUpForLead(payload, client, cacheMutations);
+          }
+          if (payload.assignedEmployeeId) {
+            await syncAssignedEmployeeUniversally('leads', payload.id, payload.assignedEmployeeId, client, cacheMutations);
+          }
+        }
+
+        // Follow up specific post-insert automation
+        if (module === 'follow_ups') {
+          await handleFollowUpPipelineAction(rec, client, req, cacheMutations);
+        }
+
         await insertRecord('activity_logs', log, client);
         return rec;
       });
@@ -1994,6 +2310,9 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         }
       }
 
+      cacheMutations.forEach(mutate => mutate());
+
+      try { syncToSheets(module); } catch(e) {}
       res.status(201).json(inserted);
     } catch (err) {
       console.error(`Error inserting ${module}:`, err);
@@ -2473,7 +2792,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
-  if (module === 'employees' || module === 'attendance') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -2482,12 +2801,53 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         dateTime: new Date().toLocaleString()
       };
 
+      const cacheMutations = [];
+
       const updated = await runTransaction(async (client) => {
         const recordExists = await getRecord(module, id, client);
         if (!recordExists) {
           throw new Error(`Record ${id} not found.`);
         }
+
+        const metadata = readMetadata();
+        const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
+        fields.forEach(f => {
+          if (f.name === 'last_updated') {
+            payload[f.name] = new Date().toLocaleString('en-IN');
+          }
+        });
+
+        if (module === 'leads') {
+          if (payload.assignedEmployeeId && payload.assignedEmployeeId !== recordExists.assignedEmployeeId) {
+            payload.assignmentStatus = 'accepted';
+            payload.assignmentTime = null;
+            payload.droppedBy = [];
+            setTimeout(() => {
+              notifyUser(payload.assignedEmployeeId, 'new-lead', { leadId: id, leadName: payload.name || payload.person_name || 'New Lead' });
+            }, 500);
+          }
+        }
+
         const rec = await updateRecord(module, id, payload, client);
+
+        if (module === 'queries') {
+          await handleQueryStageChange(rec, client, req, cacheMutations);
+        }
+
+        if (module === 'leads') {
+          await handleLeadStatusChange(rec, client, req, cacheMutations);
+          if (rec.assignmentStatus === 'accepted' && rec.leadType !== 'Seller') {
+            await createFollowUpForLead(rec, client, cacheMutations);
+          }
+          if (rec.assignedEmployeeId) {
+            await syncAssignedEmployeeUniversally('leads', id, rec.assignedEmployeeId, client, cacheMutations);
+          }
+        }
+
+        if (module === 'follow_ups') {
+          await handleFollowUpPipelineAction(rec, client, req, cacheMutations);
+        }
+
         await insertRecord('activity_logs', log, client);
         return rec;
       });
@@ -2502,6 +2862,9 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         }
       }
 
+      cacheMutations.forEach(mutate => mutate());
+
+      try { syncToSheets(module); } catch(e) {}
       res.json(updated);
     } catch (err) {
       if (err.message.includes('not found')) {
@@ -2775,7 +3138,7 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 }, async (req, res) => {
   const { module, id } = req.params;
 
-  if (module === 'employees' || module === 'attendance') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -2784,21 +3147,110 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         dateTime: new Date().toLocaleString()
       };
 
-      const deleted = await runTransaction(async (client) => {
-        const recordExists = await getRecord(module, id, client);
-        if (!recordExists) {
+      const recordExists = await runTransaction(async (client) => {
+        const rec = await getRecord(module, id, client);
+        if (!rec) {
           throw new Error(`Record ${id} not found.`);
         }
+        
+        if (module === 'leads' || module === 'customers') {
+          const targetPhone = String(rec.phone || '').trim();
+          const targetEmail = String(rec.email || '').trim();
+          
+          if (module === 'leads') {
+            await client.query('DELETE FROM customers WHERE "leadId" = $1 OR (phone = $2 AND $2 <> \'\') OR (email = $3 AND $3 <> \'\')', [id, targetPhone, targetEmail]);
+          } else {
+            const leadIdVal = rec.leadId || '';
+            await client.query('DELETE FROM leads WHERE id = $1 OR (phone = $2 AND $2 <> \'\') OR (email = $3 AND $3 <> \'\')', [leadIdVal, targetPhone, targetEmail]);
+          }
+
+          const queriesRes = await client.query('SELECT id FROM queries WHERE "customerId" = $1', [id]);
+          const queryIds = queriesRes.rows.map(q => q.id);
+
+          if (queryIds.length > 0) {
+            await client.query('DELETE FROM properties WHERE "booked_by_customer_id" = $1 OR "linkedQueryId" = ANY($2) OR (contact_number = $3 AND $3 <> \'\')', [id, queryIds, targetPhone]);
+          } else {
+            await client.query('DELETE FROM properties WHERE "booked_by_customer_id" = $1 OR (contact_number = $2 AND $2 <> \'\')', [id, targetPhone]);
+          }
+
+          if (queryIds.length > 0) {
+            await client.query('DELETE FROM follow_ups WHERE "customerId" = $1 OR "queryId" = ANY($2)', [id, queryIds]);
+          } else {
+            await client.query('DELETE FROM follow_ups WHERE "customerId" = $1', [id]);
+          }
+
+          await client.query('DELETE FROM queries WHERE "customerId" = $1', [id]);
+          await client.query('DELETE FROM site_visits WHERE "customerId" = $1', [id]);
+          await client.query('DELETE FROM property_pitch_history WHERE "customerId" = $1', [id]);
+          await client.query('DELETE FROM sales WHERE "customerId" = $1', [id]);
+          await client.query('DELETE FROM deals WHERE "customerId" = $1', [id]);
+        }
+
         await deleteRecord(module, id, client);
         await insertRecord('activity_logs', log, client);
-        return recordExists;
+        return rec;
       });
 
-      if (dbCache && dbCache[module]) {
-        dbCache[module] = dbCache[module].filter(x => String(x.id) !== String(id));
+      if (dbCache) {
+        dbCache[module] = (dbCache[module] || []).filter(x => String(x.id) !== String(id));
         if (dbCache.activity_logs) {
           dbCache.activity_logs.unshift(log);
         }
+
+        if (module === 'leads' || module === 'customers') {
+          const rec = recordExists;
+          const targetPhone = String(rec.phone || '').trim();
+          const targetEmail = String(rec.email || '').trim();
+
+          if (module === 'leads') {
+            dbCache.customers = (dbCache.customers || []).filter(c => 
+              String(c.leadId) !== String(id) && 
+              (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
+              (targetEmail === '' || String(c.email).trim() !== targetEmail)
+            );
+          } else {
+            dbCache.leads = (dbCache.leads || []).filter(l => 
+              String(l.id) !== String(rec.leadId) && 
+              (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
+              (targetEmail === '' || String(l.email).trim() !== targetEmail)
+            );
+          }
+
+          const customerQueries = (dbCache.queries || []).filter(q => String(q.customerId) === String(id));
+          const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
+
+          dbCache.properties = (dbCache.properties || []).filter(p => {
+            if (String(p.booked_by_customer_id) === String(id)) return false;
+            if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
+            if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
+            return true;
+          });
+
+          dbCache.follow_ups = (dbCache.follow_ups || []).filter(f => 
+            String(f.customerId) !== String(id) && 
+            (!f.queryId || !customerQueryIds.has(String(f.queryId)))
+          );
+
+          dbCache.queries = (dbCache.queries || []).filter(q => String(q.customerId) !== String(id));
+          dbCache.site_visits = (dbCache.site_visits || []).filter(s => String(s.customerId) !== String(id));
+          dbCache.property_pitch_history = (dbCache.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
+          dbCache.sales = (dbCache.sales || []).filter(s => String(s.customerId) !== String(id));
+          dbCache.deals = (dbCache.deals || []).filter(d => String(d.customerId) !== String(id));
+        }
+      }
+
+      if (module === 'leads' || module === 'customers') {
+        try { syncToSheets('leads'); } catch(e) {}
+        try { syncToSheets('customers'); } catch(e) {}
+        try { syncToSheets('properties'); } catch(e) {}
+        try { syncToSheets('follow_ups'); } catch(e) {}
+        try { syncToSheets('queries'); } catch(e) {}
+        try { syncToSheets('site_visits'); } catch(e) {}
+        try { syncToSheets('property_pitch_history'); } catch(e) {}
+        try { syncToSheets('sales'); } catch(e) {} 
+        try { syncToSheets('deals'); } catch(e) {}
+      } else {
+        try { syncToSheets(module); } catch (e) {}
       }
 
       res.json({ success: true, message: `Record ${id} deleted successfully.` });
@@ -2949,7 +3401,7 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
     return res.status(400).json({ message: 'Invalid IDs array.' });
   }
 
-  if (module === 'employees' || module === 'attendance') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -2958,18 +3410,117 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
         dateTime: new Date().toLocaleString()
       };
 
-      await runTransaction(async (client) => {
+      const deletedRecords = await runTransaction(async (client) => {
+        const records = [];
+        
         for (const id of ids) {
+          const rec = await getRecord(module, id, client);
+          if (!rec) continue;
+
+          records.push(rec);
+
+          if (module === 'leads' || module === 'customers') {
+            const targetPhone = String(rec.phone || '').trim();
+            const targetEmail = String(rec.email || '').trim();
+            
+            if (module === 'leads') {
+              await client.query('DELETE FROM customers WHERE "leadId" = $1 OR (phone = $2 AND $2 <> \'\') OR (email = $3 AND $3 <> \'\')', [id, targetPhone, targetEmail]);
+            } else {
+              const leadIdVal = rec.leadId || '';
+              await client.query('DELETE FROM leads WHERE id = $1 OR (phone = $2 AND $2 <> \'\') OR (email = $3 AND $3 <> \'\')', [leadIdVal, targetPhone, targetEmail]);
+            }
+
+            const queriesRes = await client.query('SELECT id FROM queries WHERE "customerId" = $1', [id]);
+            const queryIds = queriesRes.rows.map(q => q.id);
+
+            if (queryIds.length > 0) {
+              await client.query('DELETE FROM properties WHERE "booked_by_customer_id" = $1 OR "linkedQueryId" = ANY($2) OR (contact_number = $3 AND $3 <> \'\')', [id, queryIds, targetPhone]);
+            } else {
+              await client.query('DELETE FROM properties WHERE "booked_by_customer_id" = $1 OR (contact_number = $2 AND $2 <> \'\')', [id, targetPhone]);
+            }
+
+            if (queryIds.length > 0) {
+              await client.query('DELETE FROM follow_ups WHERE "customerId" = $1 OR "queryId" = ANY($2)', [id, queryIds]);
+            } else {
+              await client.query('DELETE FROM follow_ups WHERE "customerId" = $1', [id]);
+            }
+
+            await client.query('DELETE FROM queries WHERE "customerId" = $1', [id]);
+            await client.query('DELETE FROM site_visits WHERE "customerId" = $1', [id]);
+            await client.query('DELETE FROM property_pitch_history WHERE "customerId" = $1', [id]);
+            await client.query('DELETE FROM sales WHERE "customerId" = $1', [id]);
+            await client.query('DELETE FROM deals WHERE "customerId" = $1', [id]);
+          }
+
           await deleteRecord(module, id, client);
         }
+
         await insertRecord('activity_logs', log, client);
+        return records;
       });
 
-      if (dbCache && dbCache[module]) {
-        dbCache[module] = dbCache[module].filter(rec => !ids.includes(String(rec.id)));
+      if (dbCache) {
+        dbCache[module] = (dbCache[module] || []).filter(rec => !ids.includes(String(rec.id)));
         if (dbCache.activity_logs) {
           dbCache.activity_logs.unshift(log);
         }
+
+        deletedRecords.forEach(rec => {
+          if (module === 'leads' || module === 'customers') {
+            const id = rec.id;
+            const targetPhone = String(rec.phone || '').trim();
+            const targetEmail = String(rec.email || '').trim();
+
+            if (module === 'leads') {
+              dbCache.customers = (dbCache.customers || []).filter(c => 
+                String(c.leadId) !== String(id) && 
+                (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
+                (targetEmail === '' || String(c.email).trim() !== targetEmail)
+              );
+            } else {
+              dbCache.leads = (dbCache.leads || []).filter(l => 
+                String(l.id) !== String(rec.leadId) && 
+                (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
+                (targetEmail === '' || String(l.email).trim() !== targetEmail)
+              );
+            }
+
+            const customerQueries = (dbCache.queries || []).filter(q => String(q.customerId) === String(id));
+            const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
+
+            dbCache.properties = (dbCache.properties || []).filter(p => {
+              if (String(p.booked_by_customer_id) === String(id)) return false;
+              if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
+              if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
+              return true;
+            });
+
+            dbCache.follow_ups = (dbCache.follow_ups || []).filter(f => 
+              String(f.customerId) !== String(id) && 
+              (!f.queryId || !customerQueryIds.has(String(f.queryId)))
+            );
+
+            dbCache.queries = (dbCache.queries || []).filter(q => String(q.customerId) !== String(id));
+            dbCache.site_visits = (dbCache.site_visits || []).filter(s => String(s.customerId) !== String(id));
+            dbCache.property_pitch_history = (dbCache.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
+            dbCache.sales = (dbCache.sales || []).filter(s => String(s.customerId) !== String(id));
+            dbCache.deals = (dbCache.deals || []).filter(d => String(d.customerId) !== String(id));
+          }
+        });
+      }
+
+      if (module === 'leads' || module === 'customers') {
+        try { syncToSheets('leads'); } catch(e) {}
+        try { syncToSheets('customers'); } catch(e) {}
+        try { syncToSheets('properties'); } catch(e) {}
+        try { syncToSheets('follow_ups'); } catch(e) {}
+        try { syncToSheets('queries'); } catch(e) {}
+        try { syncToSheets('site_visits'); } catch(e) {}
+        try { syncToSheets('property_pitch_history'); } catch(e) {}
+        try { syncToSheets('sales'); } catch(e) {} 
+        try { syncToSheets('deals'); } catch(e) {}
+      } else {
+        try { syncToSheets(module); } catch (e) {}
       }
 
       res.json({ success: true, message: `Bulk deleted ${ids.length} records.` });
@@ -4523,22 +5074,32 @@ app.get('/api/leads/pending', authenticateToken, (req, res) => {
   res.json(pendingLeads);
 });
 
-function createFollowUpForLead(lead, db) {
+async function createFollowUpForLead(lead, dbOrClient, cacheMutations) {
   if (lead.leadType === 'Seller') return;
-  db.follow_ups = db.follow_ups || [];
-
-  const cleanPhone = String(lead.phone).trim();
-  const cust = (db.customers || []).find(c => String(c.leadId) === String(lead.id) || (c.phone && String(c.phone).trim() === cleanPhone));
+  const client = dbOrClient || pool;
+  
+  const cleanPhone = String(lead.phone || '').trim();
+  const custRes = await client.query('SELECT * FROM customers WHERE "leadId" = $1 OR (phone = $2 AND $2 <> \'\')', [lead.id, cleanPhone]);
+  const cust = custRes.rows[0];
   const finalCustId = cust ? cust.id : lead.id;
 
-  const existingFollowUp = db.follow_ups.find(f => String(f.customerId) === String(finalCustId));
+  const followUpRes = await client.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [finalCustId]);
+  const existingFollowUp = followUpRes.rows[0];
+
   if (existingFollowUp) {
     if (lead.assignedEmployeeId && existingFollowUp.employeeId !== lead.assignedEmployeeId) {
-      existingFollowUp.employeeId = lead.assignedEmployeeId;
-      try { syncToSheets('follow_ups'); } catch(e) {}
+      const updatedFollowUp = await updateRecord('follow_ups', existingFollowUp.id, { employeeId: lead.assignedEmployeeId }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.follow_ups) {
+            const idx = dbCache.follow_ups.findIndex(x => String(x.id) === String(existingFollowUp.id));
+            if (idx !== -1) dbCache.follow_ups[idx] = updatedFollowUp;
+          }
+        });
+      }
     }
   } else {
-    const followUpId = generateNextId(db, 'follow_ups', 'FOLLOW');
+    const followUpId = await generateNextIdAsync(client, 'follow_ups');
     const newFollowUp = {
       id: followUpId,
       customerId: finalCustId,
@@ -4549,8 +5110,15 @@ function createFollowUpForLead(lead, db) {
       pipelineAction: 'Fresh Lead',
       remarks: `Auto-scheduled follow up for accepted Lead ${lead.id}: ${lead.remarks || 'No notes'}`
     };
-    db.follow_ups.push(newFollowUp);
-    try { syncToSheets('follow_ups'); } catch(e) {}
+    const insertedFollowUp = await insertRecord('follow_ups', newFollowUp, client);
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache) {
+          if (!dbCache.follow_ups) dbCache.follow_ups = [];
+          dbCache.follow_ups.push(insertedFollowUp);
+        }
+      });
+    }
   }
 }
 
