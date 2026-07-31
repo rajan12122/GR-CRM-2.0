@@ -111,6 +111,14 @@
           "editable": false
         },
         {
+          "name": "leadId",
+          "label": "Lead ID",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": false
+        },
+        {
           "name": "name",
           "label": "Name",
           "type": "text",
