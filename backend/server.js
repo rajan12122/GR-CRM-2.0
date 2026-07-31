@@ -131,6 +131,16 @@ function readDb() {
   return dbCache;
 }
 
+async function getModuleRecordsForServer(moduleName, client = null) {
+  const migratedModules = ['employees', 'attendance', 'location_logs', 'active_paths'];
+  if (migratedModules.includes(moduleName)) {
+    return await getRecords(moduleName, client);
+  } else {
+    if (!dbCache) return [];
+    return dbCache[moduleName] || [];
+  }
+}
+
 async function writeDb(db) {
   dbCache = db;
   try {
@@ -342,6 +352,15 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
       };
       await insertRecord('activity_logs', auditLog, client);
     });
+
+    // Synchronously write-through to dbCache.employees
+    if (dbCache && dbCache.employees) {
+      const emp = dbCache.employees.find(e => String(e.id) === String(employeeId));
+      if (emp) {
+        emp.passwordHash = hash;
+        emp.tokenVersion = newTokenVersion;
+      }
+    }
 
     res.json({ success: true, message: `Password for employee ${employee.name} updated successfully. Active sessions revoked.` });
   } catch (err) {
@@ -1948,6 +1967,41 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
+  if (module === 'employees' || module === 'attendance') {
+    try {
+      const log = {
+        id: generateUniqueId('LOG'),
+        employeeName: req.user.name,
+        action: `Created record ${payload.id || 'new'} in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+
+      const inserted = await runTransaction(async (client) => {
+        if (!payload.id) {
+          payload.id = await generateNextIdAsync(client, module);
+        }
+        log.action = `Created record ${payload.id} in ${module}`;
+        const rec = await insertRecord(module, payload, client);
+        await insertRecord('activity_logs', log, client);
+        return rec;
+      });
+
+      if (dbCache) {
+        if (!dbCache[module]) dbCache[module] = [];
+        dbCache[module].push(inserted);
+        if (dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      }
+
+      res.status(201).json(inserted);
+    } catch (err) {
+      console.error(`Error inserting ${module}:`, err);
+      res.status(400).json({ message: err.message });
+    }
+    return;
+  }
+
   try {
     const result = await runTransaction(async (client) => {
       const dbBefore = await loadTransactionDb(client);
@@ -2419,6 +2473,46 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
+  if (module === 'employees' || module === 'attendance') {
+    try {
+      const log = {
+        id: generateUniqueId('LOG'),
+        employeeName: req.user.name,
+        action: `Updated record ${id} in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+
+      const updated = await runTransaction(async (client) => {
+        const recordExists = await getRecord(module, id, client);
+        if (!recordExists) {
+          throw new Error(`Record ${id} not found.`);
+        }
+        const rec = await updateRecord(module, id, payload, client);
+        await insertRecord('activity_logs', log, client);
+        return rec;
+      });
+
+      if (dbCache && dbCache[module]) {
+        const idx = dbCache[module].findIndex(x => String(x.id) === String(id));
+        if (idx !== -1) {
+          dbCache[module][idx] = updated;
+        }
+        if (dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      }
+
+      res.json(updated);
+    } catch (err) {
+      if (err.message.includes('not found')) {
+        res.status(404).json({ message: err.message });
+      } else {
+        res.status(400).json({ message: err.message });
+      }
+    }
+    return;
+  }
+
   try {
     const result = await runTransaction(async (client) => {
       const dbBefore = await loadTransactionDb(client);
@@ -2681,6 +2775,43 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 }, async (req, res) => {
   const { module, id } = req.params;
 
+  if (module === 'employees' || module === 'attendance') {
+    try {
+      const log = {
+        id: generateUniqueId('LOG'),
+        employeeName: req.user.name,
+        action: `Deleted record ${id} in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+
+      const deleted = await runTransaction(async (client) => {
+        const recordExists = await getRecord(module, id, client);
+        if (!recordExists) {
+          throw new Error(`Record ${id} not found.`);
+        }
+        await deleteRecord(module, id, client);
+        await insertRecord('activity_logs', log, client);
+        return recordExists;
+      });
+
+      if (dbCache && dbCache[module]) {
+        dbCache[module] = dbCache[module].filter(x => String(x.id) !== String(id));
+        if (dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      }
+
+      res.json({ success: true, message: `Record ${id} deleted successfully.` });
+    } catch (err) {
+      if (err.message.includes('not found')) {
+        res.status(404).json({ message: err.message });
+      } else {
+        res.status(400).json({ message: err.message });
+      }
+    }
+    return;
+  }
+
   try {
     const result = await runTransaction(async (client) => {
       const dbBefore = await loadTransactionDb(client);
@@ -2816,6 +2947,36 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
   const { ids } = req.body;
   if (!ids || !Array.isArray(ids)) {
     return res.status(400).json({ message: 'Invalid IDs array.' });
+  }
+
+  if (module === 'employees' || module === 'attendance') {
+    try {
+      const log = {
+        id: generateUniqueId('LOG'),
+        employeeName: req.user.name,
+        action: `Bulk deleted ${ids.length} records in ${module}`,
+        dateTime: new Date().toLocaleString()
+      };
+
+      await runTransaction(async (client) => {
+        for (const id of ids) {
+          await deleteRecord(module, id, client);
+        }
+        await insertRecord('activity_logs', log, client);
+      });
+
+      if (dbCache && dbCache[module]) {
+        dbCache[module] = dbCache[module].filter(rec => !ids.includes(String(rec.id)));
+        if (dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      }
+
+      res.json({ success: true, message: `Bulk deleted ${ids.length} records.` });
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+    return;
   }
 
   try {
@@ -3032,136 +3193,172 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 // Log location entry
-app.post('/api/location/log', authenticateToken, (req, res) => {
+app.post('/api/location/log', authenticateToken, async (req, res) => {
   const { employeeId, employeeName, latitude, longitude, status } = req.body;
-  const db = readDb();
   
-  if (!db.location_logs) db.location_logs = [];
-  if (!db.active_paths) db.active_paths = {};
+  try {
+    // Support direct floats or legacy XOR strings
+    let decLat = parseFloat(latitude);
+    let decLng = parseFloat(longitude);
 
-  // Support direct floats or legacy XOR strings
-  let decLat = parseFloat(latitude);
-  let decLng = parseFloat(longitude);
+    if (isNaN(decLat) || isNaN(decLng)) {
+      decLat = parseFloat(decryptLegacyXOR(latitude)) || 0;
+      decLng = parseFloat(decryptLegacyXOR(longitude)) || 0;
+    }
 
-  if (isNaN(decLat) || isNaN(decLng)) {
-    decLat = parseFloat(decryptLegacyXOR(latitude)) || 0;
-    decLng = parseFloat(decryptLegacyXOR(longitude)) || 0;
-  }
+    // Encrypt at rest in db using AES-256-GCM
+    const encryptedCoords = encryptLocation(decLat, decLng);
 
-  // Encrypt at rest in db using AES-256-GCM
-  const encryptedCoords = encryptLocation(decLat, decLng);
+    const logEntry = {
+      id: generateUniqueId('LOC'),
+      employeeId,
+      employeeName,
+      latitude: encryptedCoords, // Coordinates encrypted at rest
+      longitude: "",
+      status,
+      timestamp: new Date().toISOString()
+    };
+    
+    // 1. Insert directly to location_logs table
+    await insertRecord('location_logs', logEntry);
 
-  const logEntry = {
-    id: generateUniqueId('LOC'),
-    employeeId,
-    employeeName,
-    latitude: encryptedCoords, // Coordinates encrypted at rest
-    longitude: "",
-    status,
-    timestamp: new Date().toISOString()
-  };
-  
-  db.location_logs.push(logEntry);
-
-  if (status === 'sharing' && decLat !== 0 && decLng !== 0) {
-    db.active_paths[employeeId] = db.active_paths[employeeId] || [];
-    const currentPath = db.active_paths[employeeId];
-    if (currentPath.length === 0) {
-      currentPath.push({
-        lat: decLat,
-        lng: decLng,
-        timestamp: logEntry.timestamp
-      });
-    } else {
-      const lastPoint = currentPath[currentPath.length - 1];
-      const dist = calculateDistanceKm(lastPoint.lat, lastPoint.lng, decLat, decLng);
-      // Only capture when moved more than 10 meters (0.01 km) to avoid GPS drift
-      if (dist >= 0.01) {
+    // 2. Handle active paths and employee location updates
+    if (status === 'sharing' && decLat !== 0 && decLng !== 0) {
+      const activePathRes = await pool.query('SELECT path FROM active_paths WHERE employee_id = $1', [employeeId]);
+      let currentPath = activePathRes.rows[0] ? activePathRes.rows[0].path : null;
+      if (!currentPath || !Array.isArray(currentPath)) {
+        currentPath = [];
+      }
+      
+      if (currentPath.length === 0) {
         currentPath.push({
           lat: decLat,
           lng: decLng,
           timestamp: logEntry.timestamp
         });
+      } else {
+        const lastPoint = currentPath[currentPath.length - 1];
+        const dist = calculateDistanceKm(lastPoint.lat, lastPoint.lng, decLat, decLng);
+        // Only capture when moved more than 10 meters (0.01 km) to avoid GPS drift
+        if (dist >= 0.01) {
+          currentPath.push({
+            lat: decLat,
+            lng: decLng,
+            timestamp: logEntry.timestamp
+          });
+        }
       }
-    }
-  } else if (status === 'ended') {
-    const path = db.active_paths[employeeId] || [];
-    let distance = 0;
-    for (let i = 0; i < path.length - 1; i++) {
-      distance += calculateDistanceKm(path[i].lat, path[i].lng, path[i+1].lat, path[i+1].lng);
-    }
-    
-    // Save to employees collection
-    if (db.employees) {
-      const emp = db.employees.find(e => String(e.id) === String(employeeId));
+      
+      await pool.query(
+        'INSERT INTO active_paths (employee_id, path) VALUES ($1, $2) ON CONFLICT (employee_id) DO UPDATE SET path = EXCLUDED.path',
+        [employeeId, JSON.stringify(currentPath)]
+      );
+    } else if (status === 'ended') {
+      const activePathRes = await pool.query('SELECT path FROM active_paths WHERE employee_id = $1', [employeeId]);
+      const path = activePathRes.rows[0] && Array.isArray(activePathRes.rows[0].path) ? activePathRes.rows[0].path : [];
+      
+      let distance = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        distance += calculateDistanceKm(path[i].lat, path[i].lng, path[i+1].lat, path[i+1].lng);
+      }
+      
+      // Update employee locationHistory directly in Postgres
+      const emp = await getRecord('employees', employeeId);
       if (emp) {
-        emp.locationHistory = emp.locationHistory || [];
-        emp.locationHistory.push({
+        const locHistory = emp.locationHistory || [];
+        locHistory.push({
           date: new Date().toLocaleDateString('en-IN'),
           totalKilometers: parseFloat(distance.toFixed(2)),
           path
         });
+        await updateRecord('employees', employeeId, { locationHistory: locHistory });
+        
+        // Synchronously write-through to dbCache.employees
+        if (dbCache && dbCache.employees) {
+          const cachedEmp = dbCache.employees.find(e => String(e.id) === String(employeeId));
+          if (cachedEmp) {
+            cachedEmp.locationHistory = locHistory;
+          }
+        }
       }
+      
+      await pool.query('DELETE FROM active_paths WHERE employee_id = $1', [employeeId]);
     }
-    delete db.active_paths[employeeId];
+    
+    // Also push the location log to dbCache.location_logs in memory if cached
+    if (dbCache) {
+      if (!dbCache.location_logs) dbCache.location_logs = [];
+      dbCache.location_logs.push(logEntry);
+    }
+
+    res.json({ success: true, log: logEntry });
+  } catch (err) {
+    console.error('Error logging location:', err);
+    res.status(500).json({ message: 'Error logging location: ' + err.message });
   }
-  
-  writeDb(db);
-  res.json({ success: true, log: logEntry });
 });
 
 // Fetch active coordinates path (Admin and Manager only)
-app.get('/api/location/path/:employeeId', authenticateToken, (req, res) => {
+app.get('/api/location/path/:employeeId', authenticateToken, async (req, res) => {
   if (req.user.role !== 'Admin' && req.user.role !== 'Manager') {
     return res.status(403).json({ message: 'Access denied: Location query restricted.' });
   }
 
   const { employeeId } = req.params;
-  const db = readDb();
-  const path = db.active_paths?.[employeeId] || [];
-  
-  let distance = 0;
-  for (let i = 0; i < path.length - 1; i++) {
-    distance += calculateDistanceKm(path[i].lat, path[i].lng, path[i+1].lat, path[i+1].lng);
+  try {
+    const activePathRes = await pool.query('SELECT path FROM active_paths WHERE employee_id = $1', [employeeId]);
+    const path = activePathRes.rows[0] && Array.isArray(activePathRes.rows[0].path) ? activePathRes.rows[0].path : [];
+    
+    let distance = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      distance += calculateDistanceKm(path[i].lat, path[i].lng, path[i+1].lat, path[i+1].lng);
+    }
+    res.json({ path, distance: parseFloat(distance.toFixed(2)) });
+  } catch (err) {
+    console.error('Error fetching location path:', err);
+    res.status(500).json({ message: 'Database error fetching location path.' });
   }
-  res.json({ path, distance: parseFloat(distance.toFixed(2)) });
 });
 
 // Fetch active location logs (Admin and Manager only)
-app.get('/api/location/active', authenticateToken, (req, res) => {
+app.get('/api/location/active', authenticateToken, async (req, res) => {
   if (req.user.role !== 'Admin' && req.user.role !== 'Manager') {
     return res.status(403).json({ message: 'Access denied: Location query restricted.' });
   }
 
-  const db = readDb();
-  const logs = db.location_logs || [];
-  
-  // Find the latest entry for each employee
-  const activeLocs = {};
-  logs.forEach(log => {
-    const empId = log.employeeId;
-    if (!activeLocs[empId] || new Date(log.timestamp) > new Date(activeLocs[empId].timestamp)) {
-      activeLocs[empId] = log;
-    }
-  });
-  
-  // Only return those who are actively 'sharing' and have pinged in the last 5 minutes
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-  const result = Object.values(activeLocs).filter(loc => 
-    loc.status === 'sharing' && new Date(loc.timestamp) > fiveMinutesAgo
-  );
+  try {
+    const logs = await getRecords('location_logs');
+    
+    // Find the latest entry for each employee
+    const activeLocs = {};
+    logs.forEach(log => {
+      const empId = log.employeeId;
+      if (!activeLocs[empId] || new Date(log.timestamp) > new Date(activeLocs[empId].timestamp)) {
+        activeLocs[empId] = log;
+      }
+    });
+    
+    // Only return those who are actively 'sharing' and have pinged in the last 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const result = Object.values(activeLocs).filter(loc => 
+      loc.status === 'sharing' && new Date(loc.timestamp) > fiveMinutesAgo
+    );
 
-  // Decrypt latitude/longitude for client
-  const decryptedResult = result.map(loc => {
-    const coords = decryptLocation(loc.latitude);
-    return {
-      ...loc,
-      latitude: coords.lat,
-      longitude: coords.lng
-    };
-  });
+    // Decrypt latitude/longitude for client
+    const decryptedResult = result.map(loc => {
+      const coords = decryptLocation(loc.latitude);
+      return {
+        ...loc,
+        latitude: coords.lat,
+        longitude: coords.lng
+      };
+    });
 
-  res.json(decryptedResult);
+    res.json(decryptedResult);
+  } catch (err) {
+    console.error('Error fetching active locations:', err);
+    res.status(500).json({ message: 'Database error fetching active locations.' });
+  }
 });
 
 // Fetch set message templates config
@@ -3186,7 +3383,7 @@ app.post('/api/templates', authenticateToken, (req, res) => {
 
 // --- GLOBAL 360° SEARCH ENGINE ---
 
-app.get('/api/search', authenticateToken, (req, res) => {
+app.get('/api/search', authenticateToken, async (req, res) => {
   const { q } = req.query;
   if (!q || q.trim() === '') {
     return res.json({ results: {}, connections: {} });
@@ -3346,17 +3543,17 @@ app.get('/api/search', authenticateToken, (req, res) => {
   const connections = {};
   
   // Find connected records for properties, customers, employees if searched
-  const allEmployees = db.employees || [];
-  const allCustomers = db.customers || [];
-  const allProperties = db.properties || [];
-  const allSiteVisits = db.site_visits || [];
-  const allFollowUps = db.follow_ups || [];
-  const allAttendance = db.attendance || [];
-  const allTasks = db.tasks || [];
-  const allSales = db.sales || [];
-  const allLeaves = db.leaves || [];
-  const allRemarks = db.remarks || [];
-  const allDocs = db.documents || [];
+  const allEmployees = await getModuleRecordsForServer('employees');
+  const allCustomers = await getModuleRecordsForServer('customers');
+  const allProperties = await getModuleRecordsForServer('properties');
+  const allSiteVisits = await getModuleRecordsForServer('site_visits');
+  const allFollowUps = await getModuleRecordsForServer('follow_ups');
+  const allAttendance = await getModuleRecordsForServer('attendance');
+  const allTasks = await getModuleRecordsForServer('tasks');
+  const allSales = await getModuleRecordsForServer('sales');
+  const allLeaves = await getModuleRecordsForServer('leaves');
+  const allRemarks = await getModuleRecordsForServer('remarks');
+  const allDocs = await getModuleRecordsForServer('documents');
 
   // Helper to link records
   const getConnectedData = (type, id) => {
@@ -3412,22 +3609,22 @@ app.get('/api/search', authenticateToken, (req, res) => {
 });
 
 // GET Relationship Data for Single Record Details Page (Salesforce 360 style)
-app.get('/api/360/:module/:id', authenticateToken, (req, res) => {
+app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
   const { module, id } = req.params;
   const db = readDb();
   
-  const allEmployees = db.employees || [];
-  const allCustomers = db.customers || [];
-  const allProperties = db.properties || [];
-  const allSiteVisits = db.site_visits || [];
-  const allFollowUps = db.follow_ups || [];
-  const allAttendance = db.attendance || [];
-  const allTasks = db.tasks || [];
-  const allSales = db.sales || [];
-  const allLeaves = db.leaves || [];
-  const allRemarks = db.remarks || [];
-  const allDocs = db.documents || [];
-  const allQueries = db.queries || [];
+  const allEmployees = await getModuleRecordsForServer('employees');
+  const allCustomers = await getModuleRecordsForServer('customers');
+  const allProperties = await getModuleRecordsForServer('properties');
+  const allSiteVisits = await getModuleRecordsForServer('site_visits');
+  const allFollowUps = await getModuleRecordsForServer('follow_ups');
+  const allAttendance = await getModuleRecordsForServer('attendance');
+  const allTasks = await getModuleRecordsForServer('tasks');
+  const allSales = await getModuleRecordsForServer('sales');
+  const allLeaves = await getModuleRecordsForServer('leaves');
+  const allRemarks = await getModuleRecordsForServer('remarks');
+  const allDocs = await getModuleRecordsForServer('documents');
+  const allQueries = await getModuleRecordsForServer('queries');
   const allDeals = db.deals || [];
   const allPitches = db.property_pitch_history || [];
   const allDealerCalls = db.dealer_calls || [];
@@ -4109,7 +4306,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         property_pitch_history: 'PITCH', dealer_calls: 'CALL'
       };
       const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
-      payload.id = await generateNextId(client, module, prefix);
+      payload.id = await generateNextIdAsync(client, module, prefix);
 
       // Enforce unique phone number / Master Customer record duplicate prevention
       if (payload.phone && (module === 'customers' || module === 'leads')) {
@@ -4119,7 +4316,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         
         if (existingCust || existingLead) {
           const matchedId = existingCust ? existingCust.id : existingLead.id;
-          const queryId = await generateNextId(client, 'queries', 'QRY');
+          const queryId = await generateNextIdAsync(client, 'queries', 'QRY');
           const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
           
           const newQuery = {
@@ -4146,7 +4343,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
           // Automatically schedule a follow up task for the new query
           if (String(matchedId).startsWith('LEAD')) {
             db.follow_ups = db.follow_ups || [];
-            const followUpId = await generateNextId(client, 'follow_ups', 'FOLLOW');
+            const followUpId = await generateNextIdAsync(client, 'follow_ups', 'FOLLOW');
             const newFollowUp = {
               id: followUpId,
               customerId: matchedId,

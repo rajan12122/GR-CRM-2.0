@@ -479,29 +479,6 @@ async function loadTransactionDb(client) {
 
 // Sync in-memory changes inside transaction back to PostgreSQL
 async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
-  // Sync active_paths
-  if (dbAfter.active_paths) {
-    const dbBeforeKeys = Object.keys(dbBefore.active_paths || {});
-    const dbAfterKeys = Object.keys(dbAfter.active_paths || {});
-    
-    const deletedKeys = dbBeforeKeys.filter(k => !dbAfterKeys.includes(k));
-    for (const key of deletedKeys) {
-      await client.query('DELETE FROM active_paths WHERE employee_id = $1', [key]);
-    }
-    
-    for (const key of dbAfterKeys) {
-      const pathVal = dbAfter.active_paths[key];
-      const beforeVal = dbBefore.active_paths?.[key];
-      if (!beforeVal || JSON.stringify(beforeVal) !== JSON.stringify(pathVal)) {
-        await client.query(`
-          INSERT INTO active_paths (employee_id, path)
-          VALUES ($1, $2)
-          ON CONFLICT (employee_id) DO UPDATE SET path = EXCLUDED.path
-        `, [key, JSON.stringify(pathVal)]);
-      }
-    }
-  }
-
   // Sync ID counters
   if (dbAfter.idCounters) {
     for (const [mod, counter] of Object.entries(dbAfter.idCounters)) {
@@ -519,11 +496,12 @@ async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
 
   // Tables to sync
   const tables = [
-    'employees', 'customers', 'leads', 'properties', 'projects', 'site_visits', 
+    // 'employees', 'attendance', 'location_logs', <-- Excluded in Phase 1 (migrated to direct-SQL)
+    'customers', 'leads', 'properties', 'projects', 'site_visits', 
     'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals', 
     'property_pitch_history', 'dealer_calls', 'activity_logs',
-    'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
-    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history',
+    'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
+    'salaries', 'reminders', 'project_history', 'property_history',
     'wanted_properties', 'dealer_meetings'
   ];
 
