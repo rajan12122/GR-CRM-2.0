@@ -72,7 +72,9 @@ const Attendance = () => {
     user,
     logEmployeeLocation,
     sharingLocation,
-    sharingError
+    sharingError,
+    startLocationSharing,
+    endLocationSharing
   } = useApp();
 
   // Payroll / Salary Settlement states
