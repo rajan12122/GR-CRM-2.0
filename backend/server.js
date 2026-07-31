@@ -379,10 +379,10 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
     const newMetadata = req.body;
     const oldMetadata = readMetadata();
     
-    // Detect chip value renames
+    // 1. Detect chip value renames
     const oldChips = oldMetadata.chips || {};
     const newChips = newMetadata.chips || {};
-    const renames = [];
+    const chipRenames = [];
 
     Object.keys(oldChips).forEach(group => {
       const oldList = oldChips[group] || [];
@@ -391,7 +391,7 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
       const added = newList.filter(n => !oldList.some(o => o.value === n.value));
       
       if (removed.length === 1 && added.length === 1) {
-        renames.push({
+        chipRenames.push({
           group,
           oldValue: removed[0].value,
           newValue: added[0].value
@@ -399,8 +399,51 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
       }
     });
 
+    // 2. Detect field/column renames
+    const fieldRenames = [];
+    Object.keys(oldMetadata.modules).forEach(moduleKey => {
+      const oldModule = oldMetadata.modules[moduleKey];
+      const newModule = newMetadata.modules[moduleKey];
+      if (newModule) {
+        const oldFields = oldModule.fields || [];
+        const newFields = newModule.fields || [];
+        
+        oldFields.forEach((oldField, idx) => {
+          const newField = newFields[idx];
+          if (newField && oldField.name !== newField.name) {
+            fieldRenames.push({
+              moduleKey,
+              oldName: oldField.name,
+              newName: newField.name
+            });
+          }
+        });
+      }
+    });
+
     await runTransaction(async (client) => {
-      for (const rename of renames) {
+      // Apply column renames in PostgreSQL
+      for (const rename of fieldRenames) {
+        const { moduleKey, oldName, newName } = rename;
+        
+        // Rename column in PostgreSQL table
+        await client.query(
+          `ALTER TABLE "${moduleKey}" RENAME COLUMN "${oldName}" TO "${newName}"`
+        );
+
+        // Rename key in in-memory dbCache
+        if (dbCache && dbCache[moduleKey]) {
+          dbCache[moduleKey].forEach(rec => {
+            if (rec[oldName] !== undefined) {
+              rec[newName] = rec[oldName];
+              delete rec[oldName];
+            }
+          });
+        }
+      }
+
+      // Apply chip renames in PostgreSQL
+      for (const rename of chipRenames) {
         const { group, oldValue, newValue } = rename;
         
         for (const moduleKey of Object.keys(newMetadata.modules)) {
@@ -412,7 +455,7 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
               
               // 1. Run update query in PostgreSQL case-insensitively
               await client.query(
-                `UPDATE ${moduleKey} SET "${columnName}" = $1 WHERE LOWER("${columnName}") = LOWER($2)`,
+                `UPDATE "${moduleKey}" SET "${columnName}" = $1 WHERE LOWER("${columnName}") = LOWER($2)`,
                 [newValue, oldValue]
               );
 
