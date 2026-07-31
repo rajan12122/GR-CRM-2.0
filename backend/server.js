@@ -833,7 +833,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
 
     const newCustId = existingCust.id;
 
-    await client.query('UPDATE follow_ups SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    await client.query('UPDATE follow_ups SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
     cacheMutations.push(() => {
       if (dbCache && dbCache.follow_ups) {
         dbCache.follow_ups.forEach(f => {
@@ -842,7 +842,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
       }
     });
 
-    await client.query('UPDATE queries SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    await client.query('UPDATE queries SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
     cacheMutations.push(() => {
       if (dbCache && dbCache.queries) {
         dbCache.queries.forEach(q => {
@@ -851,7 +851,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
       }
     });
 
-    await client.query('UPDATE site_visits SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    await client.query('UPDATE site_visits SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
     cacheMutations.push(() => {
       if (dbCache && dbCache.site_visits) {
         dbCache.site_visits.forEach(sv => {
@@ -869,7 +869,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
       }
     });
 
-    await client.query('UPDATE property_pitch_history SET customer_id = $1 WHERE customer_id = $2', [newCustId, leadId]);
+    await client.query('UPDATE property_pitch_history SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
     cacheMutations.push(() => {
       if (dbCache && dbCache.property_pitch_history) {
         dbCache.property_pitch_history.forEach(p => {
