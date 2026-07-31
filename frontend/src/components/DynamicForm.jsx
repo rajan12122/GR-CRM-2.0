@@ -475,10 +475,45 @@ const DynamicForm = ({
   };
 
   const handleChange = (name, val, type) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' && val !== '' ? Number(val) : val
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [name]: type === 'number' && val !== '' ? Number(val) : val
+      };
+
+      if (name === 'contact_number' || name === 'dealerContactNum') {
+        const cleanVal = String(val).replace(/[^0-9]/g, '');
+        if (cleanVal.length >= 10 && moduleData?.dealers) {
+          const matchedDealer = moduleData.dealers.find(d => {
+            const dealerPhone = String(d.contact_num || '').replace(/[^0-9]/g, '');
+            return dealerPhone === cleanVal;
+          });
+          if (matchedDealer) {
+            updated.dealerId = matchedDealer.id;
+            if (name === 'contact_number') {
+              if (matchedDealer.person_name && !updated.contact_person_name) {
+                updated.contact_person_name = matchedDealer.person_name;
+              }
+              if (matchedDealer.firm_name && !updated.firm_name) {
+                updated.firm_name = matchedDealer.firm_name;
+              }
+            } else if (name === 'dealerContactNum') {
+              if (matchedDealer.person_name && !updated.dealerContactName) {
+                updated.dealerContactName = matchedDealer.person_name;
+              }
+              if (matchedDealer.firm_name && !updated.dealerFirmName) {
+                updated.dealerFirmName = matchedDealer.firm_name;
+              }
+              if (matchedDealer.address && !updated.dealerAddress) {
+                updated.dealerAddress = matchedDealer.address;
+              }
+            }
+          }
+        }
+      }
+
+      return updated;
+    });
     
     // Clear validation error on type
     if (errors[name]) {

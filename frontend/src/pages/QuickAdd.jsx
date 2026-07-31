@@ -642,7 +642,36 @@ const QuickAdd = () => {
                         <TextField label="Contact Person Name" size="small" fullWidth value={nestedPropertyData.contact_person_name || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, contact_person_name: e.target.value }))} sx={{ input: { color: '#FFFFFF' }, '.MuiInputLabel-root': { color: '#94A3B8' }, '& .MuiOutlinedInput-root': { backgroundColor: '#0F172A', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } } }} />
                       </Grid>
                       <Grid item xs={12} sm={6}>
-                        <TextField label="Contact Number" size="small" fullWidth value={nestedPropertyData.contact_number || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, contact_number: e.target.value }))} sx={{ input: { color: '#FFFFFF' }, '.MuiInputLabel-root': { color: '#94A3B8' }, '& .MuiOutlinedInput-root': { backgroundColor: '#0F172A', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } } }} />
+                        <TextField
+                          label="Contact Number"
+                          size="small"
+                          fullWidth
+                          value={nestedPropertyData.contact_number || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNestedPropertyData(prev => {
+                              const updated = { ...prev, contact_number: val };
+                              const cleanVal = String(val).replace(/[^0-9]/g, '');
+                              if (cleanVal.length >= 10 && lookups['dealers']) {
+                                const matchedDealer = lookups['dealers'].find(d => {
+                                  const dealerPhone = String(d.contact_num || '').replace(/[^0-9]/g, '');
+                                  return dealerPhone === cleanVal;
+                                });
+                                if (matchedDealer) {
+                                  updated.dealerId = matchedDealer.id;
+                                  if (matchedDealer.person_name && !updated.contact_person_name) {
+                                    updated.contact_person_name = matchedDealer.person_name;
+                                  }
+                                  if (matchedDealer.firm_name && !updated.firm_name) {
+                                    updated.firm_name = matchedDealer.firm_name;
+                                  }
+                                }
+                              }
+                              return updated;
+                            });
+                          }}
+                          sx={{ input: { color: '#FFFFFF' }, '.MuiInputLabel-root': { color: '#94A3B8' }, '& .MuiOutlinedInput-root': { backgroundColor: '#0F172A', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } } }}
+                        />
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <FormControl fullWidth size="small">
