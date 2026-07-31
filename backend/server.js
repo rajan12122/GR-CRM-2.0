@@ -3333,8 +3333,10 @@ app.get('/api/location/active', authenticateToken, async (req, res) => {
     const activeLocs = {};
     logs.forEach(log => {
       const empId = log.employeeId;
-      if (!activeLocs[empId] || new Date(log.timestamp) > new Date(activeLocs[empId].timestamp)) {
-        activeLocs[empId] = log;
+      if (empId) {
+        if (!activeLocs[empId] || new Date(log.timestamp) > new Date(activeLocs[empId].timestamp)) {
+          activeLocs[empId] = log;
+        }
       }
     });
     
@@ -3349,6 +3351,7 @@ app.get('/api/location/active', authenticateToken, async (req, res) => {
       const coords = decryptLocation(loc.latitude);
       return {
         ...loc,
+        employeeName: loc.employeeName || 'Unknown Employee',
         latitude: coords.lat,
         longitude: coords.lng
       };
@@ -5399,6 +5402,8 @@ app.listen(PORT, async () => {
   try {
     const client = await pool.connect();
     try {
+      // Clean up invalid test location logs that have NULL employeeIds or employeeNames from previous runs
+      await client.query('DELETE FROM location_logs WHERE "employeeId" IS NULL OR "employeeName" IS NULL OR employeeid IS NULL OR employeename IS NULL');
       dbCache = await loadTransactionDb(client);
       console.log('Successfully initialized dbCache from PostgreSQL.');
     } finally {
