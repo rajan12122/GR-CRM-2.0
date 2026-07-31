@@ -415,8 +415,8 @@ async function handlePropertyDealerAssociation(payload, dbOrClient, dryRun = fal
     const newDealer = {
       id: dealerId,
       firm_name: payload.firm_name ? String(payload.firm_name).trim() : 'Property Dealer',
-      address: payload.locality || payload.address || '',
-      sector_block: payload.sector_block || '',
+      address: '',
+      sector_block: 'Auto-created',
       person_name: payload.contact_person_name ? String(payload.contact_person_name).trim() : 'Contact Person',
       contact_num: cleanPhone,
       contacted_num: '',
