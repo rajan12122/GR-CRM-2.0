@@ -566,9 +566,10 @@ async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
   const tables = [
     // 'employees', 'attendance', 'location_logs', <-- Excluded in Phase 1
     // 'customers', 'leads', 'queries', 'follow_ups', <-- Excluded in Phase 2
+    // 'property_pitch_history', <-- Excluded in Phase 2 custom addition
     'properties', 'projects', 'site_visits', 
     'remarks', 'documents', 'dealers', 'deals', 
-    'property_pitch_history', 'dealer_calls', 'activity_logs',
+    'dealer_calls', 'activity_logs',
     'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
     'salaries', 'reminders', 'project_history', 'property_history',
     'wanted_properties', 'dealer_meetings'

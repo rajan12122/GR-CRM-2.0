@@ -1053,35 +1053,48 @@ function parsePriceToNumeric(priceStr) {
     multiplier = 1000;
     clean = clean.replace(/k/g, '');
   }
-  
   const match = clean.match(/[0-9.]+/);
   if (!match) return 0;
   const parsed = parseFloat(match[0]);
   return isNaN(parsed) ? 0 : parsed * multiplier;
 }
 
-function handlePitchStatusChange(p, db, req) {
+async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
   if (!p.id) return;
+  const client = dbOrClient || pool;
 
   if (p.propertyId && p.propertyStatus) {
-    const propIndex = (db.properties || []).findIndex(pr => String(pr.id) === String(p.propertyId));
-    if (propIndex !== -1) {
-      db.properties[propIndex].status = p.propertyStatus;
-      writeDb(db);
-      try { syncToSheets('properties'); } catch(e) {}
+    await client.query('UPDATE properties SET status = $1 WHERE id = $2', [p.propertyStatus, p.propertyId]);
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.properties) {
+          const idx = dbCache.properties.findIndex(pr => String(pr.id) === String(p.propertyId));
+          if (idx !== -1) {
+            dbCache.properties[idx].status = p.propertyStatus;
+          }
+        }
+      });
     }
   }
 
   // Auto-complete call follow-up if pitched via call
   if (p.pitchMethod === 'Call') {
-    db.follow_ups = db.follow_ups || [];
-    db.follow_ups.forEach(f => {
-      if (String(f.customerId) === String(p.customerId) && f.status !== 'Completed') {
-        f.status = 'Completed';
-        f.remarks = (f.remarks || '') + `\n[System: Auto-completed call follow-up via logged Call Pitch ${p.id}]`;
-      }
-    });
-    try { syncToSheets('follow_ups'); } catch(e) {}
+    await client.query(
+      `UPDATE follow_ups SET status = $1, remarks = concat(remarks, $2) WHERE "customerId" = $3 AND status <> $4`,
+      ['Completed', `\n[System: Auto-completed call follow-up via logged Call Pitch ${p.id}]`, p.customerId, 'Completed']
+    );
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.follow_ups) {
+          dbCache.follow_ups.forEach(f => {
+            if (String(f.customerId) === String(p.customerId) && f.status !== 'Completed') {
+              f.status = 'Completed';
+              f.remarks = (f.remarks || '') + `\n[System: Auto-completed call follow-up via logged Call Pitch ${p.id}]`;
+            }
+          });
+        }
+      });
+    }
   }
 
   // Auto-update follow-up and query pipeline stage matching keywords/meanings
@@ -1100,114 +1113,158 @@ function handlePitchStatusChange(p, db, req) {
   const mappedStage = mapPitchStatusToPipelineAction(p.status) || mapPitchStatusToPipelineAction(p.propertyStatus) || 'Contacted';
   
   if (p.linkedFollowUpId) {
-    const targetF = (db.follow_ups || []).find(f => String(f.id) === String(p.linkedFollowUpId));
+    const fRes = await client.query('SELECT * FROM follow_ups WHERE id = $1', [p.linkedFollowUpId]);
+    const targetF = fRes.rows[0];
     if (targetF) {
       targetF.pipelineAction = mappedStage;
       targetF.pitchedPropertyId = p.propertyId || targetF.pitchedPropertyId;
       targetF.pitchPrice = p.quotedPrice || targetF.pitchPrice;
       targetF.pitchRemarks = p.remarks || targetF.pitchRemarks;
-      handleFollowUpPipelineAction(targetF, db, req);
+      
+      const updatedF = await updateRecord('follow_ups', targetF.id, {
+        pipelineAction: targetF.pipelineAction,
+        pitchedPropertyId: targetF.pitchedPropertyId,
+        pitchPrice: targetF.pitchPrice,
+        pitchRemarks: targetF.pitchRemarks
+      }, client);
+
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.follow_ups) {
+            const idx = dbCache.follow_ups.findIndex(f => String(f.id) === String(p.linkedFollowUpId));
+            if (idx !== -1) {
+              dbCache.follow_ups[idx] = updatedF;
+            }
+          }
+        });
+      }
+
+      await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
 
       if (targetF.queryId) {
-        const targetQ = (db.queries || []).find(q => String(q.id) === String(targetF.queryId));
-        if (targetQ) {
-          targetQ.stage = mappedStage;
-          if (mappedStage === 'Closed') {
-            targetQ.status = 'Closed';
-          }
+        const qStatus = mappedStage === 'Closed' ? 'Closed' : undefined;
+        const updates = { stage: mappedStage };
+        if (qStatus) updates.status = qStatus;
+        
+        const updatedQ = await updateRecord('queries', targetF.queryId, updates, client);
+        if (cacheMutations) {
+          cacheMutations.push(() => {
+            if (dbCache && dbCache.queries) {
+              const idx = dbCache.queries.findIndex(q => String(q.id) === String(targetF.queryId));
+              if (idx !== -1) {
+                dbCache.queries[idx] = updatedQ;
+              }
+            }
+          });
         }
       }
-      writeDb(db);
-      try { syncToSheets('follow_ups'); } catch(e) {}
-      try { syncToSheets('queries'); } catch(e) {}
     }
   } else if (p.linkedQueryId) {
-    const targetQ = (db.queries || []).find(q => String(q.id) === String(p.linkedQueryId));
-    if (targetQ) {
-      targetQ.stage = mappedStage;
-      if (mappedStage === 'Closed') {
-        targetQ.status = 'Closed';
-      }
-      
-      (db.follow_ups || []).forEach(f => {
-        if (String(f.queryId) === String(targetQ.id) && f.status !== 'Completed' && f.status !== 'Call Done') {
-          f.pipelineAction = mappedStage;
-          f.pitchedPropertyId = p.propertyId || f.pitchedPropertyId;
-          f.pitchPrice = p.quotedPrice || f.pitchPrice;
-          f.pitchRemarks = p.remarks || f.pitchRemarks;
-          handleFollowUpPipelineAction(f, db, req);
+    const qStatus = mappedStage === 'Closed' ? 'Closed' : undefined;
+    const updates = { stage: mappedStage };
+    if (qStatus) updates.status = qStatus;
+
+    const updatedQ = await updateRecord('queries', p.linkedQueryId, updates, client);
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.queries) {
+          const idx = dbCache.queries.findIndex(q => String(q.id) === String(p.linkedQueryId));
+          if (idx !== -1) {
+            dbCache.queries[idx] = updatedQ;
+          }
         }
       });
-      writeDb(db);
-      try { syncToSheets('queries'); } catch(e) {}
-      try { syncToSheets('follow_ups'); } catch(e) {}
+    }
+
+    const fupRes = await client.query('SELECT * FROM follow_ups WHERE "queryId" = $1', [p.linkedQueryId]);
+    for (const f of fupRes.rows) {
+      if (f.status !== 'Completed' && f.status !== 'Call Done') {
+        const updatedF = await updateRecord('follow_ups', f.id, {
+          pipelineAction: mappedStage,
+          pitchedPropertyId: p.propertyId || f.pitchedPropertyId,
+          pitchPrice: p.quotedPrice || f.pitchPrice,
+          pitchRemarks: p.remarks || f.pitchRemarks
+        }, client);
+        if (cacheMutations) {
+          cacheMutations.push(() => {
+            if (dbCache && dbCache.follow_ups) {
+              const idx = dbCache.follow_ups.findIndex(x => String(x.id) === String(f.id));
+              if (idx !== -1) dbCache.follow_ups[idx] = updatedF;
+            }
+          });
+        }
+        await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
+      }
     }
   } else {
     // Fallback: match by customerId
-    db.follow_ups = (db.follow_ups || []).map(f => {
-      if (String(f.customerId) === String(p.customerId) && f.status !== 'Completed' && f.status !== 'Call Done') {
-        f.pipelineAction = mappedStage;
-        f.pitchedPropertyId = p.propertyId || f.pitchedPropertyId;
-        f.pitchPrice = p.quotedPrice || f.pitchPrice;
-        f.pitchRemarks = p.remarks || f.pitchRemarks;
-        
-        const freshFollowUp = (db.follow_ups || []).find(x => x.id === f.id);
-        if (freshFollowUp) {
-          handleFollowUpPipelineAction(freshFollowUp, db, req);
+    const fupRes = await client.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [p.customerId]);
+    for (const f of fupRes.rows) {
+      if (f.status !== 'Completed' && f.status !== 'Call Done') {
+        const updatedF = await updateRecord('follow_ups', f.id, {
+          pipelineAction: mappedStage,
+          pitchedPropertyId: p.propertyId || f.pitchedPropertyId,
+          pitchPrice: p.quotedPrice || f.pitchPrice,
+          pitchRemarks: p.remarks || f.pitchRemarks
+        }, client);
+        if (cacheMutations) {
+          cacheMutations.push(() => {
+            if (dbCache && dbCache.follow_ups) {
+              const idx = dbCache.follow_ups.findIndex(x => String(x.id) === String(f.id));
+              if (idx !== -1) dbCache.follow_ups[idx] = updatedF;
+            }
+          });
         }
+        await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
       }
-      return f;
-    });
-    try { syncToSheets('follow_ups'); } catch(e) {}
+    }
 
-    db.queries = (db.queries || []).map(q => {
-      if (String(q.customerId) === String(p.customerId)) {
-        q.stage = mappedStage;
-        if (mappedStage === 'Closed') {
-          q.status = 'Closed';
-        }
+    const qRes = await client.query('SELECT * FROM queries WHERE "customerId" = $1', [p.customerId]);
+    for (const q of qRes.rows) {
+      const qStatus = mappedStage === 'Closed' ? 'Closed' : undefined;
+      const updates = { stage: mappedStage };
+      if (qStatus) updates.status = qStatus;
+
+      const updatedQ = await updateRecord('queries', q.id, updates, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.queries) {
+            const idx = dbCache.queries.findIndex(x => String(x.id) === String(q.id));
+            if (idx !== -1) dbCache.queries[idx] = updatedQ;
+          }
+        });
       }
-      return q;
-    });
-    try { syncToSheets('queries'); } catch(e) {}
-    writeDb(db);
+    }
   }
 
   // Sync to site_visits directly
-
   const isSiteVisitStage = mappedStage === 'Site Visit';
   if (isSiteVisitStage) {
-    db.site_visits = db.site_visits || [];
     const targetDate = formatToInDate(p.followUpDate || p.pitchDate);
-    let existingVisit = db.site_visits.find(sv => sv.linkedPitchId === p.id || (sv.customerId === p.customerId && sv.propertyId === p.propertyId && sv.date === targetDate));
+    const visitRes = await client.query(
+      'SELECT * FROM site_visits WHERE "linkedPitchId" = $1 OR ("customerId" = $2 AND "propertyId" = $3 AND date = $4)',
+      [p.id, p.customerId, p.propertyId || 'PROP-001', targetDate]
+    );
+    const existingVisit = visitRes.rows[0];
+
     if (existingVisit) {
-      let changed = false;
-      if (!existingVisit.linkedPitchId) {
-        existingVisit.linkedPitchId = p.id;
-        changed = true;
-      }
-      if (existingVisit.date !== targetDate) {
-        existingVisit.date = targetDate;
-        changed = true;
-      }
-      if (existingVisit.propertyId !== p.propertyId) {
-        existingVisit.propertyId = p.propertyId;
-        changed = true;
-      }
-      if (existingVisit.employeeId !== (p.employeeId || existingVisit.employeeId)) {
-        existingVisit.employeeId = p.employeeId || existingVisit.employeeId;
-        changed = true;
-      }
-      if (existingVisit.remarks !== (p.remarks || existingVisit.remarks)) {
-        existingVisit.remarks = p.remarks || existingVisit.remarks;
-        changed = true;
-      }
-      if (changed) {
-        writeDb(db);
-        try { syncToSheets('site_visits'); } catch(e) {}
+      const updatedVisit = await updateRecord('site_visits', existingVisit.id, {
+        linkedPitchId: p.id,
+        date: targetDate,
+        propertyId: p.propertyId,
+        employeeId: p.employeeId || existingVisit.employeeId,
+        remarks: p.remarks || existingVisit.remarks
+      }, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.site_visits) {
+            const idx = dbCache.site_visits.findIndex(sv => String(sv.id) === String(existingVisit.id));
+            if (idx !== -1) dbCache.site_visits[idx] = updatedVisit;
+          }
+        });
       }
     } else {
-      const visitId = generateNextId(db, 'site_visits', 'VISIT');
+      const visitId = await generateNextIdAsync(client, 'site_visits');
       const newVisit = {
         id: visitId,
         customerId: p.customerId,
@@ -1219,17 +1276,24 @@ function handlePitchStatusChange(p, db, req) {
         remarks: p.remarks || `Automatically created from Pitch ${p.id} stage: ${p.status}.`,
         linkedPitchId: p.id
       };
-      db.site_visits.push(newVisit);
-      writeDb(db);
-      try { syncToSheets('site_visits'); } catch(e) {}
+      const insertedVisit = await insertRecord('site_visits', newVisit, client);
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache) {
+            if (!dbCache.site_visits) dbCache.site_visits = [];
+            dbCache.site_visits.push(insertedVisit);
+          }
+        });
+      }
     }
   } else {
-    // If the stage was changed away from Site Visit, delete any site visit linked to this pitch!
-    const originalLen = (db.site_visits || []).length;
-    db.site_visits = (db.site_visits || []).filter(sv => sv.linkedPitchId !== p.id);
-    if ((db.site_visits || []).length !== originalLen) {
-      writeDb(db);
-      try { syncToSheets('site_visits'); } catch(e) {}
+    await client.query('DELETE FROM site_visits WHERE "linkedPitchId" = $1', [p.id]);
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.site_visits) {
+          dbCache.site_visits = dbCache.site_visits.filter(sv => sv.linkedPitchId !== p.id);
+        }
+      });
     }
   }
 
@@ -1242,23 +1306,24 @@ function handlePitchStatusChange(p, db, req) {
   // Convert Lead to Customer if Pitch closed for a Lead ID
   let finalCustomerId = p.customerId;
   if (p.customerId && String(p.customerId).startsWith('LEAD-')) {
-    const cust = convertLeadToCustomer(p.customerId, db, `Converted via Closed Pitch ${p.id}`);
+    const cust = await convertLeadToCustomer(p.customerId, client, `Converted via Closed Pitch ${p.id}`);
     if (cust) {
       p.customerId = cust.id;
       finalCustomerId = cust.id;
     }
   }
 
-  // Create or retrieve corresponding Deal record to preserve Deal ID tracking and Deals page details
-  db.deals = db.deals || [];
-  let existingDeal = db.deals.find(d => 
-    String(d.propertyId) === String(p.propertyId) && 
-    String(d.customerId) === String(finalCustomerId)
+  // Create or retrieve corresponding Deal record
+  const dealRes = await client.query(
+    'SELECT * FROM deals WHERE "propertyId" = $1 AND "customerId" = $2',
+    [p.propertyId, finalCustomerId]
   );
+  let existingDeal = dealRes.rows[0];
 
   if (!existingDeal) {
-    const dealId = generateNextId(db, 'deals', 'DEAL');
-    const prop = (db.properties || []).find(pr => String(pr.id) === String(p.propertyId));
+    const dealId = await generateNextIdAsync(client, 'deals');
+    const propRes = await client.query('SELECT demand, current_owner_id FROM properties WHERE id = $1', [p.propertyId]);
+    const prop = propRes.rows[0];
     const sellerId = prop ? (prop.current_owner_id || '') : '';
     const salePrice = p.quotedPrice || '';
     const purchasePrice = prop ? (prop.demand || '') : '';
@@ -1268,7 +1333,7 @@ function handlePitchStatusChange(p, db, req) {
       customerId: finalCustomerId,
       sellerCustomerId: sellerId || finalCustomerId,
       propertyId: p.propertyId,
-      employeeId: p.employeeId || (req.user ? req.user.id : 'EMP-001'),
+      employeeId: p.employeeId || 'EMP-001',
       registrationDate: new Date().toISOString().split('T')[0],
       salePrice: salePrice,
       purchasePrice: purchasePrice,
@@ -1277,40 +1342,66 @@ function handlePitchStatusChange(p, db, req) {
       status: 'Closed',
       associatedPitchId: p.id
     };
-    db.deals.push(existingDeal);
-    try { syncToSheets('deals'); } catch(e) {}
+    
+    const insertedDeal = await insertRecord('deals', existingDeal, client);
+    existingDeal = insertedDeal;
+
+    if (cacheMutations) {
+      cacheMutations.push(() => {
+        if (dbCache) {
+          if (!dbCache.deals) dbCache.deals = [];
+          dbCache.deals.push(insertedDeal);
+        }
+      });
+    }
   } else {
-    // If the deal was created without associatedPitchId or sellerCustomerId (e.g. by follow-up helper first), populate it
     let updated = false;
+    const updates = {};
     if (!existingDeal.associatedPitchId) {
-      existingDeal.associatedPitchId = p.id;
+      updates.associatedPitchId = p.id;
       updated = true;
     }
     if (!existingDeal.sellerCustomerId) {
-      const prop = (db.properties || []).find(pr => String(pr.id) === String(p.propertyId));
+      const propRes = await client.query('SELECT current_owner_id FROM properties WHERE id = $1', [p.propertyId]);
+      const prop = propRes.rows[0];
       const sellerId = prop ? (prop.current_owner_id || '') : '';
-      existingDeal.sellerCustomerId = sellerId || finalCustomerId;
+      updates.sellerCustomerId = sellerId || finalCustomerId;
       updated = true;
     }
     if (updated) {
-      writeDb(db);
-      try { syncToSheets('deals'); } catch(e) {}
+      const updatedDeal = await updateRecord('deals', existingDeal.id, updates, client);
+      existingDeal = updatedDeal;
+      if (cacheMutations) {
+        cacheMutations.push(() => {
+          if (dbCache && dbCache.deals) {
+            const idx = dbCache.deals.findIndex(d => String(d.id) === String(existingDeal.id));
+            if (idx !== -1) dbCache.deals[idx] = updatedDeal;
+          }
+        });
+      }
     }
   }
 
-  // Invoke the master deal status change helper to update property registry details & timeline
-  handleDealStatusChange(existingDeal, db, req);
+  // Invoke the master deal status change helper
+  await handleDealStatusChange(existingDeal, client, req, cacheMutations);
 
   // Auto convert follow-ups for this client to Call Done / Closed
-  db.follow_ups = db.follow_ups || [];
-  db.follow_ups.forEach(f => {
-    if (String(f.customerId) === String(p.customerId) || String(f.customerId) === String(finalCustomerId)) {
-      f.status = 'Call Done';
-      f.pipelineAction = 'Property Registered/Sold Out';
-    }
-  });
-  writeDb(db);
-  try { syncToSheets('follow_ups'); } catch(e) {}
+  await client.query(
+    'UPDATE follow_ups SET status = $1, "pipelineAction" = $2 WHERE "customerId" = $3 OR "customerId" = $4',
+    ['Call Done', 'Property Registered/Sold Out', p.customerId, finalCustomerId]
+  );
+  if (cacheMutations) {
+    cacheMutations.push(() => {
+      if (dbCache && dbCache.follow_ups) {
+        dbCache.follow_ups.forEach(f => {
+          if (String(f.customerId) === String(p.customerId) || String(f.customerId) === String(finalCustomerId)) {
+            f.status = 'Call Done';
+            f.pipelineAction = 'Property Registered/Sold Out';
+          }
+        });
+      }
+    });
+  }
 }
 
 async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
@@ -2184,7 +2275,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
-  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups' || module === 'property_pitch_history') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -2296,6 +2387,11 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         // Follow up specific post-insert automation
         if (module === 'follow_ups') {
           await handleFollowUpPipelineAction(rec, client, req, cacheMutations);
+        }
+
+        // Pitch specific post-insert automation
+        if (module === 'property_pitch_history') {
+          await handlePitchStatusChange(rec, client, req, cacheMutations);
         }
 
         await insertRecord('activity_logs', log, client);
@@ -2792,7 +2888,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
     delete payload.tokenVersion;
   }
 
-  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups' || module === 'property_pitch_history') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -2846,6 +2942,10 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 
         if (module === 'follow_ups') {
           await handleFollowUpPipelineAction(rec, client, req, cacheMutations);
+        }
+
+        if (module === 'property_pitch_history') {
+          await handlePitchStatusChange(rec, client, req, cacheMutations);
         }
 
         await insertRecord('activity_logs', log, client);
@@ -3138,7 +3238,7 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 }, async (req, res) => {
   const { module, id } = req.params;
 
-  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups' || module === 'property_pitch_history') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
@@ -3401,7 +3501,7 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
     return res.status(400).json({ message: 'Invalid IDs array.' });
   }
 
-  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups') {
+  if (module === 'employees' || module === 'attendance' || module === 'customers' || module === 'leads' || module === 'queries' || module === 'follow_ups' || module === 'property_pitch_history') {
     try {
       const log = {
         id: generateUniqueId('LOG'),
