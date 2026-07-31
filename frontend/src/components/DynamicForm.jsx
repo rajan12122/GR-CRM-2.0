@@ -108,6 +108,9 @@ const DynamicForm = ({
         if (parsedData.sizeRequired) newFormData.sizeRequired = parsedData.sizeRequired;
         if (parsedData.budget) newFormData.budget = parsedData.budget;
         if (parsedData.dealerContactNum) newFormData.dealerContactNum = parsedData.dealerContactNum;
+        if (parsedData.dealerContactName) newFormData.dealerContactName = parsedData.dealerContactName;
+        if (parsedData.dealerFirmName) newFormData.dealerFirmName = parsedData.dealerFirmName;
+        if (parsedData.dealerAddress) newFormData.dealerAddress = parsedData.dealerAddress;
         
         newFormData.rawText = rawText;
         setFormData(newFormData);

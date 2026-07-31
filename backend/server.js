@@ -4590,9 +4590,12 @@ Response must be a single valid JSON object with the following fields:
   "locality": string | null,
   "sizeRequired": string | null,
   "budget": string | null,
-  "dealerContactNum": "10-digit phone number" | null
+  "dealerContactNum": "10-digit phone number" | null,
+  "dealerContactName": string | null,
+  "dealerFirmName": string | null,
+  "dealerAddress": string | null
 }
-Ensure no explanation, no markdown backticks, just the raw JSON object. If a field cannot be found, set it to null. Convert phone numbers to exactly 10 digits without spaces or country codes.`;
+Ensure no explanation, no markdown backticks, just the raw JSON object. If a field cannot be found, set it to null. Convert phone numbers to exactly 10 digits without spaces or country codes. Extract dealerContactName if a person name is mentioned, dealerFirmName if a company or agency name is mentioned (like "AB realtors" or "XYZ agency"), and dealerAddress if a dealer's office address is mentioned.`;
 
   try {
     const aiResponse = await generateAIResponse(
