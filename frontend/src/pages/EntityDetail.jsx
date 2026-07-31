@@ -1921,15 +1921,47 @@ const EntityDetail = () => {
                   {activeTab === 3 && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Permanent Ownership Registry History</Typography>
+                      
+                      {/* Current Owner Banner */}
+                      {connections.currentOwner ? (
+                        <Box sx={{ mb: 4, p: 2.5, backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                            <Box sx={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                            <Typography variant="subtitle2" sx={{ color: '#065F46', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Active Owner</Typography>
+                          </Box>
+                          <Typography variant="h6" sx={{ fontWeight: 800, color: '#064E3B', fontSize: '16px' }}>
+                            <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#059669' }} onClick={() => navigate(`/module/customers/${connections.currentOwner.id}`)}>
+                              {connections.currentOwner.name} ({connections.currentOwner.id})
+                            </span>
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#047857', mt: 0.5, fontWeight: 500, fontSize: '13px' }}>
+                            Phone: {connections.currentOwner.phone || 'N/A'} • Preferred City: {connections.currentOwner.city || 'N/A'}
+                          </Typography>
+                        </Box>
+                      ) : record.contact_person_name ? (
+                        <Box sx={{ mb: 4, p: 2.5, backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                            <Box sx={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                            <Typography variant="subtitle2" sx={{ color: '#065F46', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Active Owner</Typography>
+                          </Box>
+                          <Typography variant="h6" sx={{ fontWeight: 800, color: '#064E3B', fontSize: '16px' }}>
+                            {record.contact_person_name} (Direct Seller Owner)
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#047857', mt: 0.5, fontWeight: 500, fontSize: '13px' }}>
+                            Phone: {record.contact_number || 'N/A'} • Locality: {record.locality || 'N/A'}
+                          </Typography>
+                        </Box>
+                      ) : null}
+
                       {connections.ownerHistory?.length === 0 ? (
                         <Typography variant="body2" sx={{ color: '#94A3B8' }}>No previous owners registered in registry logs. This listing is under its first owner.</Typography>
                       ) : (
                         <Box sx={{ borderLeft: '2px solid #E2E8F0', pl: 3, ml: 1 }}>
                           {connections.ownerHistory.map((h, idx) => (
                             <Box key={idx} sx={{ mb: 3, position: 'relative' }}>
-                              <Box sx={{ position: 'absolute', left: '-35px', top: '2px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                              <Box sx={{ position: 'absolute', left: '-35px', top: '2px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#94A3B8' }} />
                               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                                Owner: {h.ownerId && h.ownerId !== 'N/A' ? (
+                                Previous Owner: {h.ownerId && h.ownerId !== 'N/A' ? (
                                   <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/customers/${h.ownerId}`)}>
                                     {h.ownerName} ({h.ownerId})
                                   </span>
