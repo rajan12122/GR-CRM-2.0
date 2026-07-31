@@ -545,7 +545,7 @@ const Dashboard = () => {
             onClick={handleAddClick}
             sx={{ backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' } }}
           >
-            + Add
+            Add
           </Button>
           <Menu
             anchorEl={addMenuAnchor}
