@@ -377,10 +377,65 @@ app.get('/api/metadata', authenticateToken, (req, res) => {
 app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
   try {
     const newMetadata = req.body;
-    await writeMetadata(newMetadata);
+    const oldMetadata = readMetadata();
+    
+    // Detect chip value renames
+    const oldChips = oldMetadata.chips || {};
+    const newChips = newMetadata.chips || {};
+    const renames = [];
+
+    Object.keys(oldChips).forEach(group => {
+      const oldList = oldChips[group] || [];
+      const newList = newChips[group] || [];
+      const removed = oldList.filter(o => !newList.some(n => n.value === o.value));
+      const added = newList.filter(n => !oldList.some(o => o.value === n.value));
+      
+      if (removed.length === 1 && added.length === 1) {
+        renames.push({
+          group,
+          oldValue: removed[0].value,
+          newValue: added[0].value
+        });
+      }
+    });
+
+    await runTransaction(async (client) => {
+      for (const rename of renames) {
+        const { group, oldValue, newValue } = rename;
+        
+        for (const moduleKey of Object.keys(newMetadata.modules)) {
+          const mod = newMetadata.modules[moduleKey];
+          const fields = mod.fields || [];
+          for (const f of fields) {
+            if (f.chipGroup === group) {
+              const columnName = f.name;
+              
+              // 1. Run update query in PostgreSQL
+              await client.query(
+                `UPDATE ${moduleKey} SET "${columnName}" = $1 WHERE "${columnName}" = $2`,
+                [newValue, oldValue]
+              );
+
+              // 2. Update in-memory dbCache
+              if (dbCache && dbCache[moduleKey]) {
+                dbCache[moduleKey].forEach(rec => {
+                  if (rec[columnName] === oldValue) {
+                    rec[columnName] = newValue;
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+
+      await writeMetadata(newMetadata);
+    });
+
     notifyAllUsers('metadata-updated', { message: 'Metadata schema has been updated.' });
-    res.json({ success: true, message: 'Metadata schema saved successfully.' });
+    res.json({ success: true, message: 'Metadata schema saved successfully and database records updated.' });
   } catch (error) {
+    console.error('Failed to save metadata or update database records:', error);
     res.status(500).json({ message: 'Failed to write metadata: ' + error.message });
   }
 });
