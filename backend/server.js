@@ -5063,17 +5063,6 @@ app.get('/api/notifications/stream', (req, res) => {
   });
 });
 
-// Polling fallback to check if user has any pending leads to accept
-app.get('/api/leads/pending', authenticateToken, (req, res) => {
-  const db = readDb();
-  const userId = req.user.id;
-  const pendingLeads = (db.leads || []).filter(lead => 
-    String(lead.assignedEmployeeId) === String(userId) && 
-    lead.assignmentStatus === 'pending'
-  );
-  res.json(pendingLeads);
-});
-
 async function createFollowUpForLead(lead, dbOrClient, cacheMutations) {
   if (lead.leadType === 'Seller') return;
   const client = dbOrClient || pool;
@@ -5122,66 +5111,162 @@ async function createFollowUpForLead(lead, dbOrClient, cacheMutations) {
   }
 }
 
+// Polling fallback to check if user has any pending leads to accept
+app.get('/api/leads/pending', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const resPending = await pool.query(
+      'SELECT * FROM leads WHERE "assignedEmployeeId" = $1 AND "assignmentStatus" = $2',
+      [userId, 'pending']
+    );
+    res.json(resPending.rows);
+  } catch (err) {
+    console.error('Error fetching pending leads:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Accept Lead
-app.post('/api/leads/:id/accept', authenticateToken, (req, res) => {
+app.post('/api/leads/:id/accept', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const db = readDb();
-  const leadIndex = (db.leads || []).findIndex(l => String(l.id) === String(id));
-  if (leadIndex === -1) return res.status(404).json({ message: "Lead not found." });
+  try {
+    const cacheMutations = [];
+    const updatedLead = await runTransaction(async (client) => {
+      const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
+      const lead = leadRes.rows[0];
+      if (!lead) throw new Error("Lead not found.");
 
-  db.leads[leadIndex].assignmentStatus = 'accepted';
-  db.leads[leadIndex].assignmentTime = null;
-  createFollowUpForLead(db.leads[leadIndex], db);
-  writeDb(db);
-  syncToSheets('leads');
+      const updated = await updateRecord('leads', id, {
+        assignmentStatus: 'accepted',
+        assignmentTime: null
+      }, client);
 
-  res.json({ success: true, message: "Lead accepted successfully.", lead: db.leads[leadIndex] });
+      await createFollowUpForLead(updated, client, cacheMutations);
+      
+      const log = {
+        id: generateUniqueId('LOG'),
+        employeeName: req.user.name,
+        action: `Accepted Lead ${id}`,
+        dateTime: new Date().toLocaleString()
+      };
+      await insertRecord('activity_logs', log, client);
+      
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      });
+
+      return updated;
+    });
+
+    if (dbCache && dbCache.leads) {
+      const idx = dbCache.leads.findIndex(l => String(l.id) === String(id));
+      if (idx !== -1) {
+        dbCache.leads[idx] = updatedLead;
+      }
+    }
+    
+    cacheMutations.forEach(mutate => mutate());
+    try { syncToSheets('leads'); } catch(e) {}
+    try { syncToSheets('follow_ups'); } catch(e) {}
+
+    res.json({ success: true, message: "Lead accepted successfully.", lead: updatedLead });
+  } catch (err) {
+    console.error('Error accepting lead:', err);
+    res.status(err.message.includes('not found') ? 404 : 400).json({ message: err.message });
+  }
 });
 
 // Drop Lead (Pass to other employee)
-app.post('/api/leads/:id/drop', authenticateToken, (req, res) => {
+app.post('/api/leads/:id/drop', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const db = readDb();
-  const leadIndex = (db.leads || []).findIndex(l => String(l.id) === String(id));
-  if (leadIndex === -1) return res.status(404).json({ message: "Lead not found." });
+  try {
+    const cacheMutations = [];
+    const updatedLead = await runTransaction(async (client) => {
+      const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
+      const lead = leadRes.rows[0];
+      if (!lead) throw new Error("Lead not found.");
 
-  const lead = db.leads[leadIndex];
-  const oldAssignee = lead.assignedEmployeeId;
-  lead.droppedBy = lead.droppedBy || [];
-  if (!lead.droppedBy.includes(oldAssignee)) {
-    lead.droppedBy.push(oldAssignee);
+      const oldAssignee = lead.assignedEmployeeId;
+      const droppedBy = lead.droppedBy || [];
+      if (!droppedBy.includes(oldAssignee)) {
+        droppedBy.push(oldAssignee);
+      }
+
+      const empRes = await client.query('SELECT * FROM employees');
+      const employees = empRes.rows;
+
+      let candidates = employees.filter(emp => 
+        emp.role !== 'Admin' && 
+        String(emp.id) !== String(oldAssignee) && 
+        !droppedBy.includes(emp.id)
+      );
+
+      if (candidates.length === 0) {
+        droppedBy.length = 0; 
+        droppedBy.push(oldAssignee);
+        candidates = employees.filter(emp => emp.role !== 'Admin' && String(emp.id) !== String(oldAssignee));
+      }
+
+      let nextEmpId = 'EMP-001';
+      let assignmentStatus = 'accepted';
+      let assignmentTime = null;
+
+      if (candidates.length > 0) {
+        const nextEmp = candidates[0];
+        nextEmpId = nextEmp.id;
+        assignmentStatus = 'pending';
+        assignmentTime = new Date().toISOString();
+        setTimeout(() => {
+          notifyUser(nextEmp.id, 'new-lead', { leadId: lead.id, leadName: lead.name || lead.person_name || 'New Lead' });
+        }, 500);
+      }
+
+      const updated = await updateRecord('leads', id, {
+        assignedEmployeeId: nextEmpId,
+        assignmentStatus,
+        assignmentTime,
+        droppedBy
+      }, client);
+
+      if (assignmentStatus === 'accepted') {
+        await createFollowUpForLead(updated, client, cacheMutations);
+      }
+
+      const log = {
+        id: generateUniqueId('LOG'),
+        employeeName: req.user.name,
+        action: `Dropped Lead ${id} (reassigned to ${nextEmpId})`,
+        dateTime: new Date().toLocaleString()
+      };
+      await insertRecord('activity_logs', log, client);
+      
+      cacheMutations.push(() => {
+        if (dbCache && dbCache.activity_logs) {
+          dbCache.activity_logs.unshift(log);
+        }
+      });
+
+      return updated;
+    });
+
+    if (dbCache && dbCache.leads) {
+      const idx = dbCache.leads.findIndex(l => String(l.id) === String(id));
+      if (idx !== -1) {
+        dbCache.leads[idx] = updatedLead;
+      }
+    }
+
+    cacheMutations.forEach(mutate => mutate());
+    try { syncToSheets('leads'); } catch(e) {}
+    try { syncToSheets('follow_ups'); } catch(e) {}
+
+    res.json({ success: true, message: "Lead dropped and re-assigned.", lead: updatedLead });
+  } catch (err) {
+    console.error('Error dropping lead:', err);
+    res.status(err.message.includes('not found') ? 404 : 400).json({ message: err.message });
   }
-
-  // Find all active employees who are not Admins and haven't dropped this lead yet
-  const employees = db.employees || [];
-  let candidates = employees.filter(emp => 
-    emp.role !== 'Admin' && 
-    String(emp.id) !== String(oldAssignee) && 
-    !lead.droppedBy.includes(emp.id)
-  );
-
-  if (candidates.length === 0) {
-    lead.droppedBy = [oldAssignee];
-    candidates = employees.filter(emp => emp.role !== 'Admin' && String(emp.id) !== String(oldAssignee));
-  }
-
-  if (candidates.length > 0) {
-    const nextEmp = candidates[0];
-    lead.assignedEmployeeId = nextEmp.id;
-    lead.assignmentStatus = 'pending';
-    lead.assignmentTime = new Date().toISOString();
-    notifyUser(nextEmp.id, 'new-lead', { leadId: lead.id, leadName: lead.name || lead.person_name || 'New Lead' });
-  } else {
-    lead.assignedEmployeeId = 'EMP-001';
-    lead.assignmentStatus = 'accepted';
-    lead.assignmentTime = null;
-    createFollowUpForLead(lead, db);
-  }
-
-  writeDb(db);
-  syncToSheets('leads');
-
-  res.json({ success: true, message: "Lead dropped and re-assigned.", lead });
 });
 
 // --- AI ASSISTANT API ENDPOINTS ---
