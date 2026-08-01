@@ -2078,7 +2078,7 @@
         },
         {
           "name": "customerId",
-          "label": "Customer",
+          "label": "Customer Name",
           "type": "ref",
           "refModule": "customers",
           "required": true,
@@ -2090,7 +2090,7 @@
           "label": "Customer Name",
           "type": "text",
           "required": false,
-          "showInTable": true,
+          "showInTable": false,
           "editable": true
         },
         {
