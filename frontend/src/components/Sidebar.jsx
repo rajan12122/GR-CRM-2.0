@@ -10,7 +10,8 @@ import {
   ListItemText, 
   Typography, 
   Divider,
-  Button
+  Button,
+  Collapse
 } from '@mui/material';
 import * as Icons from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -26,7 +27,14 @@ const DRAWER_WIDTH = 260;
 const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const { metadata, logout, user, hasPermission } = useApp();
   const navigate = useNavigate();
-  const location = useLocation();
+  const [collapsedCategories, setCollapsedCategories] = React.useState({});
+
+  const toggleCategory = (catId) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [catId]: !prev[catId]
+    }));
+  };
 
   if (!metadata) return null;
 
@@ -141,21 +149,305 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {/* Grouped Dynamic Schema Modules Links */}
         {groupedModules.map((group) => (
           <React.Fragment key={group.id}>
-            <Typography variant="caption" sx={{ px: 3.5, py: 1.5, display: 'block', textTransform: 'uppercase', fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>
-              {group.label}
-            </Typography>
-            <List sx={{ px: 1.5, py: 0 }}>
-              {group.modules.map((mod) => (
-                <ListItem key={mod.id} disablePadding sx={{ mb: 0.5 }}>
+            <Box 
+              onClick={() => toggleCategory(group.id)}
+              sx={{ 
+                px: 2, 
+                py: 1, 
+                mx: 1.5,
+                mt: 1.5,
+                mb: 0.5,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                color: '#94A3B8',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: '#FFFFFF'
+                },
+                userSelect: 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  textTransform: 'uppercase', 
+                  fontSize: '12.5px', // Increased size!
+                  fontWeight: 800, // Thicker font!
+                  letterSpacing: '0.05em',
+                  fontFamily: 'Poppins, Roboto, sans-serif'
+                }}
+              >
+                {group.label}
+              </Typography>
+              {collapsedCategories[group.id] ? (
+                <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
+              ) : (
+                <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
+              )}
+            </Box>
+            <Collapse in={!collapsedCategories[group.id]} timeout="auto" unmountOnExit>
+              <List sx={{ px: 1.5, py: 0 }}>
+                {group.modules.map((mod) => (
+                  <ListItem key={mod.id} disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      onClick={() => handleNavClick(mod.path)}
+                      selected={isModuleActive(mod.path)}
+                      sx={{
+                        borderRadius: '8px',
+                        py: 1.2,
+                        px: 2,
+                        backgroundColor: isModuleActive(mod.path) ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                        color: isModuleActive(mod.path) ? '#3B82F6' : '#94A3B8',
+                        '&:hover': {
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          color: '#FFFFFF'
+                        }
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                        <DynamicIcon name={mod.icon} size={20} />
+                      </ListItemIcon>
+                      <ListItemText 
+                        primary={mod.label} 
+                        primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </Collapse>
+          </React.Fragment>
+        ))}
+
+        {/* Pipelines Section */}
+        <Box 
+          onClick={() => toggleCategory('pipelines')}
+          sx={{ 
+            px: 2, 
+            py: 1, 
+            mx: 1.5,
+            mt: 1.5,
+            mb: 0.5,
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            borderRadius: '6px',
+            color: '#94A3B8',
+            '&:hover': {
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              color: '#FFFFFF'
+            },
+            userSelect: 'none',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              textTransform: 'uppercase', 
+              fontSize: '12.5px',
+              fontWeight: 800,
+              letterSpacing: '0.05em',
+              fontFamily: 'Poppins, Roboto, sans-serif'
+            }}
+          >
+            Pipelines
+          </Typography>
+          {collapsedCategories['pipelines'] ? (
+            <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
+          ) : (
+            <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
+          )}
+        </Box>
+        <Collapse in={!collapsedCategories['pipelines']} timeout="auto" unmountOnExit>
+          <List sx={{ px: 1.5, py: 0 }}>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={() => handleNavClick('/pipeline/properties')}
+                selected={activePath === '/pipeline/properties'}
+                sx={{
+                  borderRadius: '8px',
+                  py: 1.2,
+                  px: 2,
+                  backgroundColor: activePath === '/pipeline/properties' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                  color: activePath === '/pipeline/properties' ? '#3B82F6' : '#94A3B8',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: '#FFFFFF'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                  <Icons.Layers size={20} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Property Pipeline" 
+                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={() => handleNavClick('/pipeline/property_pitches')}
+                selected={activePath === '/pipeline/property_pitches'}
+                sx={{
+                  borderRadius: '8px',
+                  py: 1.2,
+                  px: 2,
+                  backgroundColor: activePath === '/pipeline/property_pitches' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                  color: activePath === '/pipeline/property_pitches' ? '#3B82F6' : '#94A3B8',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: '#FFFFFF'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                  <Icons.CheckSquare size={20} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Property Interest Pipeline" 
+                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={() => handleNavClick('/pipeline/customers')}
+                selected={activePath === '/pipeline/customers'}
+                sx={{
+                  borderRadius: '8px',
+                  py: 1.2,
+                  px: 2,
+                  backgroundColor: activePath === '/pipeline/customers' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                  color: activePath === '/pipeline/customers' ? '#3B82F6' : '#94A3B8',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: '#FFFFFF'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                  <Icons.GitCommit size={20} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Customer Pipeline" 
+                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={() => handleNavClick('/pipeline/buyer_query')}
+                selected={activePath === '/pipeline/buyer_query'}
+                sx={{
+                  borderRadius: '8px',
+                  py: 1.2,
+                  px: 2,
+                  backgroundColor: activePath === '/pipeline/buyer_query' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                  color: activePath === '/pipeline/buyer_query' ? '#3B82F6' : '#94A3B8',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: '#FFFFFF'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                  <Icons.TrendingUp size={20} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Buyer Query Pipeline" 
+                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={() => handleNavClick('/pipeline/seller_query')}
+                selected={activePath === '/pipeline/seller_query'}
+                sx={{
+                  borderRadius: '8px',
+                  py: 1.2,
+                  px: 2,
+                  backgroundColor: activePath === '/pipeline/seller_query' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                  color: activePath === '/pipeline/seller_query' ? '#3B82F6' : '#94A3B8',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    color: '#FFFFFF'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                  <Icons.TrendingDown size={20} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Seller Query Pipeline" 
+                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </Collapse>
+
+        {user?.role === 'Admin' && (
+          <>
+            <Box 
+              onClick={() => toggleCategory('management')}
+              sx={{ 
+                px: 2, 
+                py: 1, 
+                mx: 1.5,
+                mt: 1.5,
+                mb: 0.5,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                color: '#94A3B8',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: '#FFFFFF'
+                },
+                userSelect: 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  textTransform: 'uppercase', 
+                  fontSize: '12.5px',
+                  fontWeight: 800,
+                  letterSpacing: '0.05em',
+                  fontFamily: 'Poppins, Roboto, sans-serif'
+                }}
+              >
+                Management
+              </Typography>
+              {collapsedCategories['management'] ? (
+                <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
+              ) : (
+                <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
+              )}
+            </Box>
+            <Collapse in={!collapsedCategories['management']} timeout="auto" unmountOnExit>
+              <List sx={{ px: 1.5, py: 0 }}>
+                <ListItem disablePadding sx={{ mb: 0.5 }}>
                   <ListItemButton
-                    onClick={() => handleNavClick(mod.path)}
-                    selected={isModuleActive(mod.path)}
+                    onClick={() => handleNavClick('/sheets-mapping')}
+                    selected={activePath === '/sheets-mapping'}
                     sx={{
                       borderRadius: '8px',
                       py: 1.2,
                       px: 2,
-                      backgroundColor: isModuleActive(mod.path) ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                      color: isModuleActive(mod.path) ? '#3B82F6' : '#94A3B8',
+                      backgroundColor: activePath === '/sheets-mapping' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                      color: activePath === '/sheets-mapping' ? '#3B82F6' : '#94A3B8',
                       '&:hover': {
                         backgroundColor: 'rgba(255, 255, 255, 0.05)',
                         color: '#FFFFFF'
@@ -163,209 +455,42 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
                     }}
                   >
                     <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                      <DynamicIcon name={mod.icon} size={20} />
+                      <Icons.FileSpreadsheet size={20} />
                     </ListItemIcon>
                     <ListItemText 
-                      primary={mod.label} 
+                      primary="Sheets Mapping" 
                       primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
                     />
                   </ListItemButton>
                 </ListItem>
-              ))}
-            </List>
-          </React.Fragment>
-        ))}
-
-        {/* Pipelines Section */}
-        <Typography variant="caption" sx={{ px: 3.5, py: 1.5, display: 'block', textTransform: 'uppercase', fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>
-          Pipelines
-        </Typography>
-        <List sx={{ px: 1.5, py: 0 }}>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => handleNavClick('/pipeline/properties')}
-              selected={activePath === '/pipeline/properties'}
-              sx={{
-                borderRadius: '8px',
-                py: 1.2,
-                px: 2,
-                backgroundColor: activePath === '/pipeline/properties' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                color: activePath === '/pipeline/properties' ? '#3B82F6' : '#94A3B8',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  color: '#FFFFFF'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <Icons.Layers size={20} />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Property Pipeline" 
-                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-              />
-            </ListItemButton>
-          </ListItem>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => handleNavClick('/pipeline/property_pitches')}
-              selected={activePath === '/pipeline/property_pitches'}
-              sx={{
-                borderRadius: '8px',
-                py: 1.2,
-                px: 2,
-                backgroundColor: activePath === '/pipeline/property_pitches' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                color: activePath === '/pipeline/property_pitches' ? '#3B82F6' : '#94A3B8',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  color: '#FFFFFF'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <Icons.CheckSquare size={20} />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Property Interest Pipeline" 
-                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-              />
-            </ListItemButton>
-          </ListItem>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => handleNavClick('/pipeline/customers')}
-              selected={activePath === '/pipeline/customers'}
-              sx={{
-                borderRadius: '8px',
-                py: 1.2,
-                px: 2,
-                backgroundColor: activePath === '/pipeline/customers' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                color: activePath === '/pipeline/customers' ? '#3B82F6' : '#94A3B8',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  color: '#FFFFFF'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <Icons.GitCommit size={20} />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Customer Pipeline" 
-                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-              />
-            </ListItemButton>
-          </ListItem>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => handleNavClick('/pipeline/buyer_query')}
-              selected={activePath === '/pipeline/buyer_query'}
-              sx={{
-                borderRadius: '8px',
-                py: 1.2,
-                px: 2,
-                backgroundColor: activePath === '/pipeline/buyer_query' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                color: activePath === '/pipeline/buyer_query' ? '#3B82F6' : '#94A3B8',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  color: '#FFFFFF'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <Icons.TrendingUp size={20} />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Buyer Query Pipeline" 
-                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-              />
-            </ListItemButton>
-          </ListItem>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => handleNavClick('/pipeline/seller_query')}
-              selected={activePath === '/pipeline/seller_query'}
-              sx={{
-                borderRadius: '8px',
-                py: 1.2,
-                px: 2,
-                backgroundColor: activePath === '/pipeline/seller_query' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                color: activePath === '/pipeline/seller_query' ? '#3B82F6' : '#94A3B8',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  color: '#FFFFFF'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <Icons.TrendingDown size={20} />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Seller Query Pipeline" 
-                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-              />
-            </ListItemButton>
-          </ListItem>
-        </List>
-
-        <Typography variant="caption" sx={{ px: 3.5, py: 1.5, display: 'block', textTransform: 'uppercase', fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>
-          Management
-        </Typography>
-
-        {/* System Settings */}
-        {user?.role === 'Admin' && (
-          <List sx={{ px: 1.5, py: 0 }}>
-            <ListItem disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => handleNavClick('/sheets-mapping')}
-                selected={activePath === '/sheets-mapping'}
-                sx={{
-                  borderRadius: '8px',
-                  py: 1.2,
-                  px: 2,
-                  backgroundColor: activePath === '/sheets-mapping' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                  color: activePath === '/sheets-mapping' ? '#3B82F6' : '#94A3B8',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    color: '#FFFFFF'
-                  }
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                  <Icons.FileSpreadsheet size={20} />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Sheets Mapping" 
-                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-                />
-              </ListItemButton>
-            </ListItem>
-            <ListItem disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => handleNavClick('/settings')}
-                selected={activePath === '/settings'}
-                sx={{
-                  borderRadius: '8px',
-                  py: 1.2,
-                  px: 2,
-                  backgroundColor: activePath === '/settings' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                  color: activePath === '/settings' ? '#3B82F6' : '#94A3B8',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    color: '#FFFFFF'
-                  }
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                  <Icons.Settings size={20} />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Admin Control Panel" 
-                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-                />
-              </ListItemButton>
-            </ListItem>
-          </List>
+                <ListItem disablePadding sx={{ mb: 0.5 }}>
+                  <ListItemButton
+                    onClick={() => handleNavClick('/settings')}
+                    selected={activePath === '/settings'}
+                    sx={{
+                      borderRadius: '8px',
+                      py: 1.2,
+                      px: 2,
+                      backgroundColor: activePath === '/settings' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                      color: activePath === '/settings' ? '#3B82F6' : '#94A3B8',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                        color: '#FFFFFF'
+                      }
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                      <Icons.Settings size={20} />
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary="Admin Control Panel" 
+                      primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                    />
+                  </ListItemButton>
+                </ListItem>
+              </List>
+            </Collapse>
+          </>
         )}
 
 
