@@ -139,6 +139,7 @@ const EntityDetail = () => {
   const [pitchStatus, setPitchStatus] = useState('Pitched');
   const [pitchPropertyStatus, setPitchPropertyStatus] = useState('');
   const [pitchPrice, setPitchPrice] = useState('');
+  const [pitchClosingPrice, setPitchClosingPrice] = useState('');
   const [pitchFollowUp, setPitchFollowUp] = useState('');
   const [pitchRemarks, setPitchRemarks] = useState('');
   const [pitchWarning, setPitchWarning] = useState('');
@@ -217,6 +218,7 @@ const EntityDetail = () => {
     setPitchPropertyId(propertyId);
     setPitchEmployeeId(record?.assignedEmployeeId || record?.employeeId || 'EMP-001');
     setPitchPrice('');
+    setPitchClosingPrice('');
     setPitchRemarks('');
     setPitchWarning('');
     setPitchPropertyStatus('');
@@ -1252,6 +1254,7 @@ const EntityDetail = () => {
                             setPitchPropertyId('');
                             setPitchEmployeeId(record.assignedEmployeeId || '');
                             setPitchPrice('');
+                            setPitchClosingPrice('');
                             setPitchRemarks('');
                             setPitchWarning('');
                             setPitchPropertyStatus('');
@@ -1283,6 +1286,7 @@ const EntityDetail = () => {
                                     setPitchCustomerId(p.customerId);
                                     setPitchEmployeeId(p.employeeId);
                                     setPitchPrice(p.quotedPrice);
+                                    setPitchClosingPrice(p.closingPrice || '');
                                     setPitchRemarks(p.remarks);
                                     setPitchInterest(p.interestLevel);
                                     setPitchStatus(p.status);
@@ -1457,7 +1461,7 @@ const EntityDetail = () => {
                                 </Grid>
                                 <Grid item xs={6} sm={4}>
                                   <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Sale Value:</Typography>
-                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>₹{formatCurrency(d.salePrice)}</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>₹{formatCurrency(d.purchasePrice || d.salePrice)}</Typography>
                                 </Grid>
                                 <Grid item xs={6} sm={4}>
                                   <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Commission/Brokerage:</Typography>
@@ -2148,7 +2152,7 @@ const EntityDetail = () => {
                                 </Typography>
                               );
                             })()}
-                            <Typography variant="body2" sx={{ mt: 1, fontWeight: 700 }}>Price Sold: ₹{formatCurrency(d.salePrice)}</Typography>
+                            <Typography variant="body2" sx={{ mt: 1, fontWeight: 700 }}>Price Sold: ₹{formatCurrency(d.purchasePrice || d.salePrice)}</Typography>
                           </Paper>
                         ))
                       )}
@@ -2512,6 +2516,7 @@ const EntityDetail = () => {
                             setPitchEmployeeId(record.assignedEmployeeId || record.employeeId || '');
                             setPitchCustomerId('');
                             setPitchPrice('');
+                            setPitchClosingPrice('');
                             setPitchRemarks('');
                             setPitchWarning('');
                             setPitchPropertyStatus('');
@@ -2821,6 +2826,7 @@ const EntityDetail = () => {
                                       const mappedCustId = record.customerId || record.id;
                                       setPitchCustomerId(mappedCustId);
                                       setPitchPrice('');
+                                      setPitchClosingPrice('');
                                       setPitchRemarks('');
                                       setPitchWarning('');
                                       setPitchDialogOpen(true);
@@ -2851,6 +2857,7 @@ const EntityDetail = () => {
                                               setPitchCustomerId(p.customerId);
                                               setPitchEmployeeId(p.employeeId);
                                               setPitchPrice(p.quotedPrice);
+                                              setPitchClosingPrice(p.closingPrice || '');
                                               setPitchRemarks(p.remarks);
                                               setPitchInterest(p.interestLevel);
                                               setPitchStatus(p.status);
@@ -4740,7 +4747,10 @@ const EntityDetail = () => {
                 }
               </Select>
             </FormControl>
-            <TextField label="Quoted Pitch Price Offer" type="text" fullWidth value={pitchPrice} onChange={(e) => setPitchPrice(e.target.value)} />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField label="Quoted Pitch Price Offer" type="text" fullWidth value={pitchPrice} onChange={(e) => setPitchPrice(e.target.value)} />
+              <TextField label="Closing Price Offer" type="text" fullWidth value={pitchClosingPrice} onChange={(e) => setPitchClosingPrice(e.target.value)} />
+            </Box>
             {pitchStatus === 'Site Visit Scheduled' ? (
               <TextField 
                 label="Scheduled Site Visit Date" 
@@ -4874,6 +4884,7 @@ const EntityDetail = () => {
               status: pitchStatus,
               propertyStatus: pitchPropertyStatus,
               quotedPrice: pitchPrice || '',
+              closingPrice: pitchClosingPrice || '',
               followUpDate: pitchFollowUp,
               remarks: pitchRemarks,
               pitchDate: editingPitch ? (editingPitch.pitchDate || new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN')) : new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN'),

@@ -956,7 +956,7 @@ async function handleDealStatusChange(d, dbOrClient, req, cacheMutations) {
           purchaseDate: prop.date || '',
           purchasePrice: prop.demand || '',
           saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
-          salePrice: d.salePrice || '',
+          salePrice: d.purchasePrice || '',
           soldByEmployeeId: d.employeeId || '',
           soldByEmployeeName: empName
         });
@@ -982,7 +982,7 @@ async function handleDealStatusChange(d, dbOrClient, req, cacheMutations) {
     timeline.push({
       date: new Date().toLocaleDateString('en-IN'),
       event: 'Ownership Changed (Deal Closed)',
-      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${d.salePrice} (Closed by Employee: ${empName})`
+      details: `Sold by ${prevOwnerName || 'Unknown'} to ${buyerName} for ₹${d.purchasePrice} (Closed by Employee: ${empName})`
     });
     
     await client.query(
@@ -1325,8 +1325,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
     const propRes = await client.query('SELECT demand, current_owner_id FROM properties WHERE id = $1', [p.propertyId]);
     const prop = propRes.rows[0];
     const sellerId = prop ? (prop.current_owner_id || '') : '';
-    const salePrice = p.quotedPrice || '';
-    const purchasePrice = prop ? (prop.demand || '') : '';
+    const finalPrice = p.closingPrice || p.quotedPrice || '';
 
     existingDeal = {
       id: dealId,
@@ -1335,8 +1334,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
       propertyId: p.propertyId,
       employeeId: p.employeeId || 'EMP-001',
       registrationDate: new Date().toISOString().split('T')[0],
-      salePrice: salePrice,
-      purchasePrice: purchasePrice,
+      purchasePrice: finalPrice || (prop ? (prop.demand || '') : ''),
       brokerage: '',
       commission: '',
       status: 'Closed',
@@ -1856,8 +1854,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
         propertyId: propId,
         employeeId: f.employeeId || 'EMP-001',
         status: 'Closed',
-        salePrice: f.pitchPrice || 1000000,
-        purchasePrice: prop ? (prop.demand || '') : '',
+        purchasePrice: f.pitchPrice || (prop ? (prop.demand || '') : ''),
         registrationDate: new Date().toISOString().split('T')[0]
       };
       
@@ -2020,7 +2017,7 @@ function generateDynamicTimeline(moduleName, id, db) {
           timeline.push({
             date: d.registrationDate || '',
             event: `Deal ${d.status} (${d.id})`,
-            details: `Customer role: ${role} • Property: ${d.propertyId} • Price: ₹${d.salePrice}`,
+            details: `Customer role: ${role} • Property: ${d.propertyId} • Price: ₹${d.purchasePrice}`,
             icon: 'Handshake'
           });
         }
@@ -2060,7 +2057,7 @@ function generateDynamicTimeline(moduleName, id, db) {
           timeline.push({
             date: d.registrationDate || '',
             event: `Deal ${d.status} (${d.id})`,
-            details: `Buyer: ${d.customerId} • Seller: ${d.sellerCustomerId} • Price: ₹${d.salePrice}`,
+            details: `Buyer: ${d.customerId} • Seller: ${d.sellerCustomerId} • Price: ₹${d.purchasePrice}`,
             icon: 'Handshake'
           });
         }
@@ -2102,7 +2099,7 @@ function generateDynamicTimeline(moduleName, id, db) {
       timeline.push({
         date: d.registrationDate || '',
         event: 'Deal Created',
-        details: `Status: ${d.status} • Price: ₹${d.salePrice}`,
+        details: `Status: ${d.status} • Price: ₹${d.purchasePrice}`,
         icon: 'Handshake'
       });
     }
@@ -4374,7 +4371,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           purchaseDate: '',
           purchasePrice: '',
           saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
-          salePrice: d.salePrice || ''
+          salePrice: d.purchasePrice || ''
         });
       }
     });
@@ -6217,7 +6214,7 @@ app.listen(PORT, async () => {
             purchaseDate: prop.date || '',
             purchasePrice: prop.demand || '',
             saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
-            salePrice: d.salePrice || ''
+            salePrice: d.purchasePrice || ''
           });
           updated = true;
         }

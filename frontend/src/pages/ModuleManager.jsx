@@ -112,7 +112,7 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
               const val = rec[f.name];
               let displayVal = String(val);
               const currencyFields = [
-                'price', 'budget', 'salary', 'salePrice', 'netPay', 'baseSalary', 'dailyRate',
+                'price', 'budget', 'salary', 'salePrice', 'purchasePrice', 'quotedPrice', 'closingPrice', 'netPay', 'baseSalary', 'dailyRate',
                 'leaveDeduction', 'halfDayDeduction', 'overtimePayment', 'allowancesTotal',
                 'deductionsTotal', 'expensesReimbursement', 'advanceRecovery', 'advanceBalance',
                 'advanceTaken'

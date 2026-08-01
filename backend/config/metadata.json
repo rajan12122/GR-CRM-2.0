@@ -2013,18 +2013,10 @@
           "editable": true
         },
         {
-          "name": "salePrice",
-          "label": "Sale Price (INR)",
-          "type": "text",
-          "required": true,
-          "showInTable": true,
-          "editable": true
-        },
-        {
           "name": "purchasePrice",
           "label": "Purchase Price (INR)",
           "type": "text",
-          "required": false,
+          "required": true,
           "showInTable": true,
           "editable": true
         },
@@ -2161,19 +2153,11 @@
           "editable": true
         },
         {
-          "name": "minNegotiablePrice",
-          "label": "Min Negotiable (INR)",
-          "type": "number",
+          "name": "closingPrice",
+          "label": "Closing Price (INR)",
+          "type": "text",
           "required": false,
-          "showInTable": false,
-          "editable": true
-        },
-        {
-          "name": "expectedClosingPrice",
-          "label": "Expected Closing (INR)",
-          "type": "number",
-          "required": false,
-          "showInTable": false,
+          "showInTable": true,
           "editable": true
         },
         {

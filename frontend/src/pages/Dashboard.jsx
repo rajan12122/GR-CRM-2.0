@@ -374,12 +374,12 @@ const Dashboard = () => {
 
   // Upgraded deals-driven revenue intelligence calculations
   const closedDeals = deals.filter(d => d.status === 'Closed');
-  const totalSalesVal = closedDeals.reduce((sum, d) => sum + (Number(d.salePrice) || 0), 0);
-  const totalCommissionVal = closedDeals.reduce((sum, d) => sum + (Number(d.commissionAmount) || 0), 0);
+  const totalSalesVal = closedDeals.reduce((sum, d) => sum + (parseFloat(d.purchasePrice || d.salePrice) || 0), 0);
+  const totalCommissionVal = closedDeals.reduce((sum, d) => sum + (parseFloat(d.commissionAmount) || 0), 0);
   
-  const revenueToday = closedDeals.filter(d => d.registrationDate === '2026-07-08' || d.registrationDate === '08/07/2026').reduce((sum, d) => sum + (Number(d.salePrice) || 0), 0);
-  const revenue7Days = closedDeals.reduce((sum, d) => sum + (Number(d.salePrice) || 0), 0) * 0.4; // Weighted approximation for dashboard representation
-  const revenue30Days = closedDeals.reduce((sum, d) => sum + (Number(d.salePrice) || 0), 0) * 0.8;
+  const revenueToday = closedDeals.filter(d => d.registrationDate === '2026-07-08' || d.registrationDate === '08/07/2026').reduce((sum, d) => sum + (parseFloat(d.purchasePrice || d.salePrice) || 0), 0);
+  const revenue7Days = closedDeals.reduce((sum, d) => sum + (parseFloat(d.purchasePrice || d.salePrice) || 0), 0) * 0.4; // Weighted approximation for dashboard representation
+  const revenue30Days = closedDeals.reduce((sum, d) => sum + (parseFloat(d.purchasePrice || d.salePrice) || 0), 0) * 0.8;
   const revenueQuarter = totalSalesVal;
 
   const todayStr = new Date().toISOString().split('T')[0];
