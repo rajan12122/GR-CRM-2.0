@@ -30,14 +30,56 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   if (!metadata) return null;
 
-  const modules = Object.keys(metadata.modules)
-    .filter(key => hasPermission(key, 'view'))
-    .map(key => ({
-      id: key,
-      label: metadata.modules[key].label,
-      icon: metadata.modules[key].icon || 'Layers',
-      path: `/module/${key}`
-    }));
+  const categories = metadata.sidebarCategories || [];
+
+  // Group modules by category dynamically
+  const groupedModules = (() => {
+    const groupedKeys = new Set();
+    const result = [];
+
+    // 1. Process custom categories
+    categories.forEach(cat => {
+      const catModules = (cat.modules || [])
+        .filter(key => metadata.modules[key] && hasPermission(key, 'view'))
+        .map(key => {
+          groupedKeys.add(key);
+          return {
+            id: key,
+            label: metadata.modules[key].label,
+            icon: metadata.modules[key].icon || 'Layers',
+            path: `/module/${key}`
+          };
+        });
+
+      if (catModules.length > 0) {
+        result.push({
+          id: cat.id,
+          label: cat.label,
+          modules: catModules
+        });
+      }
+    });
+
+    // 2. Process uncategorized modules
+    const uncategorizedModules = Object.keys(metadata.modules)
+      .filter(key => !groupedKeys.has(key) && hasPermission(key, 'view'))
+      .map(key => ({
+        id: key,
+        label: metadata.modules[key].label,
+        icon: metadata.modules[key].icon || 'Layers',
+        path: `/module/${key}`
+      }));
+
+    if (uncategorizedModules.length > 0) {
+      result.push({
+        id: 'uncategorized',
+        label: categories.length > 0 ? 'Other Modules' : 'Modules',
+        modules: uncategorizedModules
+      });
+    }
+
+    return result;
+  })();
 
   const activePath = location.pathname;
 
@@ -96,40 +138,43 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           </ListItem>
         </List>
 
-        <Typography variant="caption" sx={{ px: 3.5, py: 1.5, display: 'block', textTransform: 'uppercase', fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>
-          Modules
-        </Typography>
-
-        {/* Dynamic Schema Modules Links */}
-        <List sx={{ px: 1.5, py: 0 }}>
-          {modules.map((mod) => (
-            <ListItem key={mod.id} disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => handleNavClick(mod.path)}
-                selected={isModuleActive(mod.path)}
-                sx={{
-                  borderRadius: '8px',
-                  py: 1.2,
-                  px: 2,
-                  backgroundColor: isModuleActive(mod.path) ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
-                  color: isModuleActive(mod.path) ? '#3B82F6' : '#94A3B8',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    color: '#FFFFFF'
-                  }
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                  <DynamicIcon name={mod.icon} size={20} />
-                </ListItemIcon>
-                <ListItemText 
-                  primary={mod.label} 
-                  primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
+        {/* Grouped Dynamic Schema Modules Links */}
+        {groupedModules.map((group) => (
+          <React.Fragment key={group.id}>
+            <Typography variant="caption" sx={{ px: 3.5, py: 1.5, display: 'block', textTransform: 'uppercase', fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>
+              {group.label}
+            </Typography>
+            <List sx={{ px: 1.5, py: 0 }}>
+              {group.modules.map((mod) => (
+                <ListItem key={mod.id} disablePadding sx={{ mb: 0.5 }}>
+                  <ListItemButton
+                    onClick={() => handleNavClick(mod.path)}
+                    selected={isModuleActive(mod.path)}
+                    sx={{
+                      borderRadius: '8px',
+                      py: 1.2,
+                      px: 2,
+                      backgroundColor: isModuleActive(mod.path) ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                      color: isModuleActive(mod.path) ? '#3B82F6' : '#94A3B8',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                        color: '#FFFFFF'
+                      }
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                      <DynamicIcon name={mod.icon} size={20} />
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={mod.label} 
+                      primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </React.Fragment>
+        ))}
 
         {/* Pipelines Section */}
         <Typography variant="caption" sx={{ px: 3.5, py: 1.5, display: 'block', textTransform: 'uppercase', fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>

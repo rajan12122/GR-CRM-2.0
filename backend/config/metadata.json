@@ -3896,5 +3896,27 @@
     "leadRotationActive": false,
     "rotationHours": "1",
     "rotatedSources": []
-  }
+  },
+  "sidebarCategories": [
+    {
+      "id": "sales",
+      "label": "Sales & CRM",
+      "modules": ["deals", "leads", "customers", "property_pitch_history"]
+    },
+    {
+      "id": "operations",
+      "label": "Operations & Attendance",
+      "modules": ["tasks", "attendance", "leaves", "salaries"]
+    },
+    {
+      "id": "inventory",
+      "label": "Inventory & Dealers",
+      "modules": ["properties", "projects", "dealers"]
+    },
+    {
+      "id": "others",
+      "label": "Communication & Other",
+      "modules": ["queries", "daily_price_lists", "notices", "wanted_properties"]
+    }
+  ]
 }

@@ -164,11 +164,135 @@ const Settings = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingChipIndex, setEditingChipIndex] = useState(null);
 
+  // Sidebar categories states
+  const [sidebarCategoryInputName, setSidebarCategoryInputName] = useState('');
+  const [sidebarEditingCategoryId, setSidebarEditingCategoryId] = useState('');
+  const [sidebarEditingCategoryLabel, setSidebarEditingCategoryLabel] = useState('');
+
   if (!metadata) return null;
 
   const showStatus = (type, text) => {
     setStatusMsg({ type, text });
     setTimeout(() => setStatusMsg({ type: '', text: '' }), 5000);
+  };
+
+  // --- SIDEBAR CATEGORIES MANAGEMENT ---
+
+  const handleAddSidebarCategory = async (e) => {
+    e.preventDefault();
+    const catName = sidebarCategoryInputName.trim();
+    if (!catName) {
+      showStatus('error', 'Category name cannot be empty.');
+      return;
+    }
+    const catId = catName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (!catId) {
+      showStatus('error', 'Category name must contain letters or numbers.');
+      return;
+    }
+    const currentCats = metadata.sidebarCategories || [];
+    if (currentCats.some(c => c.id === catId)) {
+      showStatus('error', 'A sidebar group with this name already exists.');
+      return;
+    }
+    const updated = {
+      ...metadata,
+      sidebarCategories: [
+        ...currentCats,
+        {
+          id: catId,
+          label: catName,
+          modules: []
+        }
+      ]
+    };
+    const res = await saveMetadata(updated);
+    if (res.success) {
+      setSidebarCategoryInputName('');
+      showStatus('success', `Sidebar group "${catName}" added successfully.`);
+    } else {
+      showStatus('error', res.message || 'Failed to add sidebar group.');
+    }
+  };
+
+  const handleDeleteSidebarCategory = async (catId) => {
+    const currentCats = metadata.sidebarCategories || [];
+    const updated = {
+      ...metadata,
+      sidebarCategories: currentCats.filter(c => c.id !== catId)
+    };
+    const res = await saveMetadata(updated);
+    if (res.success) {
+      showStatus('success', 'Sidebar group deleted successfully.');
+    } else {
+      showStatus('error', res.message || 'Failed to delete group.');
+    }
+  };
+
+  const handleRenameSidebarCategory = async (catId) => {
+    const label = sidebarEditingCategoryLabel.trim();
+    if (!label) {
+      showStatus('error', 'Sidebar group name cannot be empty.');
+      return;
+    }
+    const currentCats = metadata.sidebarCategories || [];
+    const updated = {
+      ...metadata,
+      sidebarCategories: currentCats.map(c => c.id === catId ? { ...c, label } : c)
+    };
+    const res = await saveMetadata(updated);
+    if (res.success) {
+      setSidebarEditingCategoryId('');
+      showStatus('success', 'Sidebar group renamed successfully.');
+    } else {
+      showStatus('error', res.message || 'Failed to rename group.');
+    }
+  };
+
+  const handleMoveSidebarModule = async (moduleKey, targetCatId) => {
+    const currentCats = metadata.sidebarCategories || [];
+    const updatedCats = currentCats.map(c => {
+      // Remove from current category
+      let updatedModules = (c.modules || []).filter(m => m !== moduleKey);
+      // Add to target category
+      if (c.id === targetCatId) {
+        updatedModules = [...updatedModules, moduleKey];
+      }
+      return { ...c, modules: updatedModules };
+    });
+    const updated = {
+      ...metadata,
+      sidebarCategories: updatedCats
+    };
+    const res = await saveMetadata(updated);
+    if (res.success) {
+      showStatus('success', `Moved module to new category.`);
+    } else {
+      showStatus('error', res.message || 'Failed to move module.');
+    }
+  };
+
+  const handleReorderSidebarCategory = async (catId, direction) => {
+    const currentCats = [...(metadata.sidebarCategories || [])];
+    const index = currentCats.findIndex(c => c.id === catId);
+    if (index === -1) return;
+    if (direction === 'up' && index > 0) {
+      const temp = currentCats[index];
+      currentCats[index] = currentCats[index - 1];
+      currentCats[index - 1] = temp;
+    } else if (direction === 'down' && index < currentCats.length - 1) {
+      const temp = currentCats[index];
+      currentCats[index] = currentCats[index + 1];
+      currentCats[index + 1] = temp;
+    }
+    const updated = {
+      ...metadata,
+      sidebarCategories: currentCats
+    };
+    const res = await saveMetadata(updated);
+    if (!res.success) {
+      showStatus('error', 'Failed to reorder categories.');
+    }
   };
 
   // --- FIELDS SCHEMA SCHEMA MANAGEMENT ---
@@ -797,10 +921,14 @@ const Settings = () => {
                    <Icons.RefreshCw size={18} style={{ marginRight: 10 }} />
                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Lead Rotation Engine</Typography>
                  </ListItem>
-                  <ListItem button onClick={() => setActiveTab('templates')} selected={activeTab === 'templates'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'templates' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'templates' ? '#2563EB' : '#4B5563' }}>
-                    <Icons.MessageSquare size={18} style={{ marginRight: 10 }} />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Notification Templates</Typography>
-                  </ListItem>
+                   <ListItem button onClick={() => setActiveTab('templates')} selected={activeTab === 'templates'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'templates' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'templates' ? '#2563EB' : '#4B5563' }}>
+                     <Icons.MessageSquare size={18} style={{ marginRight: 10 }} />
+                     <Typography variant="body2" sx={{ fontWeight: 600 }}>Notification Templates</Typography>
+                   </ListItem>
+                   <ListItem button onClick={() => setActiveTab('sidebar_categories')} selected={activeTab === 'sidebar_categories'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'sidebar_categories' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'sidebar_categories' ? '#2563EB' : '#4B5563' }}>
+                     <Icons.FolderTree size={18} style={{ marginRight: 10 }} />
+                     <Typography variant="body2" sx={{ fontWeight: 600 }}>Sidebar Groups</Typography>
+                   </ListItem>
                   <Divider sx={{ my: 1 }} />
                   <ListItem 
                     button 
@@ -1957,6 +2085,211 @@ const Settings = () => {
                     Save Templates
                   </Button>
                 </Box>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TAB 8: SIDEBAR CATEGORIES CONFIG */}
+          {activeTab === 'sidebar_categories' && (
+            <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '20px', fontFamily: 'Poppins', mb: 1 }}>
+                  Sidebar Groups & Module Categorization
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mb: 4 }}>
+                  Organize modules in the sidebar under custom group headers. Uncategorized modules will dynamically show up at the bottom.
+                </Typography>
+
+                {/* Add Category Form */}
+                <Box component="form" onSubmit={handleAddSidebarCategory} sx={{ mb: 4, display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                  <TextField
+                    label="New Sidebar Group Name"
+                    size="small"
+                    value={sidebarCategoryInputName}
+                    onChange={(e) => setSidebarCategoryInputName(e.target.value)}
+                    sx={{ flexGrow: 1 }}
+                    placeholder="e.g. Finance, Core Sales, Inventory"
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    startIcon={<Icons.Plus size={16} />}
+                    sx={{ backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' }, borderRadius: '8px', px: 3, py: 1.1, textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Add Group
+                  </Button>
+                </Box>
+
+                <Divider sx={{ my: 3 }} />
+
+                {/* Categories Reorder and Management List */}
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>
+                  Sidebar Layout Categories ({(metadata.sidebarCategories || []).length})
+                </Typography>
+
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={7}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                      {(metadata.sidebarCategories || []).map((cat, idx) => (
+                        <Paper
+                          key={cat.id}
+                          variant="outlined"
+                          sx={{
+                            p: 2.5,
+                            borderRadius: '12px',
+                            borderColor: '#E2E8F0',
+                            backgroundColor: '#F8FAFC'
+                          }}
+                        >
+                          {/* Category Header Controls */}
+                          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                            {sidebarEditingCategoryId === cat.id ? (
+                              <Box display="flex" gap={1} alignItems="center" sx={{ flexGrow: 1 }}>
+                                <TextField
+                                  size="small"
+                                  value={sidebarEditingCategoryLabel}
+                                  onChange={(e) => setSidebarEditingCategoryLabel(e.target.value)}
+                                  autoFocus
+                                />
+                                <IconButton size="small" color="primary" onClick={() => handleRenameSidebarCategory(cat.id)}>
+                                  <Icons.Check size={18} />
+                                </IconButton>
+                                <IconButton size="small" onClick={() => setSidebarEditingCategoryId('')}>
+                                  <Icons.X size={18} />
+                                </IconButton>
+                              </Box>
+                            ) : (
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', fontSize: '15px' }}>
+                                  {cat.label}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                                  ({cat.id})
+                                </Typography>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => {
+                                    setSidebarEditingCategoryId(cat.id);
+                                    setSidebarEditingCategoryLabel(cat.label);
+                                  }}
+                                  sx={{ color: '#64748B', p: 0.5 }}
+                                >
+                                  <Icons.Edit3 size={14} />
+                                </IconButton>
+                              </Box>
+                            )}
+
+                            {/* Reorder and Delete Actions */}
+                            <Box display="flex" gap={0.5}>
+                              <IconButton
+                                size="small"
+                                disabled={idx === 0}
+                                onClick={() => handleReorderSidebarCategory(cat.id, 'up')}
+                              >
+                                <Icons.ArrowUp size={16} />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                disabled={idx === (metadata.sidebarCategories || []).length - 1}
+                                onClick={() => handleReorderSidebarCategory(cat.id, 'down')}
+                              >
+                                <Icons.ArrowDown size={16} />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteSidebarCategory(cat.id)}
+                              >
+                                <Icons.Trash2 size={16} />
+                              </IconButton>
+                            </Box>
+                          </Box>
+
+                          {/* List of Modules in Category */}
+                          {cat.modules && cat.modules.length > 0 ? (
+                            <Box display="flex" flexWrap="wrap" gap={1}>
+                              {cat.modules.map(modKey => {
+                                const m = metadata.modules[modKey];
+                                if (!m) return null;
+                                return (
+                                  <Chip
+                                    key={modKey}
+                                    label={m.label}
+                                    sx={{ fontWeight: 700, backgroundColor: 'white', border: '1px solid #E2E8F0' }}
+                                    onDelete={() => handleMoveSidebarModule(modKey, '')}
+                                  />
+                                );
+                              })}
+                            </Box>
+                          ) : (
+                            <Typography variant="body2" sx={{ color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' }}>
+                              No modules assigned to this category.
+                            </Typography>
+                          )}
+                        </Paper>
+                      ))}
+                    </Box>
+                  </Grid>
+
+                  {/* Modules Assignment Board */}
+                  <Grid item xs={12} md={5}>
+                    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: '12px', borderColor: '#E2E8F0' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5, fontFamily: 'Poppins' }}>
+                        Module Assignments
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mb: 2 }}>
+                        Assign any module to a specific sidebar group using the dropdown.
+                      </Typography>
+
+                      <Box display="flex" flexDirection="column" gap={1.5}>
+                        {Object.keys(metadata.modules).map(modKey => {
+                          const m = metadata.modules[modKey];
+                          const activeCat = (metadata.sidebarCategories || []).find(c => (c.modules || []).includes(modKey))?.id || '';
+                          return (
+                            <Box
+                              key={modKey}
+                              display="flex"
+                              justifyContent="space-between"
+                              alignItems="center"
+                              sx={{
+                                py: 1,
+                                px: 1.5,
+                                border: '1px solid #F1F5F9',
+                                borderRadius: '8px',
+                                backgroundColor: '#F8FAFC'
+                              }}
+                            >
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Icons.Layers size={16} color="#64748B" />
+                                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px' }}>
+                                  {m.label}
+                                </Typography>
+                              </Box>
+
+                              <FormControl size="small" sx={{ minWidth: 140 }}>
+                                <Select
+                                  value={activeCat}
+                                  onChange={(e) => handleMoveSidebarModule(modKey, e.target.value)}
+                                  displayEmpty
+                                  sx={{ fontSize: '12px', fontWeight: 600, backgroundColor: 'white' }}
+                                >
+                                  <MenuItem value="" sx={{ fontSize: '12px' }}>
+                                    <em>Uncategorized</em>
+                                  </MenuItem>
+                                  {(metadata.sidebarCategories || []).map(cat => (
+                                    <MenuItem key={cat.id} value={cat.id} sx={{ fontSize: '12px' }}>
+                                      {cat.label}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Paper>
+                  </Grid>
+                </Grid>
               </CardContent>
             </Card>
           )}
