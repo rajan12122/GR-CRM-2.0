@@ -1528,6 +1528,11 @@ const DynamicForm = ({
                             />
                           </MenuItem>
                         )}
+                        {f.name === 'employeeId' && f.refModule === 'employees' && (
+                          <MenuItem value="">
+                            <em>All Employees (Notice for Everyone)</em>
+                          </MenuItem>
+                        )}
                         {options.filter(opt => {
                           if (f.refModule === 'dealers' && dealerSearch) {
                             const name = opt.name || opt.firm_name || opt.person_name || '';

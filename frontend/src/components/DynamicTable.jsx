@@ -307,7 +307,17 @@ const DynamicTable = ({
     }
 
     if (field.type === 'ref' || field.name === 'referrer_id') {
-      if (!val) return '---';
+      const val = rec[field.name];
+      if (!val) {
+        if (field.name === 'employeeId' && field.refModule === 'employees') {
+          return (
+            <span style={{ color: '#475569', fontStyle: 'italic', fontWeight: 600 }}>
+              All Employees
+            </span>
+          );
+        }
+        return '---';
+      }
       let resolvedModule = field.refModule;
       if (field.name === 'referrer_id') {
         if (String(val).startsWith('EMP-')) resolvedModule = 'employees';

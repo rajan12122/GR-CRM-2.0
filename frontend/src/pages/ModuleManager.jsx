@@ -137,6 +137,13 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
                   <Typography variant="body2" sx={{ color: '#0F172A', fontWeight: 700, fontSize: '13px' }}>
                     {f.type === 'ref' || f.type === 'multiref' || f.name === 'referrer_id' ? (() => {
                       let resolvedModule = f.refModule;
+                      if (!val && f.name === 'employeeId' && resolvedModule === 'employees' && moduleName === 'notices') {
+                        return (
+                          <span style={{ color: '#475569', fontStyle: 'italic', fontWeight: 700 }}>
+                            All Employees
+                          </span>
+                        );
+                      }
                       if (f.name === 'referrer_id') {
                         if (String(val).startsWith('EMP-')) resolvedModule = 'employees';
                         else if (String(val).startsWith('CUST-')) resolvedModule = 'customers';

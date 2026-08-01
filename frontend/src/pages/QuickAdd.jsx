@@ -550,6 +550,11 @@ const QuickAdd = () => {
                                 '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3B82F6' }
                               }}
                             >
+                              {f.name === 'employeeId' && f.refModule === 'employees' && (
+                                <MenuItem value="">
+                                  <em>All Employees (Notice for Everyone)</em>
+                                </MenuItem>
+                              )}
                               {lookups[f.refModule].map(opt => (
                                 <MenuItem key={opt.id} value={opt.id}>{opt.name} ({opt.id})</MenuItem>
                               ))}
