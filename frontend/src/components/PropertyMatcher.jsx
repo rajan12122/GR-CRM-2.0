@@ -16,7 +16,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { Home } from 'lucide-react';
 
-const PropertyMatcher = ({ variant = 'tab' }) => {
+const PropertyMatcher = ({ variant = 'tab', onPitchProperty }) => {
   const navigate = useNavigate();
   const { moduleData } = useApp();
   const properties = moduleData.properties || [];
@@ -241,7 +241,7 @@ const PropertyMatcher = ({ variant = 'tab' }) => {
                   }}
                 >
                   <Grid container spacing={isSidebar ? 1 : 2} alignItems="center">
-                    <Grid item xs={12} sm={isSidebar ? 12 : 3}>
+                    <Grid item xs={12} sm={isSidebar ? 12 : 2.5}>
                       <Typography
                         variant="subtitle2"
                         sx={{ fontWeight: 800, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline', fontSize: isSidebar ? '13px' : '14px' }}
@@ -253,19 +253,19 @@ const PropertyMatcher = ({ variant = 'tab' }) => {
                         {p.propertyName || 'Unnamed Listing'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={isSidebar ? 6 : 2.5}>
+                    <Grid item xs={6} sm={isSidebar ? 6 : 2}>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Location</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B', fontSize: isSidebar ? '11px' : '12px' }}>
                         {p.locality || '---'} {p.sector_block ? `(Sec ${p.sector_block})` : ''}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={isSidebar ? 6 : 2}>
+                    <Grid item xs={6} sm={isSidebar ? 6 : 1.5}>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Size</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B', fontSize: isSidebar ? '11px' : '12px' }}>
                         {p.size || '---'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={isSidebar ? 6 : 2.5}>
+                    <Grid item xs={6} sm={isSidebar ? 6 : 2}>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Demand / Price</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', fontSize: isSidebar ? '12px' : '14px' }}>
                         ₹{p.demand || '---'}
@@ -294,6 +294,28 @@ const PropertyMatcher = ({ variant = 'tab' }) => {
                         />
                       )}
                     </Grid>
+                    {onPitchProperty && (
+                      <Grid item xs={12} sm={isSidebar ? 12 : 2} display="flex" justifyContent={isSidebar ? 'flex-start' : 'flex-end'}>
+                        <Button 
+                          variant="contained" 
+                          size="small" 
+                          onClick={() => onPitchProperty(p.id)}
+                          sx={{ 
+                            textTransform: 'none', 
+                            fontWeight: 700, 
+                            fontSize: '11px',
+                            backgroundColor: '#2563EB',
+                            borderRadius: '8px',
+                            px: 1.5,
+                            py: 0.5,
+                            width: isSidebar ? '100%' : 'auto',
+                            mt: isSidebar ? 1 : 0
+                          }}
+                        >
+                          Pitch Property
+                        </Button>
+                      </Grid>
+                    )}
                   </Grid>
                 </Paper>
               ))}

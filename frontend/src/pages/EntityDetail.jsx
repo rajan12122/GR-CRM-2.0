@@ -212,6 +212,17 @@ const EntityDetail = () => {
   const [queryFacing, setQueryFacing] = useState('East');
   const [queryWhite, setQueryWhite] = useState('');
 
+  const handlePitchPropertyDirectly = (propertyId) => {
+    setPitchItemType('Property');
+    setPitchPropertyId(propertyId);
+    setPitchEmployeeId(record?.assignedEmployeeId || record?.employeeId || 'EMP-001');
+    setPitchPrice('');
+    setPitchRemarks('');
+    setPitchWarning('');
+    setPitchPropertyStatus('');
+    setPitchDialogOpen(true);
+  };
+
   useEffect(() => {
     if (queryDialogOpen && queryType === 'Sell Property' && record) {
       setNestedPropertyData(prev => ({
@@ -1025,7 +1036,7 @@ const EntityDetail = () => {
           {['leads', 'follow_ups', 'queries', 'wanted_properties', 'dealers', 'customers'].includes(moduleName) && (
             <Card sx={{ mt: 3, border: '1px solid #E2E8F0', borderRadius: '16px', backgroundColor: '#FFFFFF' }}>
               <CardContent sx={{ p: 3 }}>
-                <PropertyMatcher variant="sidebar" />
+                <PropertyMatcher variant="sidebar" onPitchProperty={handlePitchPropertyDirectly} />
               </CardContent>
             </Card>
           )}
@@ -1183,7 +1194,7 @@ const EntityDetail = () => {
 
             <Box sx={{ p: 3, flexGrow: 1 }}>
               {tabs[activeTab]?.label === 'Property Matcher' && (
-                <PropertyMatcher />
+                <PropertyMatcher onPitchProperty={handlePitchPropertyDirectly} />
               )}
               {/* 1. CUSTOMER TABS */}
               {moduleName === 'customers' && (
