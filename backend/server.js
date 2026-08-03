@@ -3213,13 +3213,14 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
   try {
     const data = {};
     
-    // Consolidate dynamic timeline
-    data.timeline = await generateDynamicTimeline(module, id, pool);
-
-    const remarksRes = await pool.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [module, id]);
+    // Consolidate dynamic timeline, remarks and documents in parallel
+    const [timeline, remarksRes, docsRes] = await Promise.all([
+      generateDynamicTimeline(module, id, pool),
+      pool.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [module, id]),
+      pool.query('SELECT * FROM documents WHERE "targetModule" = $1 AND "targetId" = $2', [module, id])
+    ]);
+    data.timeline = timeline;
     data.remarks = remarksRes.rows.map(r => normalizeRow('remarks', r));
-
-    const docsRes = await pool.query('SELECT * FROM documents WHERE "targetModule" = $1 AND "targetId" = $2', [module, id]);
     data.documents = docsRes.rows.map(r => normalizeRow('documents', r));
 
     if (module === 'employees') {

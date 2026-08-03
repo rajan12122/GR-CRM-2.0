@@ -27,7 +27,10 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost') && !process.env.DATABASE_URL.includes('127.0.0.1') ? {
     rejectUnauthorized: false
-  } : false
+  } : false,
+  max: 15,
+  min: 5,
+  idleTimeoutMillis: 300000 // 5 minutes
 });
 
 pool.on('error', (err) => {
@@ -143,6 +146,21 @@ async function initializeMetadata() {
 
     // Auto-create missing tables for modules in metadata
     await ensureModuleTablesExist(client);
+
+    // Pre-warm the database pool connections to eliminate TCP/TLS handshake latency on request handling
+    try {
+      const warmClients = await Promise.all([
+        pool.connect(),
+        pool.connect(),
+        pool.connect(),
+        pool.connect(),
+        pool.connect()
+      ]);
+      warmClients.forEach(c => c.release());
+      console.log('Successfully pre-warmed 5 PostgreSQL pool database connections.');
+    } catch (warmErr) {
+      console.error('Error pre-warming PostgreSQL pool database connections:', warmErr.message);
+    }
 
   } finally {
     client.release();
