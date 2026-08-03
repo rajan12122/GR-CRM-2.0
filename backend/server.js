@@ -28,6 +28,13 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET;
 
+if (!process.env.QUICK_ADD_KEY) {
+  console.error("CRITICAL CONFIGURATION ERROR: QUICK_ADD_KEY environment variable is not defined!");
+  console.error("For security reasons, the server cannot start without a configured QUICK_ADD_KEY.");
+  process.exit(1);
+}
+const QUICK_ADD_KEY = process.env.QUICK_ADD_KEY;
+
 
 // Lightweight memory-based IP rate limiter
 const ipRequests = {};
@@ -4931,7 +4938,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
     return res.status(200).json({ success: true, message: "Record added successfully." });
   }
 
-  if (key !== 'gagan_employee_intake_2026') {
+  if (key !== QUICK_ADD_KEY) {
     return res.status(403).json({ error: "Invalid access token." });
   }
 

@@ -185,7 +185,7 @@ const QuickAdd = () => {
             const dealerRes = await axios.post(`${API_BASE_URL}/public/quick-add`, {
               module: 'dealers',
               payload: nestedDealerData,
-              key: 'gagan_employee_intake_2026'
+              key: import.meta.env.VITE_QUICK_ADD_KEY
             });
             if (dealerRes.data.success) {
               finalDealerId = dealerRes.data.record.id;
@@ -201,7 +201,7 @@ const QuickAdd = () => {
               dealerId: finalDealerId,
               date: nestedPropertyData.date || new Date().toLocaleDateString('en-IN')
             },
-            key: 'gagan_employee_intake_2026'
+            key: import.meta.env.VITE_QUICK_ADD_KEY
           });
           if (propRes.data.success) {
             payload.propertyId = propRes.data.record.id;
@@ -214,7 +214,7 @@ const QuickAdd = () => {
           const projRes = await axios.post(`${API_BASE_URL}/public/quick-add`, {
             module: 'projects',
             payload: nestedProjectData,
-            key: 'gagan_employee_intake_2026'
+            key: import.meta.env.VITE_QUICK_ADD_KEY
           });
           if (projRes.data.success) {
             payload.projectId = projRes.data.record.id;
@@ -233,7 +233,7 @@ const QuickAdd = () => {
       const response = await axios.post(`${API_BASE_URL}/public/quick-add`, {
         module: selectedModule,
         payload: payload,
-        key: 'gagan_employee_intake_2026'
+        key: import.meta.env.VITE_QUICK_ADD_KEY
       });
 
       if (response.data.success) {

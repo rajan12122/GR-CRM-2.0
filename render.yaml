@@ -11,6 +11,8 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: QUICK_ADD_KEY
+        sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
@@ -29,6 +31,9 @@ services:
     rootDir: frontend
     buildCommand: npm run build
     staticPublishPath: ./dist
+    envVars:
+      - key: VITE_QUICK_ADD_KEY
+        sync: false
     routes:
       - type: rewrite
         source: /*
