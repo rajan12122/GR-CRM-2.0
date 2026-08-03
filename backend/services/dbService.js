@@ -307,10 +307,69 @@ function normalizeRow(moduleName, row) {
 }
 
 // Granular database APIs
-async function getRecords(moduleName, dbOrClient) {
+async function getRecords(moduleName, dbOrClient, options = {}) {
   const executor = getExecutor(dbOrClient);
-  const res = await executor.query(`SELECT * FROM "${moduleName}"`);
+  const { limit, offset, search } = options;
+
+  let sql = `SELECT * FROM "${moduleName}"`;
+  const queryParams = [];
+  let paramIndex = 1;
+
+  if (search) {
+    const tableCols = await getTableColumns(moduleName, executor);
+    if (tableCols.length > 0) {
+      const searchVal = `%${search}%`;
+      queryParams.push(searchVal);
+      const searchPlaceholder = `$${paramIndex++}`;
+      
+      const searchClauses = tableCols.map(col => `"${col}"::text ILIKE ${searchPlaceholder}`);
+      sql += ` WHERE (${searchClauses.join(' OR ')})`;
+    }
+  }
+
+  // Ordering to guarantee deterministic pagination results
+  sql += ` ORDER BY id ASC`;
+
+  let limitVal = limit !== undefined && limit !== null ? parseInt(limit, 10) : null;
+  let offsetVal = offset !== undefined && offset !== null ? parseInt(offset, 10) : null;
+
+  if (limitVal !== null && !isNaN(limitVal)) {
+    if (limitVal > 100) limitVal = 100;
+    if (limitVal < 1) limitVal = 1;
+    sql += ` LIMIT $${paramIndex++}`;
+    queryParams.push(limitVal);
+  }
+
+  if (offsetVal !== null && !isNaN(offsetVal)) {
+    if (offsetVal < 0) offsetVal = 0;
+    sql += ` OFFSET $${paramIndex++}`;
+    queryParams.push(offsetVal);
+  }
+
+  const res = await executor.query(sql, queryParams);
   return res.rows.map(row => normalizeRow(moduleName, row));
+}
+
+async function getRecordsCount(moduleName, dbOrClient, search) {
+  const executor = getExecutor(dbOrClient);
+  let sql = `SELECT COUNT(*) FROM "${moduleName}"`;
+  const queryParams = [];
+  let paramIndex = 1;
+
+  if (search) {
+    const tableCols = await getTableColumns(moduleName, executor);
+    if (tableCols.length > 0) {
+      const searchVal = `%${search}%`;
+      queryParams.push(searchVal);
+      const searchPlaceholder = `$${paramIndex++}`;
+      
+      const searchClauses = tableCols.map(col => `"${col}"::text ILIKE ${searchPlaceholder}`);
+      sql += ` WHERE (${searchClauses.join(' OR ')})`;
+    }
+  }
+
+  const res = await executor.query(sql, queryParams);
+  return parseInt(res.rows[0].count, 10);
 }
 
 async function getRecord(moduleName, id, dbOrClient) {
@@ -511,99 +570,6 @@ async function getIdCounters(dbOrClient) {
   return counters;
 }
 
-// Pre-load relevant tables for write transactions
-async function loadTransactionDb(client) {
-  const tables = [
-    'employees', 'customers', 'leads', 'properties', 'projects', 'site_visits',
-    'follow_ups', 'remarks', 'documents', 'dealers', 'queries', 'deals',
-    'property_pitch_history', 'dealer_calls', 'activity_logs',
-    'attendance', 'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
-    'salaries', 'reminders', 'location_logs', 'project_history', 'property_history',
-    'wanted_properties', 'dealer_meetings'
-  ];
-
-  const results = await Promise.all([
-    ...tables.map(tbl => getRecords(tbl, client)),
-    client.query('SELECT * FROM active_paths'),
-    getIdCounters(client)
-  ]);
-
-  const db = {};
-  tables.forEach((tbl, idx) => {
-    db[tbl] = results[idx];
-  });
-
-  const activePathsRes = results[results.length - 2];
-  const paths = {};
-  activePathsRes.rows.forEach(r => {
-    paths[r.employee_id] = r.path;
-  });
-  db.active_paths = paths;
-
-  db.idCounters = results[results.length - 1];
-
-  return db;
-}
-
-// Sync in-memory changes inside transaction back to PostgreSQL
-async function syncDbChangesToPostgres(dbBefore, dbAfter, client) {
-  // Sync ID counters
-  if (dbAfter.idCounters) {
-    for (const [mod, counter] of Object.entries(dbAfter.idCounters)) {
-      const oldCounter = dbBefore.idCounters?.[mod] || 0;
-      if (counter > oldCounter) {
-        await client.query(`
-          INSERT INTO id_counters (module_name, counter)
-          VALUES ($1, $2)
-          ON CONFLICT (module_name) DO UPDATE
-          SET counter = GREATEST(id_counters.counter, EXCLUDED.counter);
-        `, [mod, counter]);
-      }
-    }
-  }
-
-  // Tables to sync
-  const tables = [
-    // 'employees', 'attendance', 'location_logs', <-- Excluded in Phase 1
-    // 'customers', 'leads', 'queries', 'follow_ups', <-- Excluded in Phase 2
-    // 'property_pitch_history', <-- Excluded in Phase 2 custom addition
-    'properties', 'projects', 'site_visits', 
-    'remarks', 'documents', 'dealers', 'deals', 
-    'dealer_calls', 'activity_logs',
-    'leaves', 'sales', 'tasks', 'daily_prices', 'notices',
-    'salaries', 'reminders', 'project_history', 'property_history',
-    'wanted_properties', 'dealer_meetings'
-  ];
-
-  for (const tbl of tables) {
-    const beforeList = dbBefore[tbl] || [];
-    const afterList = dbAfter[tbl] || [];
-
-    // 1. Find added items
-    const addedItems = afterList.filter(item => !beforeList.some(b => b.id === item.id));
-    for (const item of addedItems) {
-      await insertRecord(tbl, item, client);
-    }
-
-    // 2. Find updated items
-    const updatedItems = afterList.filter(item => {
-      const beforeItem = beforeList.find(b => b.id === item.id);
-      if (!beforeItem) return false;
-      return JSON.stringify(beforeItem) !== JSON.stringify(item);
-    });
-    for (const item of updatedItems) {
-      const { id, created_at, updated_at, ...data } = item;
-      await updateRecord(tbl, id, data, client);
-    }
-
-    // 3. Find deleted items
-    const deletedItems = beforeList.filter(item => !afterList.some(a => a.id === item.id));
-    for (const item of deletedItems) {
-      await deleteRecord(tbl, item.id, client);
-    }
-  }
-}
-
 module.exports = {
   pool,
   metadataPath,
@@ -616,11 +582,10 @@ module.exports = {
   
   // Granular functions
   getRecords,
+  getRecordsCount,
   getRecord,
   insertRecord,
   updateRecord,
   deleteRecord,
-  getIdCounters,
-  loadTransactionDb,
-  syncDbChangesToPostgres
+  getIdCounters
 };
