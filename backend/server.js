@@ -4901,14 +4901,14 @@ async function loadSearchDb() {
     pool.query("SELECT id, name FROM employees WHERE status = 'Active'"),
     pool.query('SELECT id, name, phone, email, "assignedEmployeeId" FROM customers'),
     pool.query('SELECT id, name, phone, email, "assignedEmployeeId", status FROM leads'),
-    pool.query('SELECT id, name, "propertyName", status, current_owner_id FROM properties'),
+    pool.query('SELECT id, "propertyName", status, "current_owner_id" FROM properties'),
     pool.query('SELECT id, name FROM projects'),
     pool.query('SELECT id, "customerId", "assignedEmployeeId", date, status, stage FROM queries'),
     pool.query('SELECT id, "customerId", "sellerCustomerId", "propertyId", "employeeId", status, "registrationDate" FROM deals'),
     pool.query('SELECT id, "customerId", "queryId", "employeeId", date, time, status, "pipelineAction" FROM follow_ups'),
     pool.query('SELECT id, "customerId", "propertyId", "employeeId", date, time, result FROM site_visits'),
     pool.query('SELECT id, "customerId", "propertyId", "employeeId" FROM property_pitch_history'),
-    pool.query('SELECT id, name FROM dealers'),
+    pool.query('SELECT id, person_name, firm_name FROM dealers'),
     pool.query('SELECT id, "employeeId" FROM salaries')
   ]);
 
