@@ -28,6 +28,25 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET;
 
+
+// Lightweight memory-based IP rate limiter
+const ipRequests = {};
+function ipRateLimiter(windowMs, maxRequests) {
+  return (req, res, next) => {
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const now = Date.now();
+    if (!ipRequests[ip]) {
+      ipRequests[ip] = [];
+    }
+    ipRequests[ip] = ipRequests[ip].filter(time => now - time < windowMs);
+    if (ipRequests[ip].length >= maxRequests) {
+      return res.status(429).json({ success: false, message: 'Too many requests from this network. Please try again in 15 minutes.' });
+    }
+    ipRequests[ip].push(now);
+    next();
+  };
+}
+
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
@@ -258,7 +277,7 @@ function checkPermission(moduleName, action) {
 
 // --- AUTHENTICATION ROUTES ---
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password required.' });
@@ -4733,6 +4752,13 @@ app.get('/api/public/metadata', (req, res) => {
 app.get('/api/public/lookup/:module', (req, res) => {
   try {
     const { module } = req.params;
+
+    // Security Allowlist: only allow lookup for public-facing/customer-facing modules
+    const allowedLookupModules = ['dealers', 'customers', 'projects', 'properties'];
+    if (!allowedLookupModules.includes(module)) {
+      return res.status(403).json({ error: "Access denied. Public lookup not allowed for this module." });
+    }
+
     const db = readDb();
     if (!db[module] || !Array.isArray(db[module])) {
       return res.json([]);
@@ -4747,24 +4773,6 @@ app.get('/api/public/lookup/:module', (req, res) => {
     res.status(500).json({ error: "Failed to load lookup list." });
   }
 });
-
-// Lightweight memory-based IP rate limiter
-const ipRequests = {};
-function ipRateLimiter(windowMs, maxRequests) {
-  return (req, res, next) => {
-    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const now = Date.now();
-    if (!ipRequests[ip]) {
-      ipRequests[ip] = [];
-    }
-    ipRequests[ip] = ipRequests[ip].filter(time => now - time < windowMs);
-    if (ipRequests[ip].length >= maxRequests) {
-      return res.status(429).json({ success: false, message: 'Too many requests from this network. Please try again in 15 minutes.' });
-    }
-    ipRequests[ip].push(now);
-    next();
-  };
-}
 
 // Public Customer Intake Form Submission (Rate-limited, validated, and anti-spam checked)
 app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
