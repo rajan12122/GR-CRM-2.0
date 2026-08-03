@@ -56,7 +56,33 @@ function ipRateLimiter(windowMs, maxRequests) {
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
-app.use(cors());
+
+const allowedOrigins = [
+  'https://gr-crm-frontend.onrender.com'
+];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow same-origin, curl, or mobile app requests without origin headers
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      /^http:\/\/localhost(:\d+)?$/.test(origin) || 
+                      /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) || 
+                      origin.startsWith('capacitor://') || 
+                      origin.startsWith('chrome-extension://');
+                      
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Blocked by CORS policy'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
