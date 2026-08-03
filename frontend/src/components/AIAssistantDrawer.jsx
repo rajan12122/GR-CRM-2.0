@@ -22,6 +22,7 @@ import { useApp, API_BASE_URL } from '../context/AppContext';
 
 export default function AIAssistantDrawer() {
   const navigate = useNavigate();
+  const { logout } = useApp();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hello! I am your Gagan Realtech AI Copilot. How can I help you manage your sales, properties, or leads today?' }
@@ -312,6 +313,10 @@ export default function AIAssistantDrawer() {
       });
 
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          logout();
+          return;
+        }
         throw new Error(`HTTP error! Status: ${res.status}`);
       }
 

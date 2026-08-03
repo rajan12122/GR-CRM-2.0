@@ -50,7 +50,8 @@ const Dashboard = () => {
     hasPermission,
     updateRecord,
     createRecord,
-    logEmployeeLocation
+    logEmployeeLocation,
+    logout
   } = useApp();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -87,6 +88,10 @@ const Dashboard = () => {
           },
           body: JSON.stringify({ type: aiBriefingType })
         });
+        if (res.status === 401 || res.status === 403) {
+          logout();
+          return;
+        }
         const data = await res.json();
         setAiBriefing(data);
       } catch (e) {
@@ -111,6 +116,10 @@ const Dashboard = () => {
           },
           body: JSON.stringify({})
         });
+        if (res.status === 401 || res.status === 403) {
+          logout();
+          return;
+        }
         const data = await res.json();
         if (data && data.error) {
           setAiInsightsError(data.error);

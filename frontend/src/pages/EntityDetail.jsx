@@ -92,7 +92,8 @@ const EntityDetail = () => {
     createRemark, 
     uploadDocument,
     deleteRecord,
-    loadingData 
+    loadingData,
+    logout
   } = useApp();
 
   const [record, setRecord] = useState(null);
@@ -634,6 +635,10 @@ const EntityDetail = () => {
             },
             body: JSON.stringify({ customerId: id })
           });
+          if (res.status === 401 || res.status === 403) {
+            logout();
+            return;
+          }
           const data = await res.json();
           setAiSummary(data.summary || 'Insufficient CRM data available.');
         } catch (e) {
@@ -655,6 +660,10 @@ const EntityDetail = () => {
             },
             body: JSON.stringify({ customerId: id })
           });
+          if (res.status === 401 || res.status === 403) {
+            logout();
+            return;
+          }
           const data = await res.json();
           setAiScore(data.score || 0);
           setAiLabel(data.label || 'Cold');
@@ -690,6 +699,10 @@ const EntityDetail = () => {
               projectName: whatsappTemplateType
             })
           });
+          if (res.status === 401 || res.status === 403) {
+            logout();
+            return;
+          }
           const data = await res.json();
           if (aiContentType === 'email') {
             setAiContent(`Subject: ${data.subject}\n\n${data.body}`);
