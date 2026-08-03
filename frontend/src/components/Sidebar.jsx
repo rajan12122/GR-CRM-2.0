@@ -27,10 +27,11 @@ const DRAWER_WIDTH = 260;
 const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const { metadata, logout, user, hasPermission } = useApp();
   const navigate = useNavigate();
-  const [collapsedCategories, setCollapsedCategories] = React.useState({});
+  const location = useLocation();
+  const [expandedCategories, setExpandedCategories] = React.useState({});
 
   const toggleCategory = (catId) => {
-    setCollapsedCategories(prev => ({
+    setExpandedCategories(prev => ({
       ...prev,
       [catId]: !prev[catId]
     }));
@@ -94,6 +95,21 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const isModuleActive = (modulePath) => {
     return activePath === modulePath || activePath.startsWith(modulePath + '/');
   };
+
+  // Auto-expand category containing the active module
+  React.useEffect(() => {
+    if (groupedModules && groupedModules.length > 0) {
+      const activeCat = groupedModules.find(group => 
+        group.modules.some(mod => isModuleActive(mod.path))
+      );
+      if (activeCat) {
+        setExpandedCategories(prev => ({
+          ...prev,
+          [activeCat.id]: true
+        }));
+      }
+    }
+  }, [location.pathname, metadata]);
 
   const handleNavClick = (path) => {
     navigate(path);
@@ -183,13 +199,13 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
               >
                 {group.label}
               </Typography>
-              {collapsedCategories[group.id] ? (
-                <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
-              ) : (
+              {expandedCategories[group.id] ? (
                 <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
+              ) : (
+                <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
               )}
             </Box>
-            <Collapse in={!collapsedCategories[group.id]} timeout="auto" unmountOnExit>
+            <Collapse in={!!expandedCategories[group.id]} timeout="auto" unmountOnExit>
               <List sx={{ px: 1.5, py: 0 }}>
                 {group.modules.map((mod) => (
                   <ListItem key={mod.id} disablePadding sx={{ mb: 0.5 }}>
