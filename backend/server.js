@@ -3318,7 +3318,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           pool.query('SELECT * FROM sales WHERE "propertyId" = $1', [id]),
           pool.query('SELECT * FROM deals WHERE "propertyId" = $1', [id]),
           pool.query('SELECT * FROM property_pitch_history WHERE "propertyId" = $1', [id]),
-          pool.query('SELECT * FROM property_history WHERE "propertyId" = $1', [id])
+          pool.query('SELECT * FROM property_history WHERE "property_id" = $1', [id])
         ]);
 
         const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
@@ -3459,7 +3459,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
 
       const [pitches, projHistory] = await Promise.all([
         pool.query('SELECT * FROM property_pitch_history WHERE "propertyId" = $1', [id]),
-        pool.query('SELECT * FROM project_history WHERE "projectId" = $1', [id])
+        pool.query('SELECT * FROM project_history WHERE "project_id" = $1', [id])
       ]);
 
       const pts = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
