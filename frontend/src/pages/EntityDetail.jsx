@@ -526,26 +526,31 @@ const EntityDetail = () => {
 
   const loadData = async () => {
     setLoading(true);
-    // Fetch master modules list to match details
-    const moduleRecords = await fetchModuleData(moduleName);
-    const item = moduleRecords.find(r => String(r.id) === String(id));
-    setRecord(item);
+    try {
+      // Fetch master modules list to match details
+      const moduleRecords = await fetchModuleData(moduleName);
+      const item = moduleRecords.find(r => String(r.id) === String(id));
+      setRecord(item);
 
-    if (item) {
-      const rels = await fetchEntity360(moduleName, id);
-      setConnections(rels);
-      
-      // Fetch pitch lookup dependencies
-      await Promise.all([
-        fetchModuleData('properties').catch(() => {}),
-        fetchModuleData('projects').catch(() => {}),
-        fetchModuleData('dealers').catch(() => {}),
-        fetchModuleData('employees').catch(() => {}),
-        fetchModuleData('customers').catch(() => {}),
-        fetchModuleData('leads').catch(() => {})
-      ]);
+      if (item) {
+        const rels = await fetchEntity360(moduleName, id);
+        setConnections(rels);
+        
+        // Fetch pitch lookup dependencies
+        await Promise.all([
+          fetchModuleData('properties').catch(() => {}),
+          fetchModuleData('projects').catch(() => {}),
+          fetchModuleData('dealers').catch(() => {}),
+          fetchModuleData('employees').catch(() => {}),
+          fetchModuleData('customers').catch(() => {}),
+          fetchModuleData('leads').catch(() => {})
+        ]);
+      }
+    } catch (err) {
+      console.error('Error loading entity detail page data:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
