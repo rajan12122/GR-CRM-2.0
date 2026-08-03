@@ -116,6 +116,19 @@ const LeadNotificationListener = () => {
         } catch (err) { console.error(err); }
       });
 
+      es.addEventListener('reminder', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          showToast(`🔔 ${data.title}: ${data.message}`);
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(data.title, {
+              body: data.message,
+              icon: '/logo192.png'
+            });
+          }
+        } catch (err) { console.error(err); }
+      });
+
       es.addEventListener('visit-assigned', (e) => {
         try {
           const data = JSON.parse(e.data);

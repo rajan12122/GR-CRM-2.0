@@ -170,6 +170,35 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           </ListItem>
         </List>
 
+        {/* Workspace Link */}
+        <List sx={{ px: 1.5, py: 0 }}>
+          <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              onClick={() => handleNavClick('/workspace')}
+              selected={activePath === '/workspace'}
+              sx={{
+                borderRadius: '8px',
+                py: 1.2,
+                px: 2,
+                backgroundColor: activePath === '/workspace' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                color: activePath === '/workspace' ? '#3B82F6' : '#94A3B8',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: '#FFFFFF'
+                }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                <Icons.Briefcase size={20} />
+              </ListItemIcon>
+              <ListItemText 
+                primary="My Workspace" 
+                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+              />
+            </ListItemButton>
+          </ListItem>
+        </List>
+
         {/* Grouped Dynamic Schema Modules Links */}
         {groupedModules.map((group) => (
           <React.Fragment key={group.id}>

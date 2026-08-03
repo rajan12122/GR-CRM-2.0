@@ -23,6 +23,7 @@ import PublicIntake from './pages/PublicIntake';
 import QuickAdd from './pages/QuickAdd';
 import LeadNotificationListener from './components/LeadNotificationListener';
 import Salary from './pages/Salary';
+import MyWorkspace from './pages/MyWorkspace';
 
 import AppUpdater from './components/AppUpdater';
 import AIAssistantDrawer from './components/AIAssistantDrawer';
@@ -66,6 +67,13 @@ const MainLayout = () => {
   const isMobile = useMediaQuery('(max-width:900px)');
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Request notification permissions
+  React.useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   // Request location permission on startup for native mobile app
   React.useEffect(() => {
@@ -165,6 +173,7 @@ const MainLayout = () => {
           <PullToRefresh>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/workspace" element={<MyWorkspace />} />
               <Route path="/quick-add" element={<QuickAdd />} />
               <Route path="/module/attendance" element={<ModuleRouteGuard element={<Attendance />} moduleName="attendance" />} />
               <Route path="/module/salary" element={<ModuleRouteGuard element={<Salary />} moduleName="salaries" />} />

@@ -65,6 +65,19 @@ const Dashboard = () => {
   const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
   const [aiInsightsError, setAiInsightsError] = useState(null);
 
+  // Workspace Todos
+  const [todos, setTodos] = useState([]);
+
+  useEffect(() => {
+    if (token) {
+      axios.get(`${API_BASE_URL}/workspace/todos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => setTodos(res.data))
+      .catch(err => console.error('Error fetching dashboard todos:', err));
+    }
+  }, [token]);
+
   // Attendance shift timer states
   const [elapsedTimeStr, setElapsedTimeStr] = useState('00:00:00');
   const [timerStatus, setTimerStatus] = useState('Not Checked In');
@@ -703,6 +716,83 @@ const Dashboard = () => {
             </Card>
           </Grid>
         ))}
+      </Grid>
+
+      {/* My To-Do Tasks Widget */}
+      <Grid container spacing={3} sx={{ mb: 4.5 }}>
+        <Grid item xs={12}>
+          <Card 
+            sx={{ 
+              border: '1px solid #E2E8F0', 
+              borderRadius: '16px',
+              boxShadow: 'none',
+              backgroundColor: '#FFFFFF',
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2.5}>
+                <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins', color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Icons.CheckSquare size={20} color="#2563EB" />
+                  My To-Do Tasks
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={() => navigate('/workspace')}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#E2E8F0', color: '#64748B' }}
+                >
+                  Manage Planner
+                </Button>
+              </Box>
+              <Grid container spacing={2}>
+                {['Today', 'Overdue', 'Upcoming'].map(filter => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  let filteredList = [];
+                  if (filter === 'Today') {
+                    filteredList = todos.filter(t => t.status === 'Pending' && t.dueDate === todayStr);
+                  } else if (filter === 'Overdue') {
+                    filteredList = todos.filter(t => t.status === 'Pending' && t.dueDate < todayStr);
+                  } else {
+                    filteredList = todos.filter(t => t.status === 'Pending' && t.dueDate > todayStr);
+                  }
+
+                  return (
+                    <Grid item xs={12} md={4} key={filter}>
+                      <Paper sx={{ p: 2, border: '1px solid #F1F5F9', backgroundColor: '#F8FAFC', borderRadius: '12px', boxShadow: 'none', height: '100%', minHeight: 180 }}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: filter === 'Overdue' ? '#EF4444' : '#1E293B' }}>
+                            {filter} ({filteredList.length})
+                          </Typography>
+                          <Chip 
+                            label={filter} 
+                            size="small" 
+                            color={filter === 'Overdue' ? 'error' : filter === 'Today' ? 'primary' : 'default'} 
+                            sx={{ height: 16, fontSize: '9px', fontWeight: 700 }}
+                          />
+                        </Box>
+                        <List sx={{ p: 0, maxHeight: 150, overflowY: 'auto' }}>
+                          {filteredList.map((t, idx) => (
+                            <ListItem key={idx} sx={{ p: 0, mb: 1, '&:last-child': { mb: 0 } }}>
+                              <ListItemText 
+                                primary={t.title} 
+                                secondary={`${t.dueTime || ''} | Priority: ${t.priority}`}
+                                primaryTypographyProps={{ fontWeight: 700, fontSize: '12px', color: '#1E293B' }}
+                                secondaryTypographyProps={{ fontSize: '10px' }}
+                              />
+                            </ListItem>
+                          ))}
+                          {filteredList.length === 0 && (
+                            <Typography variant="body2" sx={{ color: '#94A3B8', fontSize: '12px', py: 2, textAlign: 'center' }}>No tasks.</Typography>
+                          )}
+                        </List>
+                      </Paper>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
       {/* Today's Wanted Requirements Card */}

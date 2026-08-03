@@ -319,6 +319,414 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
   }
 });
 
+// --- WORKSPACE CUSTOM API ENDPOINTS ---
+
+// 1. To-Dos Endpoints
+app.get('/api/workspace/todos', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    let query = 'SELECT * FROM todos WHERE "assignedTo" = $1 OR personal = true';
+    let params = [userId];
+    
+    // If Admin, let them see todos
+    if (role === 'Admin') {
+      query = 'SELECT * FROM todos';
+      params = [];
+    }
+    
+    const dbRes = await pool.query(query, params);
+    res.json(dbRes.rows);
+  } catch (err) {
+    console.error('Error fetching workspace todos:', err);
+    res.status(500).json({ message: 'Error fetching to-dos: ' + err.message });
+  }
+});
+
+app.post('/api/workspace/todos', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { title, dueDate, dueTime, priority, personal, notes } = req.body;
+    
+    const todoId = 'TODO-PERS-' + Date.now();
+    const result = await pool.query(`
+      INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+      RETURNING *
+    `, [todoId, title, userId, dueDate, dueTime || '12:00', priority || 'Medium', 'Pending', personal !== false, 'Pending', notes || '']);
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error creating workspace todo:', err);
+    res.status(500).json({ message: 'Error creating to-do: ' + err.message });
+  }
+});
+
+app.put('/api/workspace/todos/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
+    const { title, dueDate, dueTime, priority, status, notes } = req.body;
+    
+    // Check ownership
+    const checkRes = await pool.query('SELECT * FROM todos WHERE id = $1', [id]);
+    if (!checkRes.rows[0]) {
+      return res.status(404).json({ message: 'To-do not found' });
+    }
+    if (role !== 'Admin' && checkRes.rows[0].assignedTo !== userId) {
+      return res.status(403).json({ message: 'Access denied to this to-do' });
+    }
+    
+    const updated = await updateRecord('todos', id, { title, dueDate, dueTime, priority, status, notes });
+    res.json(updated);
+  } catch (err) {
+    console.error('Error updating workspace todo:', err);
+    res.status(500).json({ message: 'Error updating to-do: ' + err.message });
+  }
+});
+
+app.delete('/api/workspace/todos/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
+    
+    const checkRes = await pool.query('SELECT * FROM todos WHERE id = $1', [id]);
+    if (!checkRes.rows[0]) {
+      return res.status(404).json({ message: 'To-do not found' });
+    }
+    if (role !== 'Admin' && checkRes.rows[0].assignedTo !== userId) {
+      return res.status(403).json({ message: 'Access denied to delete this to-do' });
+    }
+    
+    await pool.query('DELETE FROM todos WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Deleted to-do successfully' });
+  } catch (err) {
+    console.error('Error deleting workspace todo:', err);
+    res.status(500).json({ message: 'Error deleting to-do' });
+  }
+});
+
+// 2. Sticky Notes Endpoints
+app.get('/api/workspace/notes', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { linkedModule, linkedId } = req.query;
+    
+    let query = 'SELECT * FROM sticky_notes WHERE "employeeId" = $1';
+    let params = [userId];
+    
+    if (linkedModule && linkedId) {
+      query = 'SELECT * FROM sticky_notes WHERE ("employeeId" = $1 OR shared = true) AND "linkedModule" = $2 AND "linkedId" = $3';
+      params = [userId, linkedModule, linkedId];
+    }
+    
+    const dbRes = await pool.query(query, params);
+    res.json(dbRes.rows);
+  } catch (err) {
+    console.error('Error fetching workspace notes:', err);
+    res.status(500).json({ message: 'Error fetching notes: ' + err.message });
+  }
+});
+
+app.post('/api/workspace/notes', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { content, color, pinned, linkedModule, linkedId, reminderDate, reminderTime, shared } = req.body;
+    
+    const noteId = 'NOTE-' + Date.now();
+    const result = await pool.query(`
+      INSERT INTO sticky_notes (id, "employeeId", content, color, pinned, "linkedModule", "linkedId", "reminderDate", "reminderTime", "reminderStatus", shared, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+      RETURNING *
+    `, [noteId, userId, content || '', color || 'Yellow', !!pinned, linkedModule || null, linkedId || null, reminderDate || null, reminderTime || null, 'Pending', !!shared]);
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error creating sticky note:', err);
+    res.status(500).json({ message: 'Error creating note: ' + err.message });
+  }
+});
+
+app.put('/api/workspace/notes/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
+    const { content, color, pinned, linkedModule, linkedId, reminderDate, reminderTime, shared } = req.body;
+    
+    const checkRes = await pool.query('SELECT * FROM sticky_notes WHERE id = $1', [id]);
+    if (!checkRes.rows[0]) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+    if (role !== 'Admin' && checkRes.rows[0].employeeId !== userId) {
+      return res.status(403).json({ message: 'Access denied to this note' });
+    }
+    
+    const updated = await updateRecord('sticky_notes', id, { content, color, pinned, linkedModule, linkedId, reminderDate, reminderTime, shared });
+    res.json(updated);
+  } catch (err) {
+    console.error('Error updating sticky note:', err);
+    res.status(500).json({ message: 'Error updating note: ' + err.message });
+  }
+});
+
+app.delete('/api/workspace/notes/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { id } = req.params;
+    
+    const checkRes = await pool.query('SELECT * FROM sticky_notes WHERE id = $1', [id]);
+    if (!checkRes.rows[0]) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+    if (role !== 'Admin' && checkRes.rows[0].employeeId !== userId) {
+      return res.status(403).json({ message: 'Access denied to this note' });
+    }
+    
+    await pool.query('DELETE FROM sticky_notes WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Note deleted' });
+  } catch (err) {
+    console.error('Error deleting sticky note:', err);
+    res.status(500).json({ message: 'Error deleting note' });
+  }
+});
+
+// 3. Pinned Shortcuts Endpoints
+app.get('/api/workspace/shortcuts', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const dbRes = await pool.query('SELECT * FROM user_shortcuts WHERE "employeeId" = $1', [userId]);
+    res.json(dbRes.rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching shortcuts' });
+  }
+});
+
+app.post('/api/workspace/shortcuts', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { moduleName, recordId, label } = req.body;
+    
+    // Check duplicate
+    const checkDup = await pool.query('SELECT id FROM user_shortcuts WHERE "employeeId" = $1 AND "moduleName" = $2 AND "recordId" = $3', [userId, moduleName, recordId]);
+    if (checkDup.rows[0]) {
+      return res.json({ success: true, message: 'Already shortcutted' });
+    }
+    
+    const shortId = 'SHORT-' + Date.now();
+    const result = await pool.query(`
+      INSERT INTO user_shortcuts (id, "employeeId", "moduleName", "recordId", label, created_at)
+      VALUES ($1, $2, $3, $4, $5, now())
+      RETURNING *
+    `, [shortId, userId, moduleName, recordId, label]);
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Error pinning shortcut' });
+  }
+});
+
+app.delete('/api/workspace/shortcuts/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { id } = req.params;
+    await pool.query('DELETE FROM user_shortcuts WHERE id = $1 AND "employeeId" = $2', [id, userId]);
+    res.json({ success: true, message: 'Shortcut removed' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting shortcut' });
+  }
+});
+
+// 4. Form Drafts Endpoints
+app.get('/api/workspace/drafts/:moduleName', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { moduleName } = req.params;
+    const dbRes = await pool.query('SELECT * FROM draft_forms WHERE "employeeId" = $1 AND "moduleName" = $2', [userId, moduleName]);
+    res.json(dbRes.rows[0] ? JSON.parse(dbRes.rows[0].formData) : {});
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching drafts' });
+  }
+});
+
+app.post('/api/workspace/drafts', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { moduleName, formData } = req.body;
+    
+    const checkEx = await pool.query('SELECT id FROM draft_forms WHERE "employeeId" = $1 AND "moduleName" = $2', [userId, moduleName]);
+    if (checkEx.rows[0]) {
+      await pool.query('UPDATE draft_forms SET "formData" = $1, updated_at = now() WHERE id = $2', [JSON.stringify(formData), checkEx.rows[0].id]);
+    } else {
+      const draftId = 'DRAFT-' + Date.now();
+      await pool.query(`
+        INSERT INTO draft_forms (id, "employeeId", "moduleName", "formData", created_at)
+        VALUES ($1, $2, $3, $4, now())
+      `, [draftId, userId, moduleName, JSON.stringify(formData)]);
+    }
+    res.json({ success: true, message: 'Draft saved' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error saving draft' });
+  }
+});
+
+// 5. Personal Documents Vault Endpoints
+app.get('/api/workspace/documents', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const dbRes = await pool.query('SELECT * FROM personal_documents WHERE "employeeId" = $1', [userId]);
+    res.json(dbRes.rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching vault files' });
+  }
+});
+
+app.post('/api/workspace/documents', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { name, fileUrl, expiryDate } = req.body;
+    
+    const docId = 'PERS-DOC-' + Date.now();
+    const result = await pool.query(`
+      INSERT INTO personal_documents (id, "employeeId", name, "fileUrl", "expiryDate", created_at)
+      VALUES ($1, $2, $3, $4, $5, now())
+      RETURNING *
+    `, [docId, userId, name, fileUrl || '', expiryDate || null]);
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Error uploading personal document' });
+  }
+});
+
+app.delete('/api/workspace/documents/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { id } = req.params;
+    await pool.query('DELETE FROM personal_documents WHERE id = $1 AND "employeeId" = $2', [id, userId]);
+    res.json({ success: true, message: 'Document deleted from vault' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting vault document' });
+  }
+});
+
+// --- WORKSPACE SCHEDULER BACKUP TIMER ---
+let lastSummaryDate = '';
+let lastEodDate = '';
+
+async function runSchedulerTick() {
+  const client = await pool.connect();
+  try {
+    const todayDateStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const currentHour = now.getHours();
+
+    // 1. Timed Reminders (site visits and follow ups) - 30 minutes before
+    const dueVisits = await client.query(`
+      SELECT * FROM todos 
+      WHERE status = 'Pending' 
+        AND "reminderStatus" = 'Pending' 
+        AND "dueDate" = $1
+    `, [todayDateStr]);
+
+    for (const todo of dueVisits.rows) {
+      if (todo.dueTime) {
+        const [tHour, tMinute] = todo.dueTime.split(':').map(Number);
+        const todoTime = new Date();
+        todoTime.setHours(tHour, tMinute, 0, 0);
+
+        const diffMs = todoTime.getTime() - now.getTime();
+        const diffMins = Math.round(diffMs / (60 * 1000));
+
+        if (diffMins > 0 && diffMins <= 30) {
+          console.log(`[Scheduler] Dispatching 30-min timed reminder to ${todo.assignedTo} for task: ${todo.title}`);
+          notifyUser(todo.assignedTo, 'reminder', {
+            title: todo.title,
+            message: `You have a scheduled activity starting in ${diffMins} minutes at ${todo.dueTime}!`
+          });
+          await client.query('UPDATE todos SET "reminderStatus" = $1, updated_at = now() WHERE id = $2', ['Reminded', todo.id]);
+        }
+      }
+    }
+
+    // 2. Daily work summary at 9:00 AM
+    if (currentHour === 9 && lastSummaryDate !== todayDateStr) {
+      console.log(`[Scheduler] Running 9:00 AM daily planner summary...`);
+      const emps = await client.query('SELECT id FROM employees');
+      for (const emp of emps.rows) {
+        const stats = await client.query(`
+          SELECT COUNT(*) as count FROM todos 
+          WHERE "assignedTo" = $1 
+            AND status = 'Pending' 
+            AND ("dueDate" <= $2 OR "dueDate" IS NULL)
+        `, [emp.id, todayDateStr]);
+
+        const count = parseInt(stats.rows[0].count, 10);
+        if (count > 0) {
+          notifyUser(emp.id, 'reminder', {
+            title: `📋 Daily Planner Summary`,
+            message: `Good morning! You have ${count} pending or overdue tasks scheduled for today. Tap to check your planner timeline!`
+          });
+        }
+      }
+      lastSummaryDate = todayDateStr;
+    }
+
+    // 3. Overdue alert at the end of the day (6:00 PM / 18:00)
+    if (currentHour === 18 && lastEodDate !== todayDateStr) {
+      console.log(`[Scheduler] Running 6:00 PM overdue alert ticker...`);
+      const emps = await client.query('SELECT id FROM employees');
+      for (const emp of emps.rows) {
+        const stats = await client.query(`
+          SELECT COUNT(*) as count FROM todos 
+          WHERE "assignedTo" = $1 
+            AND status = 'Pending' 
+            AND "dueDate" < $2
+        `, [emp.id, todayDateStr]);
+
+        const count = parseInt(stats.rows[0].count, 10);
+        if (count > 0) {
+          notifyUser(emp.id, 'reminder', {
+            title: `⚠️ Overdue Tasks Alert`,
+            message: `You have ${count} overdue tasks remaining at the end of the day. Please log progress or reschedule.`
+          });
+        }
+      }
+      lastEodDate = todayDateStr;
+    }
+
+    // 4. Manager Escalation (Overdue high/urgent follow-up for 24-48 hours)
+    const overdueEscalations = await client.query(`
+      SELECT * FROM todos 
+      WHERE status = 'Pending' 
+        AND ("priority" = 'High' OR "priority" = 'Urgent')
+        AND "dueDate" < $1
+    `, [todayDateStr]);
+
+    for (const todo of overdueEscalations.rows) {
+      const due = new Date(todo.dueDate);
+      const diffHrs = Math.floor((now.getTime() - due.getTime()) / (60 * 60 * 1000));
+      const isUrgent = todo.priority === 'Urgent';
+
+      if ((isUrgent && diffHrs >= 24) || (!isUrgent && diffHrs >= 48)) {
+        const empRes = await client.query('SELECT name FROM employees WHERE id = $1', [todo.assignedTo]);
+        const empName = empRes.rows[0]?.name || 'Employee';
+
+        console.log(`[Scheduler] Escalating overdue todo: ${todo.title} by ${empName} to Admin/Manager`);
+        notifyUser('EMP-001', 'reminder', {
+          title: `🚨 OVERDUE ESCALATION: ${empName}`,
+          message: `Task "${todo.title}" has been overdue for ${diffHrs} hours! Priority: ${todo.priority}.`
+        });
+      }
+    }
+
+  } catch (err) {
+    console.error('Scheduler tick error:', err);
+  } finally {
+    client.release();
+  }
+}
+
+setInterval(runSchedulerTick, 60 * 1000);
+
 // --- METADATA ROUTES (Schema changes) ---
 
 app.get('/api/metadata', authenticateToken, (req, res) => {

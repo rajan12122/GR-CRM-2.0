@@ -569,7 +569,15 @@ async function insertRecord(moduleName, data, dbOrClient) {
   const values = coerceRecordValues(moduleName, coercedData, columns);
 
   const res = await executor.query(sql, values);
-  return res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
+  const inserted = res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
+  if (inserted) {
+    try {
+      await handleTodoTriggers(moduleName, inserted, executor, 'insert');
+    } catch (e) {
+      console.error('Todo trigger error:', e);
+    }
+  }
+  return inserted;
 }
 
 async function updateRecord(moduleName, id, data, dbOrClient) {
@@ -600,7 +608,15 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
   const values = [id, ...coerceRecordValues(moduleName, coercedData, columns)];
 
   const res = await executor.query(sql, values);
-  return res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
+  const updated = res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
+  if (updated) {
+    try {
+      await handleTodoTriggers(moduleName, updated, executor, 'update');
+    } catch (e) {
+      console.error('Todo trigger error:', e);
+    }
+  }
+  return updated;
 }
 
 async function deleteRecord(moduleName, id, dbOrClient) {
@@ -689,6 +705,81 @@ async function ensurePerformanceIndexes() {
   try {
     console.log('Ensuring performance indexes exist in PostgreSQL...');
     
+    // Create workspace tables
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS todos (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        "assignedTo" TEXT,
+        "dueDate" TEXT,
+        "dueTime" TEXT,
+        priority TEXT,
+        status TEXT DEFAULT 'Pending',
+        personal BOOLEAN DEFAULT false,
+        "reminderStatus" TEXT DEFAULT 'Pending',
+        notes TEXT,
+        "linkedModule" TEXT,
+        "linkedId" TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sticky_notes (
+        id TEXT PRIMARY KEY,
+        "employeeId" TEXT,
+        content TEXT,
+        color TEXT DEFAULT 'Yellow',
+        pinned BOOLEAN DEFAULT false,
+        "linkedModule" TEXT,
+        "linkedId" TEXT,
+        "reminderDate" TEXT,
+        "reminderTime" TEXT,
+        "reminderStatus" TEXT DEFAULT 'Pending',
+        shared BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS personal_documents (
+        id TEXT PRIMARY KEY,
+        "employeeId" TEXT,
+        name TEXT,
+        "fileUrl" TEXT,
+        "expiryDate" TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_shortcuts (
+        id TEXT PRIMARY KEY,
+        "employeeId" TEXT,
+        "moduleName" TEXT,
+        "recordId" TEXT,
+        label TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS draft_forms (
+        id TEXT PRIMARY KEY,
+        "employeeId" TEXT,
+        "moduleName" TEXT,
+        "formData" TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      )
+    `);
+
+    // Alter documents to add expiry_date column
+    await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS expiry_date TEXT');
+
     // Create indexes for remarks
     await client.query('CREATE INDEX IF NOT EXISTS idx_remarks_target ON remarks ("targetModule", "targetId")');
     
@@ -725,6 +816,154 @@ async function ensurePerformanceIndexes() {
     console.error('Error ensuring performance indexes:', err.message);
   } finally {
     client.release();
+  }
+}
+
+async function handleTodoTriggers(moduleName, record, client, action) {
+  // Prevent infinite loops if we are modifying todos itself
+  if (moduleName === 'todos') {
+    // Bidirectional sync: if employee manually completes a todo, auto-complete linked follow_ups/site_visits/tasks
+    if (record.status === 'Completed' && record.linkedModule && record.linkedId) {
+      const lm = record.linkedModule;
+      const lid = record.linkedId;
+      console.log(`[Todo Trigger] Todo completed. Syncing status back to linked ${lm} (${lid})`);
+      if (lm === 'follow_ups') {
+        await client.query('UPDATE follow_ups SET status = $1, updated_at = now() WHERE id = $2', ['Completed', lid]);
+      } else if (lm === 'site_visits') {
+        await client.query('UPDATE site_visits SET result = $1, updated_at = now() WHERE id = $2', ['Interested', lid]);
+      } else if (lm === 'tasks') {
+        await client.query('UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2', ['Completed', lid]);
+      } else if (lm === 'leads') {
+        await client.query('UPDATE leads SET status = $1, updated_at = now() WHERE id = $2', ['In-Progress', lid]);
+      }
+    }
+    return;
+  }
+
+  // 1. FOLLOW-UPS TRIGGER
+  if (moduleName === 'follow_ups') {
+    // Fetch customer or lead name
+    let name = 'Customer';
+    const custRes = await client.query('SELECT name FROM customers WHERE id = $1', [record.customerId]);
+    if (custRes.rows[0]) {
+      name = custRes.rows[0].name;
+    } else {
+      const leadRes = await client.query('SELECT name FROM leads WHERE id = $1', [record.customerId]);
+      if (leadRes.rows[0]) name = leadRes.rows[0].name;
+    }
+
+    const todoTitle = `Call ${name}`;
+    
+    // Check if todo already exists
+    const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['follow_ups', record.id]);
+    if (checkTodo.rows[0]) {
+      const todoId = checkTodo.rows[0].id;
+      if (record.status === 'Completed') {
+        await client.query('UPDATE todos SET status = $1, notes = $2, updated_at = now() WHERE id = $3', ['Completed', record.comment || '', todoId]);
+      } else {
+        await client.query('UPDATE todos SET title = $1, "dueDate" = $2, "dueTime" = $3, "assignedTo" = $4, status = $5, updated_at = now() WHERE id = $6', [todoTitle, record.date, record.time || '', record.employeeId, 'Pending', todoId]);
+      }
+    } else {
+      const newTodoId = 'TODO-FOLLOW-' + record.id;
+      await client.query(`
+        INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+      `, [newTodoId, todoTitle, record.employeeId, record.date, record.time || '', 'Medium', record.status === 'Completed' ? 'Completed' : 'Pending', false, 'Pending', record.comment || '', 'follow_ups', record.id]);
+    }
+  }
+
+  // 2. SITE VISITS TRIGGER
+  if (moduleName === 'site_visits') {
+    let name = 'Customer';
+    const custRes = await client.query('SELECT name FROM customers WHERE id = $1', [record.customerId]);
+    if (custRes.rows[0]) name = custRes.rows[0].name;
+
+    let propLoc = 'Property';
+    const propRes = await client.query('SELECT "propertyName", locality FROM properties WHERE id = $1', [record.propertyId]);
+    if (propRes.rows[0]) {
+      propLoc = propRes.rows[0].propertyName || propRes.rows[0].locality || 'Property';
+    }
+
+    const todoTitle = `Site visit: ${propLoc} for ${name}`;
+    const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['site_visits', record.id]);
+    const isCompleted = record.result && record.result !== '' && record.result !== 'Pending';
+
+    if (checkTodo.rows[0]) {
+      const todoId = checkTodo.rows[0].id;
+      if (isCompleted) {
+        await client.query('UPDATE todos SET status = $1, notes = $2, updated_at = now() WHERE id = $3', ['Completed', record.result || '', todoId]);
+      } else {
+        await client.query('UPDATE todos SET title = $1, "dueDate" = $2, "dueTime" = $3, "assignedTo" = $4, status = $5, updated_at = now() WHERE id = $6', [todoTitle, record.date, record.time || '', record.employeeId, 'Pending', todoId]);
+      }
+    } else {
+      const newTodoId = 'TODO-VISIT-' + record.id;
+      await client.query(`
+        INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+      `, [newTodoId, todoTitle, record.employeeId, record.date, record.time || '', 'High', isCompleted ? 'Completed' : 'Pending', false, 'Pending', record.result || '', 'site_visits', record.id]);
+    }
+  }
+
+  // 3. LEADS TRIGGER
+  if (moduleName === 'leads') {
+    const todoTitle = `Accept or review new lead: ${record.name}`;
+    const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['leads', record.id]);
+    const isCompleted = record.status !== 'Open';
+
+    if (checkTodo.rows[0]) {
+      const todoId = checkTodo.rows[0].id;
+      if (isCompleted) {
+        await client.query('UPDATE todos SET status = $1, updated_at = now() WHERE id = $2', ['Completed', todoId]);
+      } else {
+        await client.query('UPDATE todos SET "assignedTo" = $1, status = $2, updated_at = now() WHERE id = $3', [record.assignedEmployeeId || 'EMP-001', 'Pending', todoId]);
+      }
+    } else {
+      const newTodoId = 'TODO-LEAD-' + record.id;
+      await client.query(`
+        INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+      `, [newTodoId, todoTitle, record.assignedEmployeeId || 'EMP-001', new Date().toISOString().split('T')[0], '12:00', 'High', isCompleted ? 'Completed' : 'Pending', false, 'Pending', '', 'leads', record.id]);
+    }
+  }
+
+  // 4. DOCUMENTS TRIGGER
+  if (moduleName === 'documents') {
+    if (record.expiry_date) {
+      const todoTitle = `Collect/update document: ${record.name}`;
+      const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['documents', record.id]);
+      if (checkTodo.rows[0]) {
+        const todoId = checkTodo.rows[0].id;
+        await client.query('UPDATE todos SET title = $1, "dueDate" = $2, "assignedTo" = $3, updated_at = now() WHERE id = $4', [todoTitle, record.expiry_date, record.uploaded_by || 'EMP-001', todoId]);
+      } else {
+        const newTodoId = 'TODO-DOC-' + record.id;
+        await client.query(`
+          INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+        `, [newTodoId, todoTitle, record.uploaded_by || 'EMP-001', record.expiry_date, '12:00', 'Medium', 'Pending', false, 'Pending', '', 'documents', record.id]);
+      }
+    }
+  }
+
+  // 5. TASKS TRIGGER
+  if (moduleName === 'tasks') {
+    const todoTitle = `Complete assigned task: ${record.title}`;
+    const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['tasks', record.id]);
+    const isCompleted = record.status === 'Completed';
+
+    if (checkTodo.rows[0]) {
+      const todoId = checkTodo.rows[0].id;
+      if (isCompleted) {
+        await client.query('UPDATE todos SET status = $1, updated_at = now() WHERE id = $2', ['Completed', todoId]);
+      } else {
+        await client.query('UPDATE todos SET title = $1, "dueDate" = $2, "assignedTo" = $3, priority = $4, status = $5, updated_at = now() WHERE id = $6', [todoTitle, record.dueDate, record.assignedTo, record.priority || 'Medium', 'Pending', todoId]);
+      }
+    } else {
+      const newTodoId = 'TODO-TASK-' + record.id;
+      await client.query(`
+        INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+      `, [newTodoId, todoTitle, record.assignedTo, record.dueDate, '18:00', record.priority || 'Medium', isCompleted ? 'Completed' : 'Pending', false, 'Pending', '', 'tasks', record.id]);
+    }
   }
 }
 
