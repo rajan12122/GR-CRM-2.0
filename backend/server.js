@@ -35,7 +35,6 @@ if (!process.env.QUICK_ADD_KEY) {
 }
 const QUICK_ADD_KEY = process.env.QUICK_ADD_KEY;
 
-
 // Lightweight memory-based IP rate limiter
 const ipRequests = {};
 function ipRateLimiter(windowMs, maxRequests) {
@@ -122,8 +121,6 @@ function generateUniqueId(prefix) {
   const counterPart = String(uniqueSuffixCounter).padStart(4, '0');
   return `${prefix}-${timePart}-${randPart}-${counterPart}`;
 }
-
-let dbCache = null;
 
 // Sync from Google Sheets on start if credentials exist
 syncFromSheets().then(res => {
@@ -293,15 +290,6 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
       await insertRecord('activity_logs', auditLog, client);
     });
 
-    // Synchronously write-through to dbCache.employees
-    if (dbCache && dbCache.employees) {
-      const emp = dbCache.employees.find(e => String(e.id) === String(employeeId));
-      if (emp) {
-        emp.passwordHash = hash;
-        emp.tokenVersion = newTokenVersion;
-      }
-    }
-
     res.json({ success: true, message: `Password for employee ${employee.name} updated successfully. Active sessions revoked.` });
   } catch (err) {
     console.error('Reset password database error:', err);
@@ -390,15 +378,6 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
           `ALTER TABLE "${moduleKey}" RENAME COLUMN "${oldName}" TO "${newName}"`
         );
 
-        // Rename key in in-memory dbCache
-        if (dbCache && dbCache[moduleKey]) {
-          dbCache[moduleKey].forEach(rec => {
-            if (rec[oldName] !== undefined) {
-              rec[newName] = rec[oldName];
-              delete rec[oldName];
-            }
-          });
-        }
       }
 
       // Apply chip renames in PostgreSQL
@@ -417,15 +396,6 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
                 `UPDATE "${moduleKey}" SET "${columnName}" = $1 WHERE LOWER("${columnName}") = LOWER($2)`,
                 [newValue, oldValue]
               );
-
-              // 2. Update in-memory dbCache case-insensitively
-              if (dbCache && dbCache[moduleKey]) {
-                dbCache[moduleKey].forEach(rec => {
-                  if (rec[columnName] && String(rec[columnName]).toLowerCase() === oldValue.toLowerCase()) {
-                    rec[columnName] = newValue;
-                  }
-                });
-              }
             }
           }
         }
@@ -525,16 +495,7 @@ app.post('/api/sync/import-with-mapping', authenticateToken, checkPermission('se
     const config = getSheetsConfig();
     const result = await executeImportWithMapping(config, mapping, false); // dryRun = false
 
-    // Synchronize the memory dbCache after successful imports
-    if (result.success) {
-      const client = await pool.connect();
-      try {
-        dbCache = await loadTransactionDb(client);
-        console.log('Successfully re-synchronized dbCache after mapping import.');
-      } finally {
-        client.release();
-      }
-    }
+
 
     res.json(result);
   } catch (err) {
@@ -577,34 +538,16 @@ async function handleAutomatedPitchLogging(rec, client, req, cacheMutations) {
     };
     
     await insertRecord('property_pitch_history', newPitch, client);
-    if (cacheMutations && dbCache) {
-      cacheMutations.push(() => {
-        if (dbCache) {
-          if (!dbCache.property_pitch_history) dbCache.property_pitch_history = [];
-          dbCache.property_pitch_history.push(newPitch);
-        }
-      });
-    }
 
     // Automatically update customer / lead pipeline stage/status
     if (cust) {
       if (String(custId).startsWith('LEAD-')) {
         await updateRecord('leads', custId, { status: 'In-Progress' }, client);
-        if (cacheMutations && dbCache && dbCache.leads) {
-          cacheMutations.push(() => {
-            const idx = dbCache.leads.findIndex(x => String(x.id) === String(custId));
-            if (idx !== -1) dbCache.leads[idx].status = 'In-Progress';
-          });
-        }
+        
         try { syncToSheets('leads'); } catch(e) {}
       } else {
         await updateRecord('customers', custId, { stage: 'Interested' }, client);
-        if (cacheMutations && dbCache && dbCache.customers) {
-          cacheMutations.push(() => {
-            const idx = dbCache.customers.findIndex(x => String(x.id) === String(custId));
-            if (idx !== -1) dbCache.customers[idx].stage = 'Interested';
-          });
-        }
+        
         try { syncToSheets('customers'); } catch(e) {}
       }
     }
@@ -614,12 +557,7 @@ async function handleAutomatedPitchLogging(rec, client, req, cacheMutations) {
     if (queriesRes.rows.length > 0) {
       for (const q of queriesRes.rows) {
         await updateRecord('queries', q.id, { stage: 'Property Matching' }, client);
-        if (cacheMutations && dbCache && dbCache.queries) {
-          cacheMutations.push(() => {
-            const idx = dbCache.queries.findIndex(x => String(x.id) === String(q.id));
-            if (idx !== -1) dbCache.queries[idx].stage = 'Property Matching';
-          });
-        }
+        
       }
       try { syncToSheets('queries'); } catch(e) {}
     }
@@ -631,13 +569,7 @@ async function handleAutomatedPitchLogging(rec, client, req, cacheMutations) {
       dateTime: new Date().toLocaleString()
     };
     await insertRecord('activity_logs', log, client);
-    if (cacheMutations && dbCache) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.activity_logs) {
-          dbCache.activity_logs.unshift(log);
-        }
-      });
-    }
+    
   }
 }
 
@@ -648,12 +580,7 @@ async function handleQueryStageChange(q, client, req, cacheMutations) {
     if (q.status === 'Approved' && q.stage !== 'Inventory Added' && q.stage !== 'Available For Sale') {
       q.stage = 'Inventory Added';
       await updateRecord('queries', q.id, { stage: 'Inventory Added' }, client);
-      if (cacheMutations && dbCache && dbCache.queries) {
-        cacheMutations.push(() => {
-          const idx = dbCache.queries.findIndex(x => String(x.id) === String(q.id));
-          if (idx !== -1) dbCache.queries[idx].stage = 'Inventory Added';
-        });
-      }
+      
     }
     const propRes = await client.query('SELECT * FROM properties WHERE "linkedQueryId" = $1', [q.id]);
     const propExists = propRes.rows.length > 0;
@@ -691,21 +618,7 @@ async function handleQueryStageChange(q, client, req, cacheMutations) {
         ])
       };
       await insertRecord('properties', newProperty, client);
-      if (cacheMutations && dbCache) {
-        cacheMutations.push(() => {
-          if (dbCache) {
-            if (!dbCache.properties) dbCache.properties = [];
-            // Parse JSON fields back for in-memory compatibility
-            const parsedProperty = {
-              ...newProperty,
-              owner_history: [],
-              timeline: JSON.parse(newProperty.timeline)
-            };
-            dbCache.properties.push(parsedProperty);
-          }
-        });
-      }
-      
+
       if (q.assignedEmployeeId) {
         setTimeout(() => {
           notifyUser(q.assignedEmployeeId, 'new-property-matched', {
@@ -722,14 +635,7 @@ async function handleQueryStageChange(q, client, req, cacheMutations) {
         dateTime: new Date().toLocaleString()
       };
       await insertRecord('activity_logs', log, client);
-      if (cacheMutations && dbCache) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.activity_logs) {
-            dbCache.activity_logs.unshift(log);
-          }
-        });
-      }
-      
+
       try { syncToSheets('properties'); } catch(e) {}
     }
   }
@@ -793,8 +699,6 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
     const custRes = await client.query('SELECT * FROM customers WHERE phone = $1', [cleanPhone]);
     let existingCust = custRes.rows[0];
 
-    const cacheMutations = [];
-
     if (!existingCust) {
       const custId = await generateNextIdAsync(client, 'customers');
       const newCust = {
@@ -814,83 +718,27 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
       const insertedCust = await insertRecord('customers', newCust, client);
       existingCust = insertedCust;
 
-      cacheMutations.push(() => {
-        if (dbCache) {
-          if (!dbCache.customers) dbCache.customers = [];
-          dbCache.customers.push(insertedCust);
-        }
-      });
     }
 
     await updateRecord('leads', leadId, { status: 'Converted' }, client);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.leads) {
-        const cachedLead = dbCache.leads.find(l => String(l.id) === String(leadId));
-        if (cachedLead) cachedLead.status = 'Converted';
-      }
-    });
 
     const newCustId = existingCust.id;
 
     await client.query('UPDATE follow_ups SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.follow_ups) {
-        dbCache.follow_ups.forEach(f => {
-          if (String(f.customerId) === String(leadId)) f.customerId = newCustId;
-        });
-      }
-    });
 
     await client.query('UPDATE queries SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.queries) {
-        dbCache.queries.forEach(q => {
-          if (String(q.customerId) === String(leadId)) q.customerId = newCustId;
-        });
-      }
-    });
 
     await client.query('UPDATE site_visits SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.site_visits) {
-        dbCache.site_visits.forEach(sv => {
-          if (String(sv.customerId) === String(leadId)) sv.customerId = newCustId;
-        });
-      }
-    });
 
     await client.query('UPDATE sales SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.sales) {
-        dbCache.sales.forEach(s => {
-          if (String(s.customerId) === String(leadId)) s.customerId = newCustId;
-        });
-      }
-    });
 
     await client.query('UPDATE property_pitch_history SET "customerId" = $1 WHERE "customerId" = $2', [newCustId, leadId]);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.property_pitch_history) {
-        dbCache.property_pitch_history.forEach(p => {
-          if (String(p.customerId) === String(leadId)) p.customerId = newCustId;
-        });
-      }
-    });
 
     await client.query('UPDATE properties SET current_owner_id = $1 WHERE current_owner_id = $2', [newCustId, leadId]);
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.properties) {
-        dbCache.properties.forEach(p => {
-          if (String(p.current_owner_id) === String(leadId)) p.current_owner_id = newCustId;
-        });
-      }
-    });
 
     if (!isOuterTransaction) {
       await client.query('COMMIT');
     }
-
-    cacheMutations.forEach(mutate => mutate());
 
     try { syncToSheets('customers'); } catch(e) {}
     try { syncToSheets('leads'); } catch(e) {}
@@ -989,24 +837,6 @@ async function handleDealStatusChange(d, dbOrClient, req, cacheMutations) {
       [d.customerId, 'Property Registered/Sold Out', JSON.stringify(ownershipDocuments), JSON.stringify(ownerHistory), JSON.stringify(timeline), d.propertyId]
     );
 
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.properties) {
-          const pIdx = dbCache.properties.findIndex(x => String(x.id) === String(d.propertyId));
-          if (pIdx !== -1) {
-            dbCache.properties[pIdx] = {
-              ...dbCache.properties[pIdx],
-              current_owner_id: d.customerId,
-              status: 'Property Registered/Sold Out',
-              ownership_documents: ownershipDocuments,
-              owner_history: ownerHistory,
-              timeline: timeline
-            };
-          }
-        }
-      });
-    }
-    
     if (d.employeeId) {
       setTimeout(() => {
         notifyUser(d.employeeId, 'deal-closed-notif', {
@@ -1023,18 +853,10 @@ async function handleDealStatusChange(d, dbOrClient, req, cacheMutations) {
       dateTime: new Date().toLocaleString()
     };
     await insertRecord('activity_logs', log, client);
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.activity_logs) {
-          dbCache.activity_logs.unshift(log);
-        }
-      });
-    }
-    
+
     try { syncToSheets('properties'); } catch(e) {}
   }
 }
-
 
 function parsePriceToNumeric(priceStr) {
   if (!priceStr) return 0;
@@ -1064,16 +886,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
 
   if (p.propertyId && p.propertyStatus) {
     await client.query('UPDATE properties SET status = $1 WHERE id = $2', [p.propertyStatus, p.propertyId]);
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.properties) {
-          const idx = dbCache.properties.findIndex(pr => String(pr.id) === String(p.propertyId));
-          if (idx !== -1) {
-            dbCache.properties[idx].status = p.propertyStatus;
-          }
-        }
-      });
-    }
+    
   }
 
   // Auto-complete call follow-up if pitched via call
@@ -1082,18 +895,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
       `UPDATE follow_ups SET status = $1, remarks = concat(remarks, $2::text) WHERE "customerId" = $3 AND status <> $4`,
       ['Completed', `\n[System: Auto-completed call follow-up via logged Call Pitch ${p.id}]`, p.customerId, 'Completed']
     );
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.follow_ups) {
-          dbCache.follow_ups.forEach(f => {
-            if (String(f.customerId) === String(p.customerId) && f.status !== 'Completed') {
-              f.status = 'Completed';
-              f.remarks = (f.remarks || '') + `\n[System: Auto-completed call follow-up via logged Call Pitch ${p.id}]`;
-            }
-          });
-        }
-      });
-    }
+    
   }
 
   // Auto-update follow-up and query pipeline stage matching keywords/meanings
@@ -1127,17 +929,6 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
         pitchRemarks: targetF.pitchRemarks
       }, client);
 
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.follow_ups) {
-            const idx = dbCache.follow_ups.findIndex(f => String(f.id) === String(p.linkedFollowUpId));
-            if (idx !== -1) {
-              dbCache.follow_ups[idx] = updatedF;
-            }
-          }
-        });
-      }
-
       await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
 
       if (targetF.queryId) {
@@ -1146,16 +937,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
         if (qStatus) updates.status = qStatus;
         
         const updatedQ = await updateRecord('queries', targetF.queryId, updates, client);
-        if (cacheMutations) {
-          cacheMutations.push(() => {
-            if (dbCache && dbCache.queries) {
-              const idx = dbCache.queries.findIndex(q => String(q.id) === String(targetF.queryId));
-              if (idx !== -1) {
-                dbCache.queries[idx] = updatedQ;
-              }
-            }
-          });
-        }
+        
       }
     }
   } else if (p.linkedQueryId) {
@@ -1164,16 +946,6 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
     if (qStatus) updates.status = qStatus;
 
     const updatedQ = await updateRecord('queries', p.linkedQueryId, updates, client);
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.queries) {
-          const idx = dbCache.queries.findIndex(q => String(q.id) === String(p.linkedQueryId));
-          if (idx !== -1) {
-            dbCache.queries[idx] = updatedQ;
-          }
-        }
-      });
-    }
 
     const fupRes = await client.query('SELECT * FROM follow_ups WHERE "queryId" = $1', [p.linkedQueryId]);
     for (const f of fupRes.rows) {
@@ -1184,14 +956,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
           pitchPrice: p.quotedPrice || f.pitchPrice,
           pitchRemarks: p.remarks || f.pitchRemarks
         }, client);
-        if (cacheMutations) {
-          cacheMutations.push(() => {
-            if (dbCache && dbCache.follow_ups) {
-              const idx = dbCache.follow_ups.findIndex(x => String(x.id) === String(f.id));
-              if (idx !== -1) dbCache.follow_ups[idx] = updatedF;
-            }
-          });
-        }
+        
         await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
       }
     }
@@ -1206,14 +971,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
           pitchPrice: p.quotedPrice || f.pitchPrice,
           pitchRemarks: p.remarks || f.pitchRemarks
         }, client);
-        if (cacheMutations) {
-          cacheMutations.push(() => {
-            if (dbCache && dbCache.follow_ups) {
-              const idx = dbCache.follow_ups.findIndex(x => String(x.id) === String(f.id));
-              if (idx !== -1) dbCache.follow_ups[idx] = updatedF;
-            }
-          });
-        }
+        
         await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
       }
     }
@@ -1225,14 +983,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
       if (qStatus) updates.status = qStatus;
 
       const updatedQ = await updateRecord('queries', q.id, updates, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.queries) {
-            const idx = dbCache.queries.findIndex(x => String(x.id) === String(q.id));
-            if (idx !== -1) dbCache.queries[idx] = updatedQ;
-          }
-        });
-      }
+      
     }
   }
 
@@ -1254,14 +1005,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
         employeeId: p.employeeId || existingVisit.employeeId,
         remarks: p.remarks || existingVisit.remarks
       }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.site_visits) {
-            const idx = dbCache.site_visits.findIndex(sv => String(sv.id) === String(existingVisit.id));
-            if (idx !== -1) dbCache.site_visits[idx] = updatedVisit;
-          }
-        });
-      }
+      
     } else {
       const visitId = await generateNextIdAsync(client, 'site_visits');
       const newVisit = {
@@ -1276,24 +1020,11 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
         linkedPitchId: p.id
       };
       const insertedVisit = await insertRecord('site_visits', newVisit, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache) {
-            if (!dbCache.site_visits) dbCache.site_visits = [];
-            dbCache.site_visits.push(insertedVisit);
-          }
-        });
-      }
+      
     }
   } else {
     await client.query('DELETE FROM site_visits WHERE "linkedPitchId" = $1', [p.id]);
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.site_visits) {
-          dbCache.site_visits = dbCache.site_visits.filter(sv => sv.linkedPitchId !== p.id);
-        }
-      });
-    }
+    
   }
 
   const isDealClosed = p.status === 'Deal Closed' || 
@@ -1343,14 +1074,6 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
     const insertedDeal = await insertRecord('deals', existingDeal, client);
     existingDeal = insertedDeal;
 
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache) {
-          if (!dbCache.deals) dbCache.deals = [];
-          dbCache.deals.push(insertedDeal);
-        }
-      });
-    }
   } else {
     let updated = false;
     const updates = {};
@@ -1368,14 +1091,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
     if (updated) {
       const updatedDeal = await updateRecord('deals', existingDeal.id, updates, client);
       existingDeal = updatedDeal;
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.deals) {
-            const idx = dbCache.deals.findIndex(d => String(d.id) === String(existingDeal.id));
-            if (idx !== -1) dbCache.deals[idx] = updatedDeal;
-          }
-        });
-      }
+      
     }
   }
 
@@ -1387,18 +1103,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
     'UPDATE follow_ups SET status = $1, "pipelineAction" = $2 WHERE "customerId" = $3 OR "customerId" = $4',
     ['Call Done', 'Property Registered/Sold Out', p.customerId, finalCustomerId]
   );
-  if (cacheMutations) {
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.follow_ups) {
-        dbCache.follow_ups.forEach(f => {
-          if (String(f.customerId) === String(p.customerId) || String(f.customerId) === String(finalCustomerId)) {
-            f.status = 'Call Done';
-            f.pipelineAction = 'Property Registered/Sold Out';
-          }
-        });
-      }
-    });
-  }
+  
 }
 
 async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
@@ -1433,27 +1138,12 @@ async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
       const insertedCust = await insertRecord('customers', existingCust, client);
       existingCust = insertedCust;
 
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache) {
-            if (!dbCache.customers) dbCache.customers = [];
-            dbCache.customers.push(insertedCust);
-          }
-        });
-      }
     } else {
       const updatedCust = await updateRecord('customers', existingCust.id, {
         budget: leadDemand,
         city: lead.locality || existingCust.city || ''
       }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.customers) {
-            const idx = dbCache.customers.findIndex(x => String(x.id) === String(existingCust.id));
-            if (idx !== -1) dbCache.customers[idx] = updatedCust;
-          }
-        });
-      }
+      
     }
 
     let existingProp = null;
@@ -1478,14 +1168,7 @@ async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
         propertyType: lead.propertyType || existingProp.propertyType || '',
         r_c_i: lead.r_c_i || existingProp.r_c_i || 'Residential'
       }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.properties) {
-            const idx = dbCache.properties.findIndex(x => String(x.id) === String(existingProp.id));
-            if (idx !== -1) dbCache.properties[idx] = updatedProp;
-          }
-        });
-      }
+      
     } else {
       const propId = await generateNextIdAsync(client, 'properties');
       const newProp = {
@@ -1509,14 +1192,7 @@ async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
       };
       const insertedProp = await insertRecord('properties', newProp, client);
       lead.propertyId = propId;
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache) {
-            if (!dbCache.properties) dbCache.properties = [];
-            dbCache.properties.push(insertedProp);
-          }
-        });
-      }
+      
     }
   }
 }
@@ -1540,78 +1216,22 @@ async function syncPropertyDetailsUniversally(propId, dbOrClient, cacheMutations
     'UPDATE leads SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7 OR id = $8',
     [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId, prop.linkedLeadId]
   );
-  if (cacheMutations) {
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.leads) {
-        dbCache.leads.forEach(l => {
-          if (String(l.propertyId) === String(propId) || String(l.id) === String(prop.linkedLeadId)) {
-            l.r_c_i = fieldsToSync.r_c_i;
-            l.propertyType = fieldsToSync.propertyType;
-            l.locality = fieldsToSync.locality;
-            l.sector_block = fieldsToSync.sector_block;
-            l.size = fieldsToSync.size;
-            l.demand = fieldsToSync.demand;
-            l.budget = fieldsToSync.demand;
-          }
-        });
-      }
-    });
-  }
 
   await client.query(
     'UPDATE customers SET city = $1, budget = $2 WHERE id = $3 OR id = $4',
     [fieldsToSync.locality, fieldsToSync.demand, prop.current_owner_id, prop.booked_by_customer_id]
   );
-  if (cacheMutations) {
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.customers) {
-        dbCache.customers.forEach(c => {
-          if (String(c.id) === String(prop.current_owner_id) || String(c.id) === String(prop.booked_by_customer_id)) {
-            c.city = fieldsToSync.locality;
-            c.budget = fieldsToSync.demand;
-          }
-        });
-      }
-    });
-  }
 
   await client.query(
     'UPDATE queries SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7',
     [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId]
   );
-  if (cacheMutations) {
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.queries) {
-        dbCache.queries.forEach(q => {
-          if (String(q.propertyId) === String(propId)) {
-            q.r_c_i = fieldsToSync.r_c_i;
-            q.propertyType = fieldsToSync.propertyType;
-            q.locality = fieldsToSync.locality;
-            q.sector_block = fieldsToSync.sector_block;
-            q.size = fieldsToSync.size;
-            q.demand = fieldsToSync.demand;
-            q.budget = fieldsToSync.demand;
-          }
-        });
-      }
-    });
-  }
 
   await client.query(
     'UPDATE follow_ups SET "pitchPrice" = $1 WHERE "pitchedPropertyId" = $2',
     [fieldsToSync.demand, propId]
   );
-  if (cacheMutations) {
-    cacheMutations.push(() => {
-      if (dbCache && dbCache.follow_ups) {
-        dbCache.follow_ups.forEach(f => {
-          if (String(f.pitchedPropertyId) === String(propId)) {
-            f.pitchPrice = fieldsToSync.demand;
-          }
-        });
-      }
-    });
-  }
+  
 }
 
 async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmployeeId, dbOrClient, cacheMutations) {
@@ -1671,17 +1291,7 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
       'UPDATE leads SET "assignedEmployeeId" = $1 WHERE id = $2 OR (phone = ANY($3) AND $3 <> \'{}\')',
       [newEmployeeId, leadId, phones]
     );
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.leads) {
-          dbCache.leads.forEach(l => {
-            if (l.id === leadId || (l.phone && phones.includes(String(l.phone).trim()))) {
-              l.assignedEmployeeId = newEmployeeId;
-            }
-          });
-        }
-      });
-    }
+    
   }
 
   if (custId || leadId || phones.length > 0) {
@@ -1689,17 +1299,7 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
       'UPDATE customers SET "assignedEmployeeId" = $1 WHERE id = $2 OR "leadId" = $3 OR (phone = ANY($4) AND $4 <> \'{}\')',
       [newEmployeeId, custId, leadId, phones]
     );
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.customers) {
-          dbCache.customers.forEach(c => {
-            if (c.id === custId || c.leadId === leadId || (c.phone && phones.includes(String(c.phone).trim()))) {
-              c.assignedEmployeeId = newEmployeeId;
-            }
-          });
-        }
-      });
-    }
+    
   }
 
   if (custId || leadId) {
@@ -1707,17 +1307,7 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
       'UPDATE follow_ups SET "employeeId" = $1 WHERE "customerId" = $2 OR "customerId" = $3',
       [newEmployeeId, custId, leadId]
     );
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.follow_ups) {
-          dbCache.follow_ups.forEach(f => {
-            if (f.customerId === custId || f.customerId === leadId) {
-              f.employeeId = newEmployeeId;
-            }
-          });
-        }
-      });
-    }
+    
   }
 
   if (custId || leadId) {
@@ -1725,17 +1315,7 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
       'UPDATE queries SET "assignedEmployeeId" = $1 WHERE "customerId" = $2 OR "customerId" = $3',
       [newEmployeeId, custId, leadId]
     );
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.queries) {
-          dbCache.queries.forEach(q => {
-            if (q.customerId === custId || q.customerId === leadId) {
-              q.assignedEmployeeId = newEmployeeId;
-            }
-          });
-        }
-      });
-    }
+    
   }
 
   if (custId || leadId) {
@@ -1743,17 +1323,7 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
       'UPDATE site_visits SET "employeeId" = $1 WHERE "customerId" = $2 OR "customerId" = $3',
       [newEmployeeId, custId, leadId]
     );
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.site_visits) {
-          dbCache.site_visits.forEach(s => {
-            if (s.customerId === custId || s.customerId === leadId) {
-              s.employeeId = newEmployeeId;
-            }
-          });
-        }
-      });
-    }
+    
   }
 }
 
@@ -1779,14 +1349,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
         propertyId: f.pitchedPropertyId || 'PROP-001',
         employeeId: f.employeeId || existingVisit.employeeId
       }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.site_visits) {
-            const idx = dbCache.site_visits.findIndex(x => String(x.id) === String(existingVisit.id));
-            if (idx !== -1) dbCache.site_visits[idx] = updatedVisit;
-          }
-        });
-      }
+      
     } else {
       const visitId = await generateNextIdAsync(client, 'site_visits');
       const newVisit = {
@@ -1801,24 +1364,11 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
         linkedFollowUpId: f.id
       };
       const insertedVisit = await insertRecord('site_visits', newVisit, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache) {
-            if (!dbCache.site_visits) dbCache.site_visits = [];
-            dbCache.site_visits.push(insertedVisit);
-          }
-        });
-      }
+      
     }
   } else {
     await client.query('DELETE FROM site_visits WHERE "linkedFollowUpId" = $1', [f.id]);
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.site_visits) {
-          dbCache.site_visits = dbCache.site_visits.filter(sv => sv.linkedFollowUpId !== f.id);
-        }
-      });
-    }
+    
   }
 
   const isClosedDeal = action === 'Closed' || action === 'Booked' || action === 'Query_ClosedWon' || action === 'Deal Closed' || action === 'Property Registered/Sold Out' || action === 'Property Booked';
@@ -1858,16 +1408,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
       };
       
       const insertedDeal = await insertRecord('deals', newDeal, client);
-      
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache) {
-            if (!dbCache.deals) dbCache.deals = [];
-            dbCache.deals.push(insertedDeal);
-          }
-        });
-      }
-      
+
       await handleDealStatusChange(insertedDeal, client, req, cacheMutations);
     } else {
       await handleDealStatusChange(existingDeal, client, req, cacheMutations);
@@ -1886,15 +1427,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
       }
       
       const updatedQ = await updateRecord('queries', q.id, { stage: q.stage, status: q.status }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.queries) {
-            const idx = dbCache.queries.findIndex(x => String(x.id) === String(q.id));
-            if (idx !== -1) dbCache.queries[idx] = updatedQ;
-          }
-        });
-      }
-      
+
       await handleQueryStageChange(updatedQ, client, req, cacheMutations);
     }
   } else if (customerId && String(customerId).startsWith('LEAD-')) {
@@ -1911,28 +1444,14 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
       }
       
       const updatedLead = await updateRecord('leads', lead.id, { status: leadStatus }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.leads) {
-            const idx = dbCache.leads.findIndex(x => String(x.id) === String(lead.id));
-            if (idx !== -1) dbCache.leads[idx] = updatedLead;
-          }
-        });
-      }
+      
     }
   } else if (customerId && String(customerId).startsWith('CUST-')) {
     const custRes = await client.query('SELECT * FROM customers WHERE id = $1', [customerId]);
     const cust = custRes.rows[0];
     if (cust) {
       const updatedCust = await updateRecord('customers', cust.id, { stage: action }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.customers) {
-            const idx = dbCache.customers.findIndex(x => String(x.id) === String(cust.id));
-            if (idx !== -1) dbCache.customers[idx] = updatedCust;
-          }
-        });
-      }
+      
     }
   }
 }
@@ -2244,8 +1763,6 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       dateTime: new Date().toLocaleString()
     };
 
-    const cacheMutations = [];
-
     const inserted = await runTransaction(async (client) => {
       // 1. Generate ID if not provided
       if (!payload.id) {
@@ -2333,14 +1850,6 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           };
           
           await insertRecord('queries', newQuery, client);
-          if (cacheMutations && dbCache) {
-            cacheMutations.push(() => {
-              if (dbCache) {
-                if (!dbCache.queries) dbCache.queries = [];
-                dbCache.queries.push(newQuery);
-              }
-            });
-          }
 
           if (newQuery.queryType === 'Buy Property' && String(existingPerson.id).startsWith('LEAD')) {
             const followUpId = await generateNextIdAsync(client, 'follow_ups', 'FOLLOW');
@@ -2356,14 +1865,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
               remarks: `Auto-scheduled follow up for auto-created duplicate check Query ${queryId}.`
             };
             await insertRecord('follow_ups', newFollowUp, client);
-            if (cacheMutations && dbCache) {
-              cacheMutations.push(() => {
-                if (dbCache) {
-                  if (!dbCache.follow_ups) dbCache.follow_ups = [];
-                  dbCache.follow_ups.push(newFollowUp);
-                }
-              });
-            }
+            
             try { syncToSheets('follow_ups'); } catch(e) {}
           }
           
@@ -2374,14 +1876,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
             dateTime: new Date().toLocaleString()
           };
           await insertRecord('activity_logs', dupLog, client);
-          if (cacheMutations && dbCache) {
-            cacheMutations.push(() => {
-              if (dbCache && dbCache.activity_logs) {
-                dbCache.activity_logs.unshift(dupLog);
-              }
-            });
-          }
-          
+
           try { syncToSheets('queries'); } catch(e) {}
           
           return {
@@ -2426,14 +1921,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
                 dateAdded: new Date().toISOString().split('T')[0]
               };
               await insertRecord('customers', cust, client);
-              if (cacheMutations && dbCache) {
-                cacheMutations.push(() => {
-                  if (dbCache) {
-                    if (!dbCache.customers) dbCache.customers = [];
-                    dbCache.customers.push(cust);
-                  }
-                });
-              }
+              
               try { syncToSheets('customers'); } catch(e) {}
             }
             if (cust) {
@@ -2606,14 +2094,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
             remarks: `Auto-scheduled follow up for new Query ${insertedRec.id}: ${payload.remarks || 'No notes'}`
           };
           await insertRecord('follow_ups', newFollowUp, client);
-          if (cacheMutations && dbCache) {
-            cacheMutations.push(() => {
-              if (dbCache) {
-                if (!dbCache.follow_ups) dbCache.follow_ups = [];
-                dbCache.follow_ups.push(newFollowUp);
-              }
-            });
-          }
+          
           try { syncToSheets('follow_ups'); } catch(e) {}
         }
       }
@@ -2695,15 +2176,6 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       return insertedRec;
     });
 
-    if (dbCache && dbCache[module] && !inserted.__is_redirected_query) {
-      dbCache[module].push(inserted);
-      if (dbCache.activity_logs) {
-        dbCache.activity_logs.unshift(log);
-      }
-    }
-
-    cacheMutations.forEach(mutate => mutate());
-
     syncToSheets(module);
     if (module === 'properties') {
       try { syncToSheets('dealers'); } catch (e) {}
@@ -2735,8 +2207,6 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       action: `Updated record ${id} in ${module}`,
       dateTime: new Date().toLocaleString()
     };
-
-    const cacheMutations = [];
 
     const updated = await runTransaction(async (client) => {
       const recordExists = await getRecord(module, id, client);
@@ -2947,18 +2417,6 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       return rec;
     });
 
-    if (dbCache && dbCache[module]) {
-      const idx = dbCache[module].findIndex(x => String(x.id) === String(id));
-      if (idx !== -1) {
-        dbCache[module][idx] = updated;
-      }
-      if (dbCache.activity_logs) {
-        dbCache.activity_logs.unshift(log);
-      }
-    }
-
-    cacheMutations.forEach(mutate => mutate());
-
     syncToSheets(module);
     if (module === 'properties') {
       try { syncToSheets('dealers'); } catch (e) {}
@@ -3059,54 +2517,6 @@ app.delete('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       await insertRecord('activity_logs', log, client);
       return rec;
     });
-
-    if (dbCache) {
-      dbCache[module] = (dbCache[module] || []).filter(x => String(x.id) !== String(id));
-      if (dbCache.activity_logs) {
-        dbCache.activity_logs.unshift(log);
-      }
-      
-      if (module === 'leads' || module === 'customers') {
-        const rec = recordDeleted;
-        const targetPhone = String(rec.phone || '').trim();
-        const targetEmail = String(rec.email || '').trim();
-
-        if (module === 'leads') {
-          dbCache.customers = (dbCache.customers || []).filter(c => 
-            String(c.leadId) !== String(id) && 
-            (targetPhone === '' || String(c.phone).trim() !== targetPhone) && 
-            (targetEmail === '' || String(c.email).trim() !== targetEmail)
-          );
-        } else {
-          dbCache.leads = (dbCache.leads || []).filter(l => 
-            String(l.id) !== String(rec.leadId) && 
-            (targetPhone === '' || String(l.phone).trim() !== targetPhone) && 
-            (targetEmail === '' || String(l.email).trim() !== targetEmail)
-          );
-        }
-
-        const customerQueries = (dbCache.queries || []).filter(q => String(q.customerId) === String(id));
-        const customerQueryIds = new Set(customerQueries.map(q => String(q.id)));
-
-        dbCache.properties = (dbCache.properties || []).filter(p => {
-          if (String(p.booked_by_customer_id) === String(id)) return false;
-          if (p.linkedQueryId && customerQueryIds.has(String(p.linkedQueryId))) return false;
-          if (targetPhone !== '' && String(p.contact_number).trim() === targetPhone) return false;
-          return true;
-        });
-
-        dbCache.follow_ups = (dbCache.follow_ups || []).filter(f => 
-          String(f.customerId) !== String(id) && 
-          (!f.queryId || !customerQueryIds.has(String(f.queryId)))
-        );
-
-        dbCache.queries = (dbCache.queries || []).filter(q => String(q.customerId) !== String(id));
-        dbCache.site_visits = (dbCache.site_visits || []).filter(s => String(s.customerId) !== String(id));
-        dbCache.property_pitch_history = (dbCache.property_pitch_history || []).filter(p => String(p.customerId) !== String(id));
-        dbCache.sales = (dbCache.sales || []).filter(s => String(s.customerId) !== String(id));
-        dbCache.deals = (dbCache.deals || []).filter(d => String(d.customerId) !== String(id));
-      }
-    }
 
     if (module === 'leads' || module === 'customers') {
       try { syncToSheets('leads'); } catch(e) {}
@@ -3219,13 +2629,6 @@ app.post('/api/data/:module/bulk-delete', authenticateToken, checkPermission('se
       await insertRecord('activity_logs', log, client);
       return records;
     });
-
-    if (dbCache) {
-      dbCache[module] = await getModuleRecordsForServer(module);
-      if (dbCache.activity_logs) {
-        dbCache.activity_logs.unshift(log);
-      }
-    }
 
     try { syncToSheets(module); } catch(e) {}
     if (module === 'leads' || module === 'customers') {
@@ -3413,23 +2816,10 @@ app.post('/api/location/log', authenticateToken, async (req, res) => {
           path
         });
         await updateRecord('employees', employeeId, { locationHistory: locHistory });
-        
-        // Synchronously write-through to dbCache.employees
-        if (dbCache && dbCache.employees) {
-          const cachedEmp = dbCache.employees.find(e => String(e.id) === String(employeeId));
-          if (cachedEmp) {
-            cachedEmp.locationHistory = locHistory;
-          }
-        }
+
       }
       
       await pool.query('DELETE FROM active_paths WHERE employee_id = $1', [employeeId]);
-    }
-    
-    // Also push the location log to dbCache.location_logs in memory if cached
-    if (dbCache) {
-      if (!dbCache.location_logs) dbCache.location_logs = [];
-      dbCache.location_logs.push(logEntry);
     }
 
     res.json({ success: true, log: logEntry });
@@ -4150,11 +3540,6 @@ app.post('/api/remarks', authenticateToken, async (req, res) => {
 
     await insertRecord('remarks', newRemark);
 
-    if (dbCache) {
-      if (!dbCache.remarks) dbCache.remarks = [];
-      dbCache.remarks.push(newRemark);
-    }
-
     // Sync to sheets
     syncToSheets('remarks');
     res.status(201).json(newRemark);
@@ -4208,11 +3593,6 @@ app.post('/api/documents', authenticateToken, async (req, res) => {
     };
 
     await insertRecord('documents', newDoc);
-
-    if (dbCache) {
-      if (!dbCache.documents) dbCache.documents = [];
-      dbCache.documents.push(newDoc);
-    }
 
     syncToSheets('documents');
     res.status(201).json(newDoc);
@@ -4354,7 +3734,6 @@ const rotateLeadsTask = async () => {
   }
 };
 
-
 // Public App Update check endpoint
 app.get('/api/public/update-check', (req, res) => {
   try {
@@ -4483,11 +3862,6 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), async (re
 
         await insertRecord('queries', newQuery, client);
 
-        if (dbCache) {
-          if (!dbCache.queries) dbCache.queries = [];
-          dbCache.queries.push(newQuery);
-        }
-
         // Schedule follow-up if it's a lead
         let newFollowUp = null;
         if (String(matchedId).startsWith('LEAD')) {
@@ -4504,11 +3878,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), async (re
             remarks: `Auto-scheduled follow up for requirements form Query ${queryId}.`
           };
           await insertRecord('follow_ups', newFollowUp, client);
-          
-          if (dbCache) {
-            if (!dbCache.follow_ups) dbCache.follow_ups = [];
-            dbCache.follow_ups.push(newFollowUp);
-          }
+
         }
 
         return {
@@ -4570,15 +3940,6 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), async (re
         remarks: `Auto-scheduled follow up for requirement form Lead/Query ${queryId}.`
       };
       await insertRecord('follow_ups', newFollowUp, client);
-
-      if (dbCache) {
-        if (!dbCache.leads) dbCache.leads = [];
-        dbCache.leads.push(newLead);
-        if (!dbCache.queries) dbCache.queries = [];
-        dbCache.queries.push(newQuery);
-        if (!dbCache.follow_ups) dbCache.follow_ups = [];
-        dbCache.follow_ups.push(newFollowUp);
-      }
 
       return {
         isDuplicate: false,
@@ -4687,11 +4048,6 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
           };
           
           await insertRecord('queries', newQuery, client);
-          
-          if (dbCache) {
-            if (!dbCache.queries) dbCache.queries = [];
-            dbCache.queries.push(newQuery);
-          }
 
           // Automatically schedule a follow up task for the new query
           let newFollowUp = null;
@@ -4709,11 +4065,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
               remarks: `Auto-scheduled follow up for Quick-Add Query ${queryId}.`
             };
             await insertRecord('follow_ups', newFollowUp, client);
-            
-            if (dbCache) {
-              if (!dbCache.follow_ups) dbCache.follow_ups = [];
-              dbCache.follow_ups.push(newFollowUp);
-            }
+
           }
           
           return {
@@ -4763,11 +4115,6 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
 
       await insertRecord(module, payload, client);
 
-      if (dbCache) {
-        if (!dbCache[module]) dbCache[module] = [];
-        dbCache[module].push(payload);
-      }
-
       if (module === 'follow_ups') {
         await handleFollowUpPipelineAction(payload, client, req);
       } else if (module === 'queries') {
@@ -4786,11 +4133,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
             remarks: `Auto-scheduled follow up for new Query ${payload.id}: ${payload.remarks || 'No notes'}`
           };
           await insertRecord('follow_ups', newFollowUp, client);
-          
-          if (dbCache) {
-            if (!dbCache.follow_ups) dbCache.follow_ups = [];
-            dbCache.follow_ups.push(newFollowUp);
-          }
+
         }
       } else if (module === 'leads') {
         await handleLeadStatusChange(payload, client, req);
@@ -4892,14 +4235,7 @@ async function createFollowUpForLead(lead, dbOrClient, cacheMutations) {
   if (existingFollowUp) {
     if (lead.assignedEmployeeId && existingFollowUp.employeeId !== lead.assignedEmployeeId) {
       const updatedFollowUp = await updateRecord('follow_ups', existingFollowUp.id, { employeeId: lead.assignedEmployeeId }, client);
-      if (cacheMutations) {
-        cacheMutations.push(() => {
-          if (dbCache && dbCache.follow_ups) {
-            const idx = dbCache.follow_ups.findIndex(x => String(x.id) === String(existingFollowUp.id));
-            if (idx !== -1) dbCache.follow_ups[idx] = updatedFollowUp;
-          }
-        });
-      }
+      
     }
   } else {
     const followUpId = await generateNextIdAsync(client, 'follow_ups');
@@ -4914,14 +4250,7 @@ async function createFollowUpForLead(lead, dbOrClient, cacheMutations) {
       remarks: `Auto-scheduled follow up for accepted Lead ${lead.id}: ${lead.remarks || 'No notes'}`
     };
     const insertedFollowUp = await insertRecord('follow_ups', newFollowUp, client);
-    if (cacheMutations) {
-      cacheMutations.push(() => {
-        if (dbCache) {
-          if (!dbCache.follow_ups) dbCache.follow_ups = [];
-          dbCache.follow_ups.push(insertedFollowUp);
-        }
-      });
-    }
+    
   }
 }
 
@@ -4944,7 +4273,7 @@ app.get('/api/leads/pending', authenticateToken, async (req, res) => {
 app.post('/api/leads/:id/accept', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
-    const cacheMutations = [];
+    
     const updatedLead = await runTransaction(async (client) => {
       const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
       const lead = leadRes.rows[0];
@@ -4964,24 +4293,10 @@ app.post('/api/leads/:id/accept', authenticateToken, async (req, res) => {
         dateTime: new Date().toLocaleString()
       };
       await insertRecord('activity_logs', log, client);
-      
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.activity_logs) {
-          dbCache.activity_logs.unshift(log);
-        }
-      });
 
       return updated;
     });
 
-    if (dbCache && dbCache.leads) {
-      const idx = dbCache.leads.findIndex(l => String(l.id) === String(id));
-      if (idx !== -1) {
-        dbCache.leads[idx] = updatedLead;
-      }
-    }
-    
-    cacheMutations.forEach(mutate => mutate());
     try { syncToSheets('leads'); } catch(e) {}
     try { syncToSheets('follow_ups'); } catch(e) {}
 
@@ -4996,7 +4311,7 @@ app.post('/api/leads/:id/accept', authenticateToken, async (req, res) => {
 app.post('/api/leads/:id/drop', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
-    const cacheMutations = [];
+    
     const updatedLead = await runTransaction(async (client) => {
       const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
       const lead = leadRes.rows[0];
@@ -5055,24 +4370,10 @@ app.post('/api/leads/:id/drop', authenticateToken, async (req, res) => {
         dateTime: new Date().toLocaleString()
       };
       await insertRecord('activity_logs', log, client);
-      
-      cacheMutations.push(() => {
-        if (dbCache && dbCache.activity_logs) {
-          dbCache.activity_logs.unshift(log);
-        }
-      });
 
       return updated;
     });
 
-    if (dbCache && dbCache.leads) {
-      const idx = dbCache.leads.findIndex(l => String(l.id) === String(id));
-      if (idx !== -1) {
-        dbCache.leads[idx] = updatedLead;
-      }
-    }
-
-    cacheMutations.forEach(mutate => mutate());
     try { syncToSheets('leads'); } catch(e) {}
     try { syncToSheets('follow_ups'); } catch(e) {}
 
@@ -5775,17 +5076,6 @@ app.post('/api/sync/dashboard/retry/:jobId', authenticateToken, async (req, res)
       [updatedAt, nextAttemptAt, jobId]
     );
 
-    if (dbCache && dbCache.sync_jobs) {
-      const cachedJob = dbCache.sync_jobs.find(j => String(j.id) === String(jobId));
-      if (cachedJob) {
-        cachedJob.status = 'PENDING';
-        cachedJob.attemptCount = 0;
-        cachedJob.lastError = null;
-            cachedJob.updatedAt = updatedAt;
-        cachedJob.nextAttemptAt = nextAttemptAt;
-      }
-    }
-
     // Trigger processing immediately in background
     setImmediate(() => processSyncQueue());
 
@@ -5963,9 +5253,7 @@ app.post('/api/sync/dashboard/reconcile-confirm/:module', authenticateToken, che
     });
 
     if (updatedCount > 0 || createdCount > 0) {
-      if (dbCache) {
-        dbCache[module] = await getModuleRecordsForServer(module);
-      }
+      
       // Enqueue outbound sync job to align Sheets correctly
       syncToSheets(module);
     }
