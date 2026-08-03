@@ -212,13 +212,18 @@ const MainLayout = () => {
               value="/" 
               icon={<Icons.LayoutDashboard size={20} />} 
             />
-            {hasPermission('customers', 'view') && (
+            {hasPermission('leads', 'view') && (
               <BottomNavigationAction 
-                label="CRM" 
-                value="/module/customers" 
+                label="Leads" 
+                value="/module/leads" 
                 icon={<Icons.Users size={20} />} 
               />
             )}
+            <BottomNavigationAction 
+              label="Add" 
+              value="/quick-add" 
+              icon={<Icons.PlusCircle size={20} />} 
+            />
             {hasPermission('tasks', 'view') && (
               <BottomNavigationAction 
                 label="Tasks" 
@@ -226,25 +231,10 @@ const MainLayout = () => {
                 icon={<Icons.CheckSquare size={20} />} 
               />
             )}
-            {hasPermission('attendance', 'view') && (
-              <BottomNavigationAction 
-                label="Attendance" 
-                value="/module/attendance" 
-                icon={<Icons.Clock size={20} />} 
-              />
-            )}
-            {hasPermission('salaries', 'view') && (
-              <BottomNavigationAction 
-                label="Salary" 
-                value="/module/salary" 
-                icon={<Icons.CircleDollarSign size={20} />} 
-              />
-            )}
             <BottomNavigationAction 
-              label="More" 
-              value="menu_trigger"
-              onClick={() => setMobileOpen(true)}
-              icon={<Icons.Menu size={20} />} 
+              label="Profile" 
+              value={user?.id ? `/module/employees/${user.id}` : "/module/employees"} 
+              icon={<Icons.User size={20} />} 
             />
           </BottomNavigation>
         </Paper>

@@ -337,9 +337,61 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Sync pending offline submissions to server
+  const syncOfflineSubmissions = async () => {
+    const queue = JSON.parse(localStorage.getItem('gr_crm_offline_submissions') || '[]');
+    if (queue.length === 0) return;
+
+    console.log(`[Offline Sync] Found ${queue.length} pending offline submissions. Syncing...`);
+    const remaining = [];
+
+    for (const item of queue) {
+      try {
+        if (item.mode === 'create') {
+          const cleanPayload = { ...item.payload };
+          if (String(cleanPayload.id).startsWith('OFFLINE-')) {
+            delete cleanPayload.id;
+          }
+          await axios.post(`${API_BASE_URL}/data/${item.moduleName}`, cleanPayload);
+        } else if (item.mode === 'update') {
+          await axios.put(`${API_BASE_URL}/data/${item.moduleName}/${item.id}`, item.payload);
+        }
+      } catch (err) {
+        console.error(`[Offline Sync] Failed to sync item:`, item, err);
+        remaining.push(item);
+      }
+    }
+
+    localStorage.setItem('gr_crm_offline_submissions', JSON.stringify(remaining));
+
+    if (queue.length > remaining.length) {
+      alert(`🎉 Network restored! Successfully synced ${queue.length - remaining.length} offline drafts with the server.`);
+      const modulesToFetch = ['properties', 'deals', 'customers', 'leads', 'dealers', 'site_visits', 'queries', 'follow_ups'];
+      modulesToFetch.forEach(m => fetchModuleData(m).catch(() => {}));
+      axios.get(`${API_BASE_URL}/data/activity_logs`).then(r => setActivityLogs(r.data)).catch(() => {});
+    }
+  };
+
+  // Register window online listener to auto-sync offline submissions
+  useEffect(() => {
+    const handleOnline = () => {
+      syncOfflineSubmissions();
+    };
+    window.addEventListener('online', handleOnline);
+    if (navigator.onLine) {
+      syncOfflineSubmissions();
+    }
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
   // Create a record dynamically
   const createRecord = async (moduleName, payload) => {
     try {
+      if (!navigator.onLine) {
+        throw new Error('Network Error');
+      }
       const res = await axios.post(`${API_BASE_URL}/data/${moduleName}`, payload);
       // Optimistic cache update
       setModuleData(prev => ({
@@ -365,6 +417,26 @@ export const AppProvider = ({ children }) => {
       return { success: true, data: res.data };
     } catch (err) {
       console.error(`Error creating ${moduleName}:`, err);
+      if (!navigator.onLine || err.message === 'Network Error') {
+        const tempId = payload.id || `OFFLINE-${moduleName.toUpperCase()}-${Date.now()}`;
+        const mockData = { ...payload, id: tempId };
+        
+        const queue = JSON.parse(localStorage.getItem('gr_crm_offline_submissions') || '[]');
+        queue.push({
+          mode: 'create',
+          moduleName,
+          payload: mockData,
+          timestamp: Date.now()
+        });
+        localStorage.setItem('gr_crm_offline_submissions', JSON.stringify(queue));
+
+        setModuleData(prev => ({
+          ...prev,
+          [moduleName]: [...(prev[moduleName] || []), mockData]
+        }));
+
+        return { success: true, isOfflineDraft: true, data: mockData };
+      }
       return { success: false, message: err.response?.data?.message || 'Create failed.' };
     }
   };
@@ -372,6 +444,9 @@ export const AppProvider = ({ children }) => {
   // Update a record dynamically
   const updateRecord = async (moduleName, id, payload) => {
     try {
+      if (!navigator.onLine) {
+        throw new Error('Network Error');
+      }
       const res = await axios.put(`${API_BASE_URL}/data/${moduleName}/${id}`, payload);
       // Update cache
       setModuleData(prev => ({
@@ -396,6 +471,31 @@ export const AppProvider = ({ children }) => {
       return { success: true, data: res.data };
     } catch (err) {
       console.error(`Error updating ${moduleName}:`, err);
+      if (!navigator.onLine || err.message === 'Network Error') {
+        const mockData = { ...payload, id };
+        
+        const queue = JSON.parse(localStorage.getItem('gr_crm_offline_submissions') || '[]');
+        const existingIdx = queue.findIndex(q => q.mode === 'update' && q.moduleName === moduleName && String(q.id) === String(id));
+        if (existingIdx > -1) {
+          queue[existingIdx].payload = { ...queue[existingIdx].payload, ...payload };
+        } else {
+          queue.push({
+            mode: 'update',
+            moduleName,
+            id,
+            payload: mockData,
+            timestamp: Date.now()
+          });
+        }
+        localStorage.setItem('gr_crm_offline_submissions', JSON.stringify(queue));
+
+        setModuleData(prev => ({
+          ...prev,
+          [moduleName]: (prev[moduleName] || []).map(rec => String(rec.id) === String(id) ? { ...rec, ...payload } : rec)
+        }));
+
+        return { success: true, isOfflineDraft: true, data: mockData };
+      }
       return { success: false, message: err.response?.data?.message || 'Update failed.' };
     }
   };

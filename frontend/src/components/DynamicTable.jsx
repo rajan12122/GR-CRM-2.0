@@ -410,6 +410,43 @@ const DynamicTable = ({
       }
     }
 
+    if (['phone', 'contact_number', 'contact_num', 'mobile'].includes(field.name) && val) {
+      const cleanVal = String(val).trim();
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <a href={`tel:${cleanVal}`} onClick={(e) => e.stopPropagation()} style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 600 }}>
+            {cleanVal}
+          </a>
+          <IconButton 
+            size="small" 
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(`https://wa.me/91${cleanVal.replace(/[^0-9]/g, '')}`, '_blank');
+            }}
+            sx={{ p: '2px', color: '#25D366' }}
+          >
+            <Icons.MessageCircle size={14} />
+          </IconButton>
+        </Box>
+      );
+    }
+
+    if (['locality', 'sector_block', 'city', 'address'].includes(field.name) && val) {
+      const cleanVal = String(val).trim();
+      return (
+        <a 
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanVal)}`} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: '#2563EB', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+        >
+          {cleanVal}
+          <Icons.MapPin size={12} />
+        </a>
+      );
+    }
+
     return String(val);
   };
 

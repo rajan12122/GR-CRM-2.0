@@ -2556,42 +2556,42 @@
     "customerStages": [
       {
         "value": "New Lead",
-        "label": "Fresh Lead",
+        "label": "New",
         "color": "#3B82F6"
       },
       {
         "value": "Contacted",
         "label": "Contacted",
-        "color": "#8B5CF6"
+        "color": "#F59E0B"
       },
       {
         "value": "Interested",
-        "label": "Interested / Nurture",
+        "label": "Interested",
         "color": "#F59E0B"
       },
       {
         "value": "Site Visit",
-        "label": "Site Visit Arranged",
-        "color": "#EC4899"
+        "label": "Site Visit",
+        "color": "#F59E0B"
       },
       {
         "value": "Negotiation",
-        "label": "Under Negotiation",
-        "color": "#10B981"
+        "label": "Negotiation",
+        "color": "#F59E0B"
       },
       {
         "value": "Booked",
-        "label": "Property Booked",
-        "color": "#059669"
+        "label": "Completed",
+        "color": "#22C55E"
       },
       {
         "value": "Closed",
-        "label": "Deal Closed",
-        "color": "#111827"
+        "label": "Completed",
+        "color": "#22C55E"
       },
       {
         "value": "Lost",
-        "label": "Lost Lead",
+        "label": "Dropped",
         "color": "#EF4444"
       }
     ],
@@ -2640,37 +2640,37 @@
     "leadStatus": [
       {
         "value": "Open",
-        "label": "Unassigned / Open",
+        "label": "New",
         "color": "#3B82F6"
       },
       {
         "value": "In-Progress",
-        "label": "Active Communication",
+        "label": "In Progress",
         "color": "#F59E0B"
       },
       {
         "value": "Contacted",
         "label": "Contacted",
-        "color": "#8B5CF6"
+        "color": "#F59E0B"
       },
       {
         "value": "Visit Scheduled",
-        "label": "Visit Scheduled",
-        "color": "#EC4899"
+        "label": "Site Visit",
+        "color": "#F59E0B"
       },
       {
         "value": "Negotiation",
-        "label": "Under Negotiation",
-        "color": "#10B981"
+        "label": "Negotiation",
+        "color": "#F59E0B"
       },
       {
         "value": "Converted",
-        "label": "Moved to Customers",
+        "label": "Completed",
         "color": "#22C55E"
       },
       {
         "value": "Junk",
-        "label": "Junk / Wrong Number",
+        "label": "Dropped",
         "color": "#EF4444"
       }
     ],
@@ -2839,22 +2839,22 @@
     "followUpStatus": [
       {
         "value": "Pending",
-        "label": "Pending Call",
+        "label": "Pending",
         "color": "#F59E0B"
       },
       {
         "value": "Completed",
-        "label": "Call Completed",
+        "label": "Completed",
         "color": "#22C55E"
       },
       {
         "value": "No Answer",
-        "label": "No Response / Ringing",
+        "label": "No Answer",
         "color": "#EF4444"
       },
       {
         "value": "Rescheduled",
-        "label": "Shifted Date",
+        "label": "Rescheduled",
         "color": "#3B82F6"
       }
     ],
@@ -2988,17 +2988,17 @@
     "taskStatus": [
       {
         "value": "Pending",
-        "label": "Not Started",
-        "color": "#6B7280"
-      },
-      {
-        "value": "In Progress",
-        "label": "Active Working",
+        "label": "New",
         "color": "#3B82F6"
       },
       {
+        "value": "In Progress",
+        "label": "In Progress",
+        "color": "#F59E0B"
+      },
+      {
         "value": "Completed",
-        "label": "Completed Task",
+        "label": "Completed",
         "color": "#22C55E"
       }
     ],

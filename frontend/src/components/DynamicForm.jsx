@@ -19,11 +19,13 @@ import {
   FormControlLabel,
   Typography,
   Alert,
-  Autocomplete
+  Autocomplete,
+  InputAdornment
 } from '@mui/material';
 import axios from 'axios';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 import { Home, Cpu } from 'lucide-react';
+import VoiceInputButton from './VoiceInputButton';
 
 const parseIndianNumber = (val) => {
   if (val === undefined || val === null || val === '') return 0;
@@ -1701,6 +1703,13 @@ const DynamicForm = ({
                       error={!!errors[f.name]}
                       helperText={errors[f.name]}
                       disabled={isReadOnly}
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 0.5 }}>
+                            <VoiceInputButton onTranscript={(txt) => handleChange(f.name, formData[f.name] ? `${formData[f.name]} ${txt}` : txt)} />
+                          </InputAdornment>
+                        )
+                      }}
                     />
                   </Grid>
                 );
@@ -2108,6 +2117,13 @@ const DynamicForm = ({
                             InputLabelProps={f.type === 'date' ? { shrink: true } : undefined}
                             value={nestedPropertyData[f.name] || ''}
                             onChange={(e) => handleNestedPropertyChange(f.name, e.target.value)}
+                            InputProps={f.type === 'textarea' ? {
+                              endAdornment: (
+                                <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 0.5 }}>
+                                  <VoiceInputButton onTranscript={(txt) => handleNestedPropertyChange(f.name, nestedPropertyData[f.name] ? `${nestedPropertyData[f.name]} ${txt}` : txt)} />
+                                </InputAdornment>
+                              )
+                            } : undefined}
                           />
                         </Grid>
                       );

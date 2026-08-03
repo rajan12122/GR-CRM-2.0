@@ -42,6 +42,7 @@ import * as Icons from 'lucide-react';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 import EntityTooltip from '../components/EntityTooltip';
 import PropertyMatcher from '../components/PropertyMatcher';
+import VoiceInputButton from '../components/VoiceInputButton';
 
 const getSingularLabel = (label) => {
   if (!label) return '';
@@ -883,12 +884,47 @@ const EntityDetail = () => {
                   <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F172A', mt: 0.5 }}>
                     {val === undefined || val === null || val === '' ? (
                       <span style={{ color: '#94A3B8', fontWeight: 400 }}>Not Specified</span>
-                    ) : f.type === 'select' ? (
-                      <Chip 
-                        label={val} 
-                        size="small" 
-                        sx={{ height: 20, fontSize: '10px', fontWeight: 700 }} 
-                      />
+                    ) : f.type === 'select' ? ( (() => {
+                      const chipList = metadata?.chips?.[f.chipGroup] || [];
+                      const chipConfig = chipList.find(c => String(c.value).toLowerCase() === String(val).toLowerCase());
+                      return (
+                        <Chip 
+                          label={chipConfig?.label || val} 
+                          size="small" 
+                          sx={{ 
+                            height: 20, 
+                            fontSize: '10px', 
+                            fontWeight: 700,
+                            backgroundColor: chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9',
+                            color: chipConfig?.color || '#475569',
+                            border: `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
+                          }} 
+                        />
+                      );
+                    })() ) : ['phone', 'contact_number', 'contact_num', 'mobile'].includes(f.name) ? (
+                      <Box display="inline-flex" alignItems="center" gap={0.5}>
+                        <a href={`tel:${String(val).trim()}`} style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          {val}
+                          <Icons.PhoneCall size={14} />
+                        </a>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => window.open(`https://wa.me/91${String(val).replace(/[^0-9]/g, '')}`, '_blank')}
+                          sx={{ p: '2px', color: '#25D366' }}
+                        >
+                          <Icons.MessageCircle size={14} />
+                        </IconButton>
+                      </Box>
+                    ) : ['locality', 'sector_block', 'city', 'address'].includes(f.name) ? (
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(val).trim())}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{ color: '#2563EB', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                      >
+                        {val}
+                        <Icons.MapPin size={14} />
+                      </a>
                     ) : f.name === 'referrer_id' && record.referrer_type ? (
                       <EntityTooltip moduleName={record.referrer_type} id={val}>
                         <Chip 
@@ -1233,6 +1269,13 @@ const EntityDetail = () => {
                               size="small"
                               value={remarkInput}
                               onChange={(e) => setRemarkInput(e.target.value)}
+                              InputProps={{
+                                endAdornment: (
+                                  <InputAdornment position="end">
+                                    <VoiceInputButton onTranscript={(txt) => setRemarkInput(prev => prev ? `${prev} ${txt}` : txt)} />
+                                  </InputAdornment>
+                                )
+                              }}
                             />
                           </Grid>
                           <Grid item xs={12} sm={2}>
@@ -1851,6 +1894,13 @@ const EntityDetail = () => {
                               size="small"
                               value={remarkInput}
                               onChange={(e) => setRemarkInput(e.target.value)}
+                              InputProps={{
+                                endAdornment: (
+                                  <InputAdornment position="end">
+                                    <VoiceInputButton onTranscript={(txt) => setRemarkInput(prev => prev ? `${prev} ${txt}` : txt)} />
+                                  </InputAdornment>
+                                )
+                              }}
                             />
                           </Grid>
                           <Grid item xs={12} sm={2}>
@@ -2412,6 +2462,13 @@ const EntityDetail = () => {
                                 size="small"
                                 value={remarkInput}
                                 onChange={(e) => setRemarkInput(e.target.value)}
+                                InputProps={{
+                                  endAdornment: (
+                                    <InputAdornment position="end">
+                                      <VoiceInputButton onTranscript={(txt) => setRemarkInput(prev => prev ? `${prev} ${txt}` : txt)} />
+                                    </InputAdornment>
+                                  )
+                                }}
                               />
                             </Grid>
                             <Grid item xs={12} sm={2}>
@@ -2947,6 +3004,13 @@ const EntityDetail = () => {
                               size="small"
                               value={remarkInput}
                               onChange={(e) => setRemarkInput(e.target.value)}
+                              InputProps={{
+                                endAdornment: (
+                                  <InputAdornment position="end">
+                                    <VoiceInputButton onTranscript={(txt) => setRemarkInput(prev => prev ? `${prev} ${txt}` : txt)} />
+                                  </InputAdornment>
+                                )
+                              }}
                             />
                           </Grid>
                           <Grid item xs={12} sm={2}>
@@ -3223,7 +3287,20 @@ const EntityDetail = () => {
                       <Box component="form" onSubmit={handlePostRemark} sx={{ mb: 3 }}>
                         <Grid container spacing={1.5}>
                           <Grid item xs={10}>
-                            <TextField placeholder="Add developer/project remarks..." fullWidth size="small" value={remarkInput} onChange={(e) => setRemarkInput(e.target.value)} />
+                             <TextField 
+                              placeholder="Add developer/project remarks..." 
+                              fullWidth 
+                              size="small" 
+                              value={remarkInput} 
+                              onChange={(e) => setRemarkInput(e.target.value)} 
+                              InputProps={{
+                                endAdornment: (
+                                  <InputAdornment position="end">
+                                    <VoiceInputButton onTranscript={(txt) => setRemarkInput(prev => prev ? `${prev} ${txt}` : txt)} />
+                                  </InputAdornment>
+                                )
+                              }}
+                            />
                           </Grid>
                           <Grid item xs={2}>
                             <Button type="submit" variant="contained" fullWidth sx={{ py: 1, backgroundColor: '#2563EB' }}>Post</Button>
