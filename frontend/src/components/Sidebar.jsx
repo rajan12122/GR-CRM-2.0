@@ -98,16 +98,24 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   // Auto-expand category containing the active module
   React.useEffect(() => {
-    if (groupedModules && groupedModules.length > 0) {
+    let catToExpand = null;
+    if (activePath.startsWith('/pipeline')) {
+      catToExpand = 'pipelines';
+    } else if (activePath === '/sheets-mapping' || activePath === '/settings') {
+      catToExpand = 'management';
+    } else if (groupedModules && groupedModules.length > 0) {
       const activeCat = groupedModules.find(group => 
         group.modules.some(mod => isModuleActive(mod.path))
       );
       if (activeCat) {
-        setExpandedCategories(prev => ({
-          ...prev,
-          [activeCat.id]: true
-        }));
+        catToExpand = activeCat.id;
       }
+    }
+    if (catToExpand) {
+      setExpandedCategories(prev => ({
+        ...prev,
+        [catToExpand]: true
+      }));
     }
   }, [location.pathname, metadata]);
 
@@ -274,13 +282,13 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           >
             Pipelines
           </Typography>
-          {collapsedCategories['pipelines'] ? (
-            <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
-          ) : (
+          {expandedCategories['pipelines'] ? (
             <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
+          ) : (
+            <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
           )}
         </Box>
-        <Collapse in={!collapsedCategories['pipelines']} timeout="auto" unmountOnExit>
+        <Collapse in={!!expandedCategories['pipelines']} timeout="auto" unmountOnExit>
           <List sx={{ px: 1.5, py: 0 }}>
             <ListItem disablePadding sx={{ mb: 0.5 }}>
               <ListItemButton
@@ -446,13 +454,13 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
               >
                 Management
               </Typography>
-              {collapsedCategories['management'] ? (
-                <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
-              ) : (
+              {expandedCategories['management'] ? (
                 <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
+              ) : (
+                <Icons.ChevronRight size={16} sx={{ opacity: 0.8 }} />
               )}
             </Box>
-            <Collapse in={!collapsedCategories['management']} timeout="auto" unmountOnExit>
+            <Collapse in={!!expandedCategories['management']} timeout="auto" unmountOnExit>
               <List sx={{ px: 1.5, py: 0 }}>
                 <ListItem disablePadding sx={{ mb: 0.5 }}>
                   <ListItemButton
