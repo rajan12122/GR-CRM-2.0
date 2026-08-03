@@ -2185,57 +2185,16 @@ app.get('/api/data/:module', authenticateToken, (req, res, next) => {
   const { limit, offset, search } = req.query;
   
   try {
-    const totalCount = await getRecordsCount(module, pool, search);
+    const userFilter = {
+      userId: req.user.id,
+      role: req.user.role
+    };
+
+    const totalCount = await getRecordsCount(module, pool, { search, userFilter });
     res.setHeader('X-Total-Count', totalCount);
     res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count');
 
-    let records = await getRecords(module, pool, { limit, offset, search });
-    
-    if (role !== 'Admin') {
-      if (module === 'wanted_properties' && role !== 'Manager') {
-        records = records.filter(r => String(r.assignedEmployeeId) === String(req.user.id));
-      } else if (module === 'leads') {
-        const followUps = await getRecords('follow_ups', pool);
-        const siteVisits = await getRecords('site_visits', pool);
-        const pitches = await getRecords('property_pitch_history', pool);
-        
-        const myFollowUpCustomerIds = followUps
-          .filter(f => String(f.employeeId) === String(req.user.id))
-          .map(f => String(f.customerId));
-        const mySiteVisitCustomerIds = siteVisits
-          .filter(sv => String(sv.employeeId) === String(req.user.id))
-          .map(sv => String(sv.customerId));
-        const myPitchCustomerIds = pitches
-          .filter(p => String(p.employeeId) === String(req.user.id))
-          .map(p => String(p.customerId));
-        
-        records = records.filter(r => 
-          String(r.assignedEmployeeId) === String(req.user.id) ||
-          myFollowUpCustomerIds.includes(String(r.id)) ||
-          mySiteVisitCustomerIds.includes(String(r.id)) ||
-          myPitchCustomerIds.includes(String(r.id))
-        );
-      } else if (module === 'follow_ups') {
-        records = records.filter(r => String(r.employeeId) === String(req.user.id));
-      } else if (module === 'queries') {
-        const followUps = await getRecords('follow_ups', pool);
-        const myFollowUpQueryIds = followUps
-          .filter(f => String(f.employeeId) === String(req.user.id))
-          .map(f => String(f.queryId));
-        records = records.filter(r => 
-          String(r.assignedEmployeeId) === String(req.user.id) ||
-          myFollowUpQueryIds.includes(String(r.id))
-        );
-      } else if (module === 'property_pitch_history') {
-        records = records.filter(r => String(r.employeeId) === String(req.user.id));
-      } else if (module === 'site_visits') {
-        records = records.filter(r => String(r.employeeId) === String(req.user.id));
-      } else if (module === 'salaries') {
-        records = records.filter(r => String(r.employeeId) === String(req.user.id));
-      } else if (module === 'tasks') {
-        records = records.filter(r => String(r.assignedTo) === String(req.user.id));
-      }
-    }
+    const records = await getRecords(module, pool, { limit, offset, search, userFilter });
     
     // Apply field-level filtering for non-Admin roles
     const metadata = readMetadata();

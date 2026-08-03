@@ -309,11 +309,12 @@ function normalizeRow(moduleName, row) {
 // Granular database APIs
 async function getRecords(moduleName, dbOrClient, options = {}) {
   const executor = getExecutor(dbOrClient);
-  const { limit, offset, search } = options;
+  const { limit, offset, search, userFilter } = options;
 
   let sql = `SELECT * FROM "${moduleName}"`;
   const queryParams = [];
   let paramIndex = 1;
+  const whereClauses = [];
 
   if (search) {
     const tableCols = await getTableColumns(moduleName, executor);
@@ -321,10 +322,56 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
       const searchVal = `%${search}%`;
       queryParams.push(searchVal);
       const searchPlaceholder = `$${paramIndex++}`;
-      
       const searchClauses = tableCols.map(col => `"${col}"::text ILIKE ${searchPlaceholder}`);
-      sql += ` WHERE (${searchClauses.join(' OR ')})`;
+      whereClauses.push(`(${searchClauses.join(' OR ')})`);
     }
+  }
+
+  if (userFilter && userFilter.role !== 'Admin') {
+    const { userId, role } = userFilter;
+    let ownershipClause = null;
+
+    if (moduleName === 'wanted_properties' && role !== 'Manager') {
+      queryParams.push(userId);
+      ownershipClause = `"assignedEmployeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'leads' || moduleName === 'customers') {
+      queryParams.push(userId, userId, userId, userId);
+      ownershipClause = `(
+        "assignedEmployeeId" = $${paramIndex++} OR 
+        id IN (SELECT "customerId" FROM follow_ups WHERE "employeeId" = $${paramIndex++}) OR 
+        id IN (SELECT "customerId" FROM site_visits WHERE "employeeId" = $${paramIndex++}) OR 
+        id IN (SELECT "customerId" FROM property_pitch_history WHERE "employeeId" = $${paramIndex++})
+      )`;
+    } else if (moduleName === 'follow_ups') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'queries') {
+      queryParams.push(userId, userId);
+      ownershipClause = `(
+        "assignedEmployeeId" = $${paramIndex++} OR 
+        id IN (SELECT "queryId" FROM follow_ups WHERE "employeeId" = $${paramIndex++})
+      )`;
+    } else if (moduleName === 'property_pitch_history') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'site_visits') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'salaries') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'tasks') {
+      queryParams.push(userId);
+      ownershipClause = `"assignedTo" = $${paramIndex++}`;
+    }
+
+    if (ownershipClause) {
+      whereClauses.push(ownershipClause);
+    }
+  }
+
+  if (whereClauses.length > 0) {
+    sql += ` WHERE ` + whereClauses.join(' AND ');
   }
 
   // Ordering to guarantee deterministic pagination results
@@ -350,11 +397,14 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
   return res.rows.map(row => normalizeRow(moduleName, row));
 }
 
-async function getRecordsCount(moduleName, dbOrClient, search) {
+async function getRecordsCount(moduleName, dbOrClient, options = {}) {
   const executor = getExecutor(dbOrClient);
+  const { search, userFilter } = options;
+
   let sql = `SELECT COUNT(*) FROM "${moduleName}"`;
   const queryParams = [];
   let paramIndex = 1;
+  const whereClauses = [];
 
   if (search) {
     const tableCols = await getTableColumns(moduleName, executor);
@@ -362,10 +412,56 @@ async function getRecordsCount(moduleName, dbOrClient, search) {
       const searchVal = `%${search}%`;
       queryParams.push(searchVal);
       const searchPlaceholder = `$${paramIndex++}`;
-      
       const searchClauses = tableCols.map(col => `"${col}"::text ILIKE ${searchPlaceholder}`);
-      sql += ` WHERE (${searchClauses.join(' OR ')})`;
+      whereClauses.push(`(${searchClauses.join(' OR ')})`);
     }
+  }
+
+  if (userFilter && userFilter.role !== 'Admin') {
+    const { userId, role } = userFilter;
+    let ownershipClause = null;
+
+    if (moduleName === 'wanted_properties' && role !== 'Manager') {
+      queryParams.push(userId);
+      ownershipClause = `"assignedEmployeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'leads' || moduleName === 'customers') {
+      queryParams.push(userId, userId, userId, userId);
+      ownershipClause = `(
+        "assignedEmployeeId" = $${paramIndex++} OR 
+        id IN (SELECT "customerId" FROM follow_ups WHERE "employeeId" = $${paramIndex++}) OR 
+        id IN (SELECT "customerId" FROM site_visits WHERE "employeeId" = $${paramIndex++}) OR 
+        id IN (SELECT "customerId" FROM property_pitch_history WHERE "employeeId" = $${paramIndex++})
+      )`;
+    } else if (moduleName === 'follow_ups') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'queries') {
+      queryParams.push(userId, userId);
+      ownershipClause = `(
+        "assignedEmployeeId" = $${paramIndex++} OR 
+        id IN (SELECT "queryId" FROM follow_ups WHERE "employeeId" = $${paramIndex++})
+      )`;
+    } else if (moduleName === 'property_pitch_history') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'site_visits') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'salaries') {
+      queryParams.push(userId);
+      ownershipClause = `"employeeId" = $${paramIndex++}`;
+    } else if (moduleName === 'tasks') {
+      queryParams.push(userId);
+      ownershipClause = `"assignedTo" = $${paramIndex++}`;
+    }
+
+    if (ownershipClause) {
+      whereClauses.push(ownershipClause);
+    }
+  }
+
+  if (whereClauses.length > 0) {
+    sql += ` WHERE ` + whereClauses.join(' AND ');
   }
 
   const res = await executor.query(sql, queryParams);
