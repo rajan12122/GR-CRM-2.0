@@ -506,7 +506,7 @@ app.post('/api/sync/import-with-mapping', authenticateToken, checkPermission('se
 
 // --- AUTOMATION TRIGGERS ---
 
-async function handleAutomatedPitchLogging(rec, client, req, cacheMutations) {
+async function handleAutomatedPitchLogging(rec, client, req) {
   if (!rec.pitchedPropertyId) return;
   
   const custId = rec.customerId || rec.id;
@@ -573,7 +573,7 @@ async function handleAutomatedPitchLogging(rec, client, req, cacheMutations) {
   }
 }
 
-async function handleQueryStageChange(q, client, req, cacheMutations) {
+async function handleQueryStageChange(q, client, req) {
   if (!q.id) return;
   const isInventoryAdded = q.queryType === 'Sell Property' && (q.status === 'Approved' || q.stage === 'Inventory Added' || q.stage === 'Available For Sale');
   if (isInventoryAdded) {
@@ -762,7 +762,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
   }
 }
 
-async function handleDealStatusChange(d, dbOrClient, req, cacheMutations) {
+async function handleDealStatusChange(d, dbOrClient, req) {
   if (!d.id || d.status !== 'Closed') return;
   
   const client = dbOrClient || pool;
@@ -880,7 +880,7 @@ function parsePriceToNumeric(priceStr) {
   return isNaN(parsed) ? 0 : parsed * multiplier;
 }
 
-async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
+async function handlePitchStatusChange(p, dbOrClient, req) {
   if (!p.id) return;
   const client = dbOrClient || pool;
 
@@ -929,7 +929,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
         pitchRemarks: targetF.pitchRemarks
       }, client);
 
-      await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
+      await handleFollowUpPipelineAction(updatedF, client, req);
 
       if (targetF.queryId) {
         const qStatus = mappedStage === 'Closed' ? 'Closed' : undefined;
@@ -957,7 +957,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
           pitchRemarks: p.remarks || f.pitchRemarks
         }, client);
         
-        await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
+        await handleFollowUpPipelineAction(updatedF, client, req);
       }
     }
   } else {
@@ -972,7 +972,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
           pitchRemarks: p.remarks || f.pitchRemarks
         }, client);
         
-        await handleFollowUpPipelineAction(updatedF, client, req, cacheMutations);
+        await handleFollowUpPipelineAction(updatedF, client, req);
       }
     }
 
@@ -1096,7 +1096,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
   }
 
   // Invoke the master deal status change helper
-  await handleDealStatusChange(existingDeal, client, req, cacheMutations);
+  await handleDealStatusChange(existingDeal, client, req);
 
   // Auto convert follow-ups for this client to Call Done / Closed
   await client.query(
@@ -1106,7 +1106,7 @@ async function handlePitchStatusChange(p, dbOrClient, req, cacheMutations) {
   
 }
 
-async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
+async function handleLeadStatusChange(lead, dbOrClient, req) {
   if (lead.leadType === 'Seller') {
     const client = dbOrClient || pool;
     const cleanPhone = String(lead.phone || '').trim();
@@ -1197,7 +1197,7 @@ async function handleLeadStatusChange(lead, dbOrClient, req, cacheMutations) {
   }
 }
 
-async function syncPropertyDetailsUniversally(propId, dbOrClient, cacheMutations) {
+async function syncPropertyDetailsUniversally(propId, dbOrClient) {
   const client = dbOrClient || pool;
   const propRes = await client.query('SELECT * FROM properties WHERE id = $1', [propId]);
   const prop = propRes.rows[0];
@@ -1234,7 +1234,7 @@ async function syncPropertyDetailsUniversally(propId, dbOrClient, cacheMutations
   
 }
 
-async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmployeeId, dbOrClient, cacheMutations) {
+async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmployeeId, dbOrClient) {
   if (!newEmployeeId) return;
 
   const client = dbOrClient || pool;
@@ -1327,7 +1327,7 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
   }
 }
 
-async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) {
+async function handleFollowUpPipelineAction(f, dbOrClient, req) {
   if (!f.pipelineAction) return;
 
   const action = f.pipelineAction;
@@ -1409,9 +1409,9 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
       
       const insertedDeal = await insertRecord('deals', newDeal, client);
 
-      await handleDealStatusChange(insertedDeal, client, req, cacheMutations);
+      await handleDealStatusChange(insertedDeal, client, req);
     } else {
-      await handleDealStatusChange(existingDeal, client, req, cacheMutations);
+      await handleDealStatusChange(existingDeal, client, req);
     }
   }
 
@@ -1428,7 +1428,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req, cacheMutations) 
       
       const updatedQ = await updateRecord('queries', q.id, { stage: q.stage, status: q.status }, client);
 
-      await handleQueryStageChange(updatedQ, client, req, cacheMutations);
+      await handleQueryStageChange(updatedQ, client, req);
     }
   } else if (customerId && String(customerId).startsWith('LEAD-')) {
     const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [customerId]);
@@ -2078,7 +2078,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
 
       // Post-insert automations
       if (module === 'queries') {
-        await handleQueryStageChange(insertedRec, client, req, cacheMutations);
+        await handleQueryStageChange(insertedRec, client, req);
         
         if (payload.queryType === 'Buy Property' && String(payload.customerId).startsWith('LEAD')) {
           const followUpId = await generateNextIdAsync(client, 'follow_ups', 'FOLLOW');
@@ -2099,31 +2099,31 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         }
       }
 
-      if (module === 'deals') await handleDealStatusChange(insertedRec, client, req, cacheMutations);
-      if (module === 'property_pitch_history') await handlePitchStatusChange(insertedRec, client, req, cacheMutations);
+      if (module === 'deals') await handleDealStatusChange(insertedRec, client, req);
+      if (module === 'property_pitch_history') await handlePitchStatusChange(insertedRec, client, req);
       
       if (module === 'leads') {
-        await handleLeadStatusChange(insertedRec, client, req, cacheMutations);
+        await handleLeadStatusChange(insertedRec, client, req);
         if (insertedRec.assignmentStatus === 'accepted' && insertedRec.leadType !== 'Seller') {
-          await createFollowUpForLead(insertedRec, client, cacheMutations);
+          await createFollowUpForLead(insertedRec, client);
         }
         if (insertedRec.assignedEmployeeId) {
-          await syncAssignedEmployeeUniversally('leads', insertedRec.id, insertedRec.assignedEmployeeId, client, cacheMutations);
+          await syncAssignedEmployeeUniversally('leads', insertedRec.id, insertedRec.assignedEmployeeId, client);
         }
       }
 
       if (module === 'customers' && insertedRec.assignedEmployeeId) {
-        await syncAssignedEmployeeUniversally('customers', insertedRec.id, insertedRec.assignedEmployeeId, client, cacheMutations);
+        await syncAssignedEmployeeUniversally('customers', insertedRec.id, insertedRec.assignedEmployeeId, client);
       }
       if (module === 'follow_ups' && insertedRec.employeeId) {
-        await syncAssignedEmployeeUniversally('follow_ups', insertedRec.id, insertedRec.employeeId, client, cacheMutations);
+        await syncAssignedEmployeeUniversally('follow_ups', insertedRec.id, insertedRec.employeeId, client);
       }
-      if (module === 'follow_ups') await handleFollowUpPipelineAction(insertedRec, client, req, cacheMutations);
+      if (module === 'follow_ups') await handleFollowUpPipelineAction(insertedRec, client, req);
       if (module === 'dealer_calls') await handleDealerCallInsertion(insertedRec, client);
       if (module === 'dealers') await handleDealerVisitAssignment(insertedRec, client, req);
       
       if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && insertedRec.pitchedPropertyId) {
-        await handleAutomatedPitchLogging(insertedRec, client, req, cacheMutations);
+        await handleAutomatedPitchLogging(insertedRec, client, req);
       }
 
       if (module === 'site_visits') {
@@ -2140,7 +2140,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
                 status: 'Site Visit Completed',
                 interestLevel: 'Site Visit Completed'
               }, client);
-              await handlePitchStatusChange(updatedPitch, client, req, cacheMutations);
+              await handlePitchStatusChange(updatedPitch, client, req);
               try { syncToSheets('property_pitch_history'); } catch(e) {}
             }
           }
@@ -2323,29 +2323,29 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       const rec = await updateRecord(module, id, payload, client);
 
       if (module === 'queries') {
-        await handleQueryStageChange(rec, client, req, cacheMutations);
+        await handleQueryStageChange(rec, client, req);
       }
 
       if (module === 'leads') {
-        await handleLeadStatusChange(rec, client, req, cacheMutations);
+        await handleLeadStatusChange(rec, client, req);
         if (rec.assignmentStatus === 'accepted' && rec.leadType !== 'Seller') {
-          await createFollowUpForLead(rec, client, cacheMutations);
+          await createFollowUpForLead(rec, client);
         }
         if (rec.assignedEmployeeId) {
-          await syncAssignedEmployeeUniversally('leads', id, rec.assignedEmployeeId, client, cacheMutations);
+          await syncAssignedEmployeeUniversally('leads', id, rec.assignedEmployeeId, client);
         }
       }
 
       if (module === 'follow_ups') {
-        await handleFollowUpPipelineAction(rec, client, req, cacheMutations);
+        await handleFollowUpPipelineAction(rec, client, req);
       }
 
       if (module === 'property_pitch_history') {
-        await handlePitchStatusChange(rec, client, req, cacheMutations);
+        await handlePitchStatusChange(rec, client, req);
       }
 
       if (module === 'properties') {
-        await syncPropertyDetailsUniversally(id, client, cacheMutations);
+        await syncPropertyDetailsUniversally(id, client);
         try { syncToSheets('leads'); } catch(e) {}
         try { syncToSheets('customers'); } catch(e) {}
         try { syncToSheets('queries'); } catch(e) {}
@@ -2374,7 +2374,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
                 status: 'Site Visit Completed',
                 interestLevel: 'Site Visit Completed'
               }, client);
-              await handlePitchStatusChange(updatedPitch, client, req, cacheMutations);
+              await handlePitchStatusChange(updatedPitch, client, req);
               try { syncToSheets('property_pitch_history'); } catch(e) {}
             }
           }
@@ -2406,11 +2406,11 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
         });
       }
 
-      if (module === 'deals') await handleDealStatusChange(rec, client, req, cacheMutations);
+      if (module === 'deals') await handleDealStatusChange(rec, client, req);
       if (module === 'dealer_calls') await handleDealerCallInsertion(rec, client);
       if (module === 'dealers') await handleDealerVisitAssignment(rec, client, req, recordExists);
       if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && rec.pitchedPropertyId) {
-        await handleAutomatedPitchLogging(rec, client, req, cacheMutations);
+        await handleAutomatedPitchLogging(rec, client, req);
       }
 
       await insertRecord('activity_logs', log, client);
@@ -4220,7 +4220,7 @@ app.get('/api/notifications/stream', (req, res) => {
   });
 });
 
-async function createFollowUpForLead(lead, dbOrClient, cacheMutations) {
+async function createFollowUpForLead(lead, dbOrClient) {
   if (lead.leadType === 'Seller') return;
   const client = dbOrClient || pool;
   
@@ -4284,7 +4284,7 @@ app.post('/api/leads/:id/accept', authenticateToken, async (req, res) => {
         assignmentTime: null
       }, client);
 
-      await createFollowUpForLead(updated, client, cacheMutations);
+      await createFollowUpForLead(updated, client);
       
       const log = {
         id: generateUniqueId('LOG'),
@@ -4360,7 +4360,7 @@ app.post('/api/leads/:id/drop', authenticateToken, async (req, res) => {
       }, client);
 
       if (assignmentStatus === 'accepted') {
-        await createFollowUpForLead(updated, client, cacheMutations);
+        await createFollowUpForLead(updated, client);
       }
 
       const log = {
