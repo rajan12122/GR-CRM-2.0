@@ -3263,23 +3263,35 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         ]);
 
         const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
-        for (const sv of svs) {
-          if (sv.propertyId) {
-            const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [sv.propertyId]);
-            sv.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
-          }
+        const svPropIds = Array.from(new Set(svs.map(sv => sv.propertyId).filter(Boolean)));
+        let svPropsMap = {};
+        if (svPropIds.length > 0) {
+          const propRes = await pool.query('SELECT * FROM properties WHERE id = ANY($1)', [svPropIds]);
+          propRes.rows.forEach(row => {
+            const norm = normalizeRow('properties', row);
+            svPropsMap[norm.id] = norm;
+          });
         }
+        svs.forEach(sv => {
+          sv.property = sv.propertyId ? (svPropsMap[sv.propertyId] || null) : null;
+        });
         data.site_visits = svs;
 
         data.follow_ups = followUps.rows.map(r => normalizeRow('follow_ups', r));
 
         const sas = sales.rows.map(r => normalizeRow('sales', r));
-        for (const sa of sas) {
-          if (sa.propertyId) {
-            const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [sa.propertyId]);
-            sa.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
-          }
+        const saPropIds = Array.from(new Set(sas.map(sa => sa.propertyId).filter(Boolean)));
+        let saPropsMap = {};
+        if (saPropIds.length > 0) {
+          const propRes = await pool.query('SELECT * FROM properties WHERE id = ANY($1)', [saPropIds]);
+          propRes.rows.forEach(row => {
+            const norm = normalizeRow('properties', row);
+            saPropsMap[norm.id] = norm;
+          });
         }
+        sas.forEach(sa => {
+          sa.property = sa.propertyId ? (saPropsMap[sa.propertyId] || null) : null;
+        });
         data.sales = sas;
 
         const cleanPhone = String(cust.phone || '').trim();
@@ -3322,12 +3334,18 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         ]);
 
         const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
-        for (const sv of svs) {
-          if (sv.customerId) {
-            const custRes = await pool.query('SELECT * FROM customers WHERE id = $1', [sv.customerId]);
-            sv.customer = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
-          }
+        const svCustIds = Array.from(new Set(svs.map(sv => sv.customerId).filter(Boolean)));
+        let svCustsMap = {};
+        if (svCustIds.length > 0) {
+          const custRes = await pool.query('SELECT * FROM customers WHERE id = ANY($1)', [svCustIds]);
+          custRes.rows.forEach(row => {
+            const norm = normalizeRow('customers', row);
+            svCustsMap[norm.id] = norm;
+          });
         }
+        svs.forEach(sv => {
+          sv.customer = sv.customerId ? (svCustsMap[sv.customerId] || null) : null;
+        });
         data.site_visits = svs;
         data.sales = sales.rows.map(r => normalizeRow('sales', r));
 
@@ -3354,11 +3372,18 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         data.deals = allDeals;
 
         const closedDeals = allDeals.filter(d => d.status === 'Closed');
+        const closedSellerIds = Array.from(new Set(closedDeals.map(d => d.sellerCustomerId).filter(Boolean)));
+        let sellerNamesMap = {};
+        if (closedSellerIds.length > 0) {
+          const sellerRes = await pool.query('SELECT id, name FROM customers WHERE id = ANY($1)', [closedSellerIds]);
+          sellerRes.rows.forEach(row => {
+            sellerNamesMap[row.id] = row.name;
+          });
+        }
         for (const d of closedDeals) {
           const alreadyLogged = data.ownerHistory.some(h => String(h.saleDate) === String(d.registrationDate));
           if (!alreadyLogged) {
-            const sellerRes = await pool.query('SELECT name FROM customers WHERE id = $1', [d.sellerCustomerId]);
-            const sellerName = sellerRes.rows[0] ? sellerRes.rows[0].name : (d.sellerCustomerId || prop.contact_person_name || 'Previous Owner');
+            const sellerName = sellerNamesMap[d.sellerCustomerId] || d.sellerCustomerId || prop.contact_person_name || 'Previous Owner';
             data.ownerHistory.push({
               ownerId: d.sellerCustomerId || 'N/A',
               ownerName: sellerName,
@@ -3370,29 +3395,52 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           }
         }
 
+        const dealCustIds = Array.from(new Set([
+          ...allDeals.map(d => d.customerId),
+          ...allDeals.map(d => d.sellerCustomerId)
+        ].filter(Boolean)));
+        let dealCustsMap = {};
+        if (dealCustIds.length > 0) {
+          const custRes = await pool.query('SELECT * FROM customers WHERE id = ANY($1)', [dealCustIds]);
+          custRes.rows.forEach(row => {
+            const norm = normalizeRow('customers', row);
+            dealCustsMap[norm.id] = norm;
+          });
+        }
         const buyers = [];
         const sellers = [];
         for (const d of allDeals) {
-          if (d.customerId) {
-            const bRes = await pool.query('SELECT * FROM customers WHERE id = $1', [d.customerId]);
-            if (bRes.rows[0]) buyers.push(normalizeRow('customers', bRes.rows[0]));
+          if (d.customerId && dealCustsMap[d.customerId]) {
+            buyers.push(dealCustsMap[d.customerId]);
           }
-          if (d.sellerCustomerId) {
-            const sRes = await pool.query('SELECT * FROM customers WHERE id = $1', [d.sellerCustomerId]);
-            if (sRes.rows[0]) sellers.push(normalizeRow('customers', sRes.rows[0]));
+          if (d.sellerCustomerId && dealCustsMap[d.sellerCustomerId]) {
+            sellers.push(dealCustsMap[d.sellerCustomerId]);
           }
         }
         data.buyerHistory = buyers;
         data.sellerHistory = sellers;
 
         const pts = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
-        for (const p of pts) {
-          if (p.customerId) {
-            const custRes = await pool.query('SELECT * FROM customers WHERE id = $1', [p.customerId]);
-            const leadRes = await pool.query('SELECT * FROM leads WHERE id = $1', [p.customerId]);
-            p.customer = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : (leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null);
-          }
+        const pitchCustIds = Array.from(new Set(pts.map(p => p.customerId).filter(Boolean)));
+        let pitchCustsMap = {};
+        let pitchLeadsMap = {};
+        if (pitchCustIds.length > 0) {
+          const [custRes, leadRes] = await Promise.all([
+            pool.query('SELECT * FROM customers WHERE id = ANY($1)', [pitchCustIds]),
+            pool.query('SELECT * FROM leads WHERE id = ANY($1)', [pitchCustIds])
+          ]);
+          custRes.rows.forEach(row => {
+            const norm = normalizeRow('customers', row);
+            pitchCustsMap[norm.id] = norm;
+          });
+          leadRes.rows.forEach(row => {
+            const norm = normalizeRow('leads', row);
+            pitchLeadsMap[norm.id] = norm;
+          });
         }
+        pts.forEach(p => {
+          p.customer = p.customerId ? (pitchCustsMap[p.customerId] || pitchLeadsMap[p.customerId] || null) : null;
+        });
         data.pitches = pts;
         data.history = propertyHistory.rows.map(r => normalizeRow('property_history', r));
       }
@@ -3463,13 +3511,26 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       ]);
 
       const pts = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
-      for (const p of pts) {
-        if (p.customerId) {
-          const custRes = await pool.query('SELECT * FROM customers WHERE id = $1', [p.customerId]);
-          const leadRes = await pool.query('SELECT * FROM leads WHERE id = $1', [p.customerId]);
-          p.customer = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : (leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null);
-        }
+      const pitchCustIds = Array.from(new Set(pts.map(p => p.customerId).filter(Boolean)));
+      let pitchCustsMap = {};
+      let pitchLeadsMap = {};
+      if (pitchCustIds.length > 0) {
+        const [custRes, leadRes] = await Promise.all([
+          pool.query('SELECT * FROM customers WHERE id = ANY($1)', [pitchCustIds]),
+          pool.query('SELECT * FROM leads WHERE id = ANY($1)', [pitchCustIds])
+        ]);
+        custRes.rows.forEach(row => {
+          const norm = normalizeRow('customers', row);
+          pitchCustsMap[norm.id] = norm;
+        });
+        leadRes.rows.forEach(row => {
+          const norm = normalizeRow('leads', row);
+          pitchLeadsMap[norm.id] = norm;
+        });
       }
+      pts.forEach(p => {
+        p.customer = p.customerId ? (pitchCustsMap[p.customerId] || pitchLeadsMap[p.customerId] || null) : null;
+      });
       data.pitches = pts;
       data.history = projHistory.rows.map(r => normalizeRow('project_history', r));
     } else {
@@ -3484,21 +3545,30 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           ]);
 
           const pts = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
-          for (const p of pts) {
-            if (p.propertyId) {
-              const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [p.propertyId]);
-              p.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
-            }
+          const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
+
+          const propIds = Array.from(new Set([
+            ...pts.map(p => p.propertyId),
+            ...svs.map(sv => sv.propertyId)
+          ].filter(Boolean)));
+
+          let propsMap = {};
+          if (propIds.length > 0) {
+            const propRes = await pool.query('SELECT * FROM properties WHERE id = ANY($1)', [propIds]);
+            propRes.rows.forEach(row => {
+              const norm = normalizeRow('properties', row);
+              propsMap[norm.id] = norm;
+            });
           }
+
+          pts.forEach(p => {
+            p.property = p.propertyId ? (propsMap[p.propertyId] || null) : null;
+          });
           data.pitches = pts;
 
-          const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
-          for (const sv of svs) {
-            if (sv.propertyId) {
-              const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [sv.propertyId]);
-              sv.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
-            }
-          }
+          svs.forEach(sv => {
+            sv.property = sv.propertyId ? (propsMap[sv.propertyId] || null) : null;
+          });
           data.site_visits = svs;
         }
       }
