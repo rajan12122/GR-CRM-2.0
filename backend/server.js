@@ -4263,7 +4263,7 @@ app.get('/api/leads/pending', authenticateToken, async (req, res) => {
       'SELECT * FROM leads WHERE "assignedEmployeeId" = $1 AND "assignmentStatus" = $2',
       [userId, 'pending']
     );
-    res.json(resPending.rows);
+    res.json(resPending.rows.map(r => normalizeRow('leads', r)));
   } catch (err) {
     console.error('Error fetching pending leads:', err);
     res.status(500).json({ message: err.message });
