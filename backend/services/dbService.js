@@ -683,5 +683,6 @@ module.exports = {
   insertRecord,
   updateRecord,
   deleteRecord,
-  getIdCounters
+  getIdCounters,
+  normalizeRow
 };

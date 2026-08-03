@@ -80,7 +80,8 @@ const {
   insertRecord,
   updateRecord,
   deleteRecord,
-  pool
+  pool,
+  normalizeRow
 } = require('./services/dbService');
 
 const getTodayDateString = () => {
