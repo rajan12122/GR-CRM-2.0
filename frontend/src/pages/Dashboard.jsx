@@ -51,7 +51,8 @@ const Dashboard = () => {
     updateRecord,
     createRecord,
     logEmployeeLocation,
-    logout
+    logout,
+    token
   } = useApp();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
