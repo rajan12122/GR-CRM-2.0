@@ -81,7 +81,8 @@ const {
   updateRecord,
   deleteRecord,
   pool,
-  normalizeRow
+  normalizeRow,
+  ensurePerformanceIndexes
 } = require('./services/dbService');
 
 const getTodayDateString = () => {
@@ -1457,15 +1458,18 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req) {
   }
 }
 
-async function generateDynamicTimeline(moduleName, id, client = pool) {
+async function generateDynamicTimeline(moduleName, id, client = pool, preFetchedData = null) {
   const timeline = [];
 
-  const allRemarksRes = await client.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [moduleName, id]);
-  const allRemarks = allRemarksRes.rows.map(r => normalizeRow('remarks', r));
+  const allRemarks = preFetchedData && preFetchedData.remarks
+    ? preFetchedData.remarks
+    : (await client.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [moduleName, id])).rows.map(r => normalizeRow('remarks', r));
 
   if (moduleName === 'customers') {
-    const custRes = await client.query('SELECT * FROM customers WHERE id = $1', [id]);
-    const cust = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
+    const cust = preFetchedData && preFetchedData.customer
+      ? preFetchedData.customer
+      : (await client.query('SELECT * FROM customers WHERE id = $1', [id])).rows.map(r => normalizeRow('customers', r))[0] || null;
+
     if (cust) {
       timeline.push({
         date: cust.dateAdded || '',
@@ -1473,11 +1477,16 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
         details: `Customer ${cust.name} added to master record.`,
         icon: 'UserCheck'
       });
-      const cleanPhone = String(cust.phone).trim();
-      const cleanEmail = String(cust.email || '').trim().toLowerCase();
       
-      const leadsRes = await client.query('SELECT * FROM leads WHERE phone = $1 OR (email = $2 AND $2 <> \'\')', [cleanPhone, cleanEmail]);
-      const leads = leadsRes.rows.map(r => normalizeRow('leads', r));
+      const leads = preFetchedData && preFetchedData.leads
+        ? preFetchedData.leads
+        : await (async () => {
+            const cleanPhone = String(cust.phone).trim();
+            const cleanEmail = String(cust.email || '').trim().toLowerCase();
+            const leadsRes = await client.query('SELECT * FROM leads WHERE phone = $1 OR (email = $2 AND $2 <> \'\')', [cleanPhone, cleanEmail]);
+            return leadsRes.rows.map(r => normalizeRow('leads', r));
+          })();
+      
       leads.forEach(l => {
         timeline.push({
           date: l.dateAdded || '',
@@ -1487,15 +1496,27 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
         });
       });
 
-      const [queries, siteVisits, followUps, pitches, deals] = await Promise.all([
-        client.query('SELECT * FROM queries WHERE "customerId" = $1', [id]),
-        client.query('SELECT * FROM site_visits WHERE "customerId" = $1', [id]),
-        client.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [id]),
-        client.query('SELECT * FROM property_pitch_history WHERE "customerId" = $1', [id]),
-        client.query('SELECT * FROM deals WHERE "customerId" = $1 OR "sellerCustomerId" = $2', [id, id])
-      ]);
+      const queries = preFetchedData && preFetchedData.queries
+        ? preFetchedData.queries
+        : (await client.query('SELECT * FROM queries WHERE "customerId" = $1', [id])).rows.map(r => normalizeRow('queries', r));
 
-      queries.rows.map(r => normalizeRow('queries', r)).forEach(q => {
+      const siteVisits = preFetchedData && preFetchedData.site_visits
+        ? preFetchedData.site_visits
+        : (await client.query('SELECT * FROM site_visits WHERE "customerId" = $1', [id])).rows.map(r => normalizeRow('site_visits', r));
+
+      const followUps = preFetchedData && preFetchedData.follow_ups
+        ? preFetchedData.follow_ups
+        : (await client.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [id])).rows.map(r => normalizeRow('follow_ups', r));
+
+      const pitches = preFetchedData && preFetchedData.pitches
+        ? preFetchedData.pitches
+        : (await client.query('SELECT * FROM property_pitch_history WHERE "customerId" = $1', [id])).rows.map(r => normalizeRow('property_pitch_history', r));
+
+      const deals = preFetchedData && preFetchedData.deals
+        ? preFetchedData.deals
+        : (await client.query('SELECT * FROM deals WHERE "customerId" = $1 OR "sellerCustomerId" = $2', [id, id])).rows.map(r => normalizeRow('deals', r));
+
+      queries.forEach(q => {
         timeline.push({
           date: q.date || '',
           event: `Query Created (${q.id})`,
@@ -1503,7 +1524,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
           icon: 'HelpCircle'
         });
       });
-      siteVisits.rows.map(r => normalizeRow('site_visits', r)).forEach(v => {
+      siteVisits.forEach(v => {
         timeline.push({
           date: v.date || '',
           event: `Site Visit Scheduled/Done (${v.id})`,
@@ -1511,7 +1532,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
           icon: 'Eye'
         });
       });
-      followUps.rows.map(r => normalizeRow('follow_ups', r)).forEach(f => {
+      followUps.forEach(f => {
         timeline.push({
           date: f.date || '',
           event: `Follow-Up Scheduled (${f.id})`,
@@ -1519,7 +1540,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
           icon: 'PhoneCall'
         });
       });
-      pitches.rows.map(r => normalizeRow('property_pitch_history', r)).forEach(p => {
+      pitches.forEach(p => {
         timeline.push({
           date: p.pitchDate ? p.pitchDate.split(' ')[0] : '',
           event: `Property Pitched (${p.id})`,
@@ -1527,7 +1548,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
           icon: 'Send'
         });
       });
-      deals.rows.map(r => normalizeRow('deals', r)).forEach(d => {
+      deals.forEach(d => {
         const role = String(d.customerId) === String(id) ? 'Buyer' : 'Seller';
         timeline.push({
           date: d.registrationDate || '',
@@ -1538,8 +1559,10 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
       });
     }
   } else if (moduleName === 'properties') {
-    const propRes = await client.query('SELECT * FROM properties WHERE id = $1', [id]);
-    const prop = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
+    const prop = preFetchedData && preFetchedData.property
+      ? preFetchedData.property
+      : (await client.query('SELECT * FROM properties WHERE id = $1', [id])).rows.map(r => normalizeRow('properties', r))[0] || null;
+
     if (prop) {
       timeline.push({
         date: prop.date || '',
@@ -1548,13 +1571,19 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
         icon: 'Home'
       });
 
-      const [siteVisits, pitches, deals] = await Promise.all([
-        client.query('SELECT * FROM site_visits WHERE "propertyId" = $1', [id]),
-        client.query('SELECT * FROM property_pitch_history WHERE "propertyId" = $1', [id]),
-        client.query('SELECT * FROM deals WHERE "propertyId" = $1', [id])
-      ]);
+      const siteVisits = preFetchedData && preFetchedData.site_visits
+        ? preFetchedData.site_visits
+        : (await client.query('SELECT * FROM site_visits WHERE "propertyId" = $1', [id])).rows.map(r => normalizeRow('site_visits', r));
 
-      siteVisits.rows.map(r => normalizeRow('site_visits', r)).forEach(v => {
+      const pitches = preFetchedData && preFetchedData.pitches
+        ? preFetchedData.pitches
+        : (await client.query('SELECT * FROM property_pitch_history WHERE "propertyId" = $1', [id])).rows.map(r => normalizeRow('property_pitch_history', r));
+
+      const deals = preFetchedData && preFetchedData.deals
+        ? preFetchedData.deals
+        : (await client.query('SELECT * FROM deals WHERE "propertyId" = $1', [id])).rows.map(r => normalizeRow('deals', r));
+
+      siteVisits.forEach(v => {
         timeline.push({
           date: v.date || '',
           event: `Site Visit Showcased (${v.id})`,
@@ -1562,7 +1591,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
           icon: 'Eye'
         });
       });
-      pitches.rows.map(r => normalizeRow('property_pitch_history', r)).forEach(p => {
+      pitches.forEach(p => {
         timeline.push({
           date: p.pitchDate ? p.pitchDate.split(' ')[0] : '',
           event: `Pitched to Customer (${p.id})`,
@@ -1570,7 +1599,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
           icon: 'Send'
         });
       });
-      deals.rows.map(r => normalizeRow('deals', r)).forEach(d => {
+      deals.forEach(d => {
         timeline.push({
           date: d.registrationDate || '',
           event: `Deal ${d.status} (${d.id})`,
@@ -1590,8 +1619,10 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
       });
     }
   } else if (moduleName === 'leads') {
-    const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
-    const lead = leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null;
+    const lead = preFetchedData && preFetchedData.lead
+      ? preFetchedData.lead
+      : (await client.query('SELECT * FROM leads WHERE id = $1', [id])).rows.map(r => normalizeRow('leads', r))[0] || null;
+
     if (lead) {
       timeline.push({
         date: lead.dateAdded || '',
@@ -1601,8 +1632,10 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
       });
     }
   } else if (moduleName === 'queries') {
-    const qRes = await client.query('SELECT * FROM queries WHERE id = $1', [id]);
-    const q = qRes.rows[0] ? normalizeRow('queries', qRes.rows[0]) : null;
+    const q = preFetchedData && preFetchedData.query
+      ? preFetchedData.query
+      : (await client.query('SELECT * FROM queries WHERE id = $1', [id])).rows.map(r => normalizeRow('queries', r))[0] || null;
+
     if (q) {
       timeline.push({
         date: q.date || '',
@@ -1612,8 +1645,10 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
       });
     }
   } else if (moduleName === 'deals') {
-    const dRes = await client.query('SELECT * FROM deals WHERE id = $1', [id]);
-    const d = dRes.rows[0] ? normalizeRow('deals', dRes.rows[0]) : null;
+    const d = preFetchedData && preFetchedData.deal
+      ? preFetchedData.deal
+      : (await client.query('SELECT * FROM deals WHERE id = $1', [id])).rows.map(r => normalizeRow('deals', r))[0] || null;
+
     if (d) {
       timeline.push({
         date: d.registrationDate || '',
@@ -1623,8 +1658,10 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
       });
     }
   } else if (moduleName === 'dealers') {
-    const dealerRes = await client.query('SELECT * FROM dealers WHERE id = $1', [id]);
-    const dealer = dealerRes.rows[0] ? normalizeRow('dealers', dealerRes.rows[0]) : null;
+    const dealer = preFetchedData && preFetchedData.dealer
+      ? preFetchedData.dealer
+      : (await client.query('SELECT * FROM dealers WHERE id = $1', [id])).rows.map(r => normalizeRow('dealers', r))[0] || null;
+
     if (dealer) {
       timeline.push({
         date: dealer.dateAdded || new Date().toLocaleDateString('en-IN'),
@@ -1633,12 +1670,15 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
         icon: 'Building'
       });
       
-      const [calls, meetings] = await Promise.all([
-        client.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [id]),
-        client.query('SELECT * FROM dealer_meetings WHERE "dealerId" = $1', [id])
-      ]);
+      const calls = preFetchedData && preFetchedData.calls
+        ? preFetchedData.calls
+        : (await client.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [id])).rows.map(r => normalizeRow('dealer_calls', r));
 
-      calls.rows.map(r => normalizeRow('dealer_calls', r)).forEach(c => {
+      const meetings = preFetchedData && preFetchedData.meetings
+        ? preFetchedData.meetings
+        : (await client.query('SELECT * FROM dealer_meetings WHERE "dealerId" = $1', [id])).rows.map(r => normalizeRow('dealer_meetings', r));
+
+      calls.forEach(c => {
         timeline.push({
           date: c.date || '',
           event: `Outreach Call logged`,
@@ -1647,7 +1687,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool) {
         });
       });
 
-      meetings.rows.map(r => normalizeRow('dealer_meetings', r)).forEach(m => {
+      meetings.forEach(m => {
         timeline.push({
           date: m.meetingDate || '',
           event: `Meeting ${m.status}`,
@@ -3135,23 +3175,35 @@ app.get('/api/search', authenticateToken, async (req, res) => {
           ]);
 
           const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
-          for (const sv of svs) {
-            if (sv.propertyId) {
-              const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [sv.propertyId]);
-              sv.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
-            }
+          const svPropIds = Array.from(new Set(svs.map(sv => sv.propertyId).filter(Boolean)));
+          let svPropsMap = {};
+          if (svPropIds.length > 0) {
+            const propRes = await pool.query('SELECT * FROM properties WHERE id = ANY($1)', [svPropIds]);
+            propRes.rows.forEach(row => {
+              const norm = normalizeRow('properties', row);
+              svPropsMap[norm.id] = norm;
+            });
           }
+          svs.forEach(sv => {
+            sv.property = sv.propertyId ? (svPropsMap[sv.propertyId] || null) : null;
+          });
           data.site_visits = svs;
           data.follow_ups = followUps.rows.map(r => normalizeRow('follow_ups', r));
           data.tasks = tasks.rows.map(r => normalizeRow('tasks', r));
 
           const sas = sales.rows.map(r => normalizeRow('sales', r));
-          for (const sa of sas) {
-            if (sa.propertyId) {
-              const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [sa.propertyId]);
-              sa.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
-            }
+          const saPropIds = Array.from(new Set(sas.map(sa => sa.propertyId).filter(Boolean)));
+          let saPropsMap = {};
+          if (saPropIds.length > 0) {
+            const propRes = await pool.query('SELECT * FROM properties WHERE id = ANY($1)', [saPropIds]);
+            propRes.rows.forEach(row => {
+              const norm = normalizeRow('properties', row);
+              saPropsMap[norm.id] = norm;
+            });
           }
+          sas.forEach(sa => {
+            sa.property = sa.propertyId ? (saPropsMap[sa.propertyId] || null) : null;
+          });
           data.sales = sas;
           data.remarks = remarks.rows.map(r => normalizeRow('remarks', r));
           data.documents = docs.rows.map(r => normalizeRow('documents', r));
@@ -3175,12 +3227,18 @@ app.get('/api/search', authenticateToken, async (req, res) => {
           ]);
 
           const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
-          for (const sv of svs) {
-            if (sv.customerId) {
-              const custRes = await pool.query('SELECT * FROM customers WHERE id = $1', [sv.customerId]);
-              sv.customer = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
-            }
+          const svCustIds = Array.from(new Set(svs.map(sv => sv.customerId).filter(Boolean)));
+          let svCustsMap = {};
+          if (svCustIds.length > 0) {
+            const custRes = await pool.query('SELECT * FROM customers WHERE id = ANY($1)', [svCustIds]);
+            custRes.rows.forEach(row => {
+              const norm = normalizeRow('customers', row);
+              svCustsMap[norm.id] = norm;
+            });
           }
+          svs.forEach(sv => {
+            sv.customer = sv.customerId ? (svCustsMap[sv.customerId] || null) : null;
+          });
           data.site_visits = svs;
           data.sales = sales.rows.map(r => normalizeRow('sales', r));
           data.remarks = remarks.rows.map(r => normalizeRow('remarks', r));
@@ -3213,13 +3271,11 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
   try {
     const data = {};
     
-    // Consolidate dynamic timeline, remarks and documents in parallel
-    const [timeline, remarksRes, docsRes] = await Promise.all([
-      generateDynamicTimeline(module, id, pool),
+    // Fetch remarks and documents in parallel
+    const [remarksRes, docsRes] = await Promise.all([
       pool.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [module, id]),
       pool.query('SELECT * FROM documents WHERE "targetModule" = $1 AND "targetId" = $2', [module, id])
     ]);
-    data.timeline = timeline;
     data.remarks = remarksRes.rows.map(r => normalizeRow('remarks', r));
     data.documents = docsRes.rows.map(r => normalizeRow('documents', r));
 
@@ -3241,6 +3297,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       data.tasks = tasks.rows.map(r => normalizeRow('tasks', r));
       data.salaries = salaries.rows.map(r => normalizeRow('salaries', r));
       data.referrals = referrals.rows.map(r => normalizeRow('leads', r));
+      data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks });
     } else if (module === 'customers') {
       const custRes = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
       const cust = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
@@ -3314,6 +3371,18 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
 
         data.referrals = referrals.rows.map(r => normalizeRow('leads', r));
         data.payments = [];
+
+        const preFetchedData = {
+          remarks: data.remarks,
+          customer: cust,
+          leads: data.leads,
+          queries: data.queries,
+          site_visits: data.site_visits,
+          follow_ups: data.follow_ups,
+          pitches: data.pitches,
+          deals: data.deals
+        };
+        data.timeline = await generateDynamicTimeline(module, id, pool, preFetchedData);
       }
     } else if (module === 'properties') {
       const propRes = await pool.query('SELECT * FROM properties WHERE id = $1', [id]);
@@ -3444,9 +3513,19 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         });
         data.pitches = pts;
         data.history = propertyHistory.rows.map(r => normalizeRow('property_history', r));
+
+        const preFetchedData = {
+          remarks: data.remarks,
+          property: prop,
+          site_visits: data.site_visits,
+          pitches: data.pitches,
+          deals: data.deals
+        };
+        data.timeline = await generateDynamicTimeline(module, id, pool, preFetchedData);
       }
     } else if (module === 'dealers') {
-      const [calls, meetings, properties, referrals, pitches, wantedProps] = await Promise.all([
+      const [dealerRes, calls, meetings, properties, referrals, pitches, wantedProps] = await Promise.all([
+        pool.query('SELECT * FROM dealers WHERE id = $1', [id]),
         pool.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [id]),
         pool.query('SELECT * FROM dealer_meetings WHERE "dealerId" = $1', [id]),
         pool.query('SELECT * FROM properties WHERE "dealerId" = $1', [id]),
@@ -3455,20 +3534,37 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         pool.query('SELECT * FROM wanted_properties WHERE "dealerId" = $1', [id])
       ]);
 
+      const dealer = dealerRes.rows[0] ? normalizeRow('dealers', dealerRes.rows[0]) : null;
+      data.dealer = dealer;
       data.calls = calls.rows.map(r => normalizeRow('dealer_calls', r)).reverse();
       
       const mtgs = meetings.rows.map(r => normalizeRow('dealer_meetings', r));
-      for (const m of mtgs) {
-        if (m.assignedEmployeeId) {
-          const empRes = await pool.query('SELECT name FROM employees WHERE id = $1', [m.assignedEmployeeId]);
-          m.assignedEmployeeName = empRes.rows[0] ? empRes.rows[0].name : m.assignedEmployeeId;
-        }
+      const empIds = Array.from(new Set(mtgs.map(m => m.assignedEmployeeId).filter(Boolean)));
+      let empNamesMap = {};
+      if (empIds.length > 0) {
+        const empRes = await pool.query('SELECT id, name FROM employees WHERE id = ANY($1)', [empIds]);
+        empRes.rows.forEach(row => {
+          empNamesMap[row.id] = row.name;
+        });
       }
+      mtgs.forEach(m => {
+        if (m.assignedEmployeeId) {
+          m.assignedEmployeeName = empNamesMap[m.assignedEmployeeId] || m.assignedEmployeeId;
+        }
+      });
       data.meetings = mtgs;
       data.properties = properties.rows.map(r => normalizeRow('properties', r));
       data.referrals = referrals.rows.map(r => normalizeRow('leads', r));
       data.pitches = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
       data.wanted_properties = wantedProps.rows.map(r => normalizeRow('wanted_properties', r)).reverse();
+
+      const preFetchedData = {
+        remarks: data.remarks,
+        dealer: dealer,
+        calls: data.calls,
+        meetings: data.meetings
+      };
+      data.timeline = await generateDynamicTimeline(module, id, pool, preFetchedData);
     } else if (module === 'wanted_properties') {
       const wpRes = await pool.query('SELECT * FROM wanted_properties WHERE id = $1', [id]);
       const wp = wpRes.rows[0] ? normalizeRow('wanted_properties', wpRes.rows[0]) : null;
@@ -3483,6 +3579,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         data.employee = empRes.rows[0] ? normalizeRow('employees', empRes.rows[0]) : null;
         data.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
       }
+      data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks, wanted_property: wp });
     } else if (module === 'dealer_meetings') {
       const meetingRes = await pool.query('SELECT * FROM dealer_meetings WHERE id = $1', [id]);
       const meeting = meetingRes.rows[0] ? normalizeRow('dealer_meetings', meetingRes.rows[0]) : null;
@@ -3501,6 +3598,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         data.remarks = remarks.rows.map(r => normalizeRow('remarks', r));
         data.documents = docs.rows.map(r => normalizeRow('documents', r));
       }
+      data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks });
     } else if (module === 'projects') {
       const projRes = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
       const proj = projRes.rows[0] ? normalizeRow('projects', projRes.rows[0]) : null;
@@ -3534,6 +3632,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       });
       data.pitches = pts;
       data.history = projHistory.rows.map(r => normalizeRow('project_history', r));
+      data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks, project: proj });
     } else {
       if (module === 'follow_ups' || module === 'queries' || module === 'leads') {
         const recRes = await pool.query(`SELECT * FROM ${module} WHERE id = $1`, [id]);
@@ -3571,6 +3670,16 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
             sv.property = sv.propertyId ? (propsMap[sv.propertyId] || null) : null;
           });
           data.site_visits = svs;
+
+          const preFetchedData = { remarks: data.remarks };
+          if (module === 'follow_ups') {
+            preFetchedData.follow_up = rec;
+          } else if (module === 'queries') {
+            preFetchedData.query = rec;
+          } else if (module === 'leads') {
+            preFetchedData.lead = rec;
+          }
+          data.timeline = await generateDynamicTimeline(module, id, pool, preFetchedData);
         }
       }
     }
@@ -5354,6 +5463,7 @@ app.listen(PORT, async () => {
 
     // Initialize metadataCache from PostgreSQL app_metadata table
     await initializeMetadata();
+    await ensurePerformanceIndexes();
     console.log('CURRENT METADATA IN DATABASE:', JSON.stringify(readMetadata()));
   } catch (err) {
     console.error('Failed to initialize database or metadata Cache from PostgreSQL:', err);

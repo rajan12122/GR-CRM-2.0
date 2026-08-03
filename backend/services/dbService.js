@@ -684,6 +684,50 @@ async function getIdCounters(dbOrClient) {
   return counters;
 }
 
+async function ensurePerformanceIndexes() {
+  const client = await pool.connect();
+  try {
+    console.log('Ensuring performance indexes exist in PostgreSQL...');
+    
+    // Create indexes for remarks
+    await client.query('CREATE INDEX IF NOT EXISTS idx_remarks_target ON remarks ("targetModule", "targetId")');
+    
+    // Create indexes for documents
+    await client.query('CREATE INDEX IF NOT EXISTS idx_documents_target ON documents ("targetModule", "targetId")');
+    
+    // Create indexes for site_visits
+    await client.query('CREATE INDEX IF NOT EXISTS idx_site_visits_customer ON site_visits ("customerId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_site_visits_property ON site_visits ("propertyId")');
+    
+    // Create indexes for deals
+    await client.query('CREATE INDEX IF NOT EXISTS idx_deals_customer ON deals ("customerId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_deals_seller ON deals ("sellerCustomerId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_deals_property ON deals ("propertyId")');
+    
+    // Create indexes for property_pitch_history
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pitches_customer ON property_pitch_history ("customerId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pitches_property ON property_pitch_history ("propertyId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pitches_dealer ON property_pitch_history ("dealerId")');
+    
+    // Create indexes for dealer_calls
+    await client.query('CREATE INDEX IF NOT EXISTS idx_dealer_calls_dealer ON dealer_calls ("dealerId")');
+    
+    // Create indexes for dealer_meetings
+    await client.query('CREATE INDEX IF NOT EXISTS idx_dealer_meetings_dealer ON dealer_meetings ("dealerId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_dealer_meetings_employee ON dealer_meetings ("assignedEmployeeId")');
+    
+    // Create indexes for leads.phone/email for customers conversion mapping lookup
+    await client.query('CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads ("phone")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_leads_email ON leads ("email")');
+    
+    console.log('Successfully verified/created database performance indexes.');
+  } catch (err) {
+    console.error('Error ensuring performance indexes:', err.message);
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   pool,
   metadataPath,
@@ -702,5 +746,6 @@ module.exports = {
   updateRecord,
   deleteRecord,
   getIdCounters,
-  normalizeRow
+  normalizeRow,
+  ensurePerformanceIndexes
 };
