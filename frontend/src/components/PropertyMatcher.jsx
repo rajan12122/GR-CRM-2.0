@@ -16,6 +16,23 @@ import {
 import { useApp } from '../context/AppContext';
 import { Home } from 'lucide-react';
 
+const getStatusStyles = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+  if (s.includes('available')) {
+    return { bg: '#ECFDF5', text: '#047857' }; // Green
+  }
+  if (s.includes('token') || s.includes('booking')) {
+    return { bg: '#FEF3C7', text: '#D97706' }; // Amber
+  }
+  if (s.includes('agreement') || s.includes('noc')) {
+    return { bg: '#EEF2F6', text: '#4F46E5' }; // Indigo
+  }
+  if (s.includes('registered') || s.includes('sold') || s.includes('lost')) {
+    return { bg: '#FEE2E2', text: '#B91C1C' }; // Red
+  }
+  return { bg: '#F1F5F9', text: '#475569' }; // Default Grey
+};
+
 const PropertyMatcher = ({ variant = 'tab', onPitchProperty }) => {
   const navigate = useNavigate();
   const { moduleData } = useApp();
@@ -242,13 +259,32 @@ const PropertyMatcher = ({ variant = 'tab', onPitchProperty }) => {
                 >
                   <Grid container spacing={isSidebar ? 1 : 2} alignItems="center">
                     <Grid item xs={12} sm={isSidebar ? 12 : 2.5}>
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: 800, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline', fontSize: isSidebar ? '13px' : '14px' }}
-                        onClick={() => navigate(`/module/properties/${p.id}`)}
-                      >
-                        {p.id}
-                      </Typography>
+                      <Box display="flex" alignItems="center" flexWrap="wrap" gap={0.8}>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 800, color: '#2563EB', cursor: 'pointer', textDecoration: 'underline', fontSize: isSidebar ? '13px' : '14px' }}
+                          onClick={() => navigate(`/module/properties/${p.id}`)}
+                        >
+                          {p.id}
+                        </Typography>
+                        {p.status && (() => {
+                          const styles = getStatusStyles(p.status);
+                          return (
+                            <Chip
+                              label={p.status}
+                              size="small"
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: '8px',
+                                height: 16,
+                                backgroundColor: styles.bg,
+                                color: styles.text,
+                                border: 'none'
+                              }}
+                            />
+                          );
+                        })()}
+                      </Box>
                       <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>
                         {p.propertyName || 'Unnamed Listing'}
                       </Typography>
