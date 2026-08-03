@@ -28,12 +28,6 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET;
 
-if (!process.env.QUICK_ADD_KEY) {
-  console.error("CRITICAL CONFIGURATION ERROR: QUICK_ADD_KEY environment variable is not defined!");
-  console.error("For security reasons, the server cannot start without a configured QUICK_ADD_KEY.");
-  process.exit(1);
-}
-const QUICK_ADD_KEY = process.env.QUICK_ADD_KEY;
 
 // Lightweight memory-based IP rate limiter
 const ipRequests = {};
@@ -1816,6 +1810,13 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
   const { module } = req.params;
   const payload = req.body;
 
+  if (payload.phone) {
+    const cleanPhone = String(payload.phone).trim();
+    if (cleanPhone.length > 0 && (cleanPhone.length !== 10 || isNaN(Number(cleanPhone)))) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits.' });
+    }
+  }
+
   if (module === 'employees') {
     delete payload.password;
     delete payload.passwordHash;
@@ -2260,6 +2261,13 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
 }, async (req, res) => {
   const { module, id } = req.params;
   const payload = req.body;
+
+  if (payload.phone) {
+    const cleanPhone = String(payload.phone).trim();
+    if (cleanPhone.length > 0 && (cleanPhone.length !== 10 || isNaN(Number(cleanPhone)))) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits.' });
+    }
+  }
 
   if (module === 'employees') {
     delete payload.password;
@@ -4173,6 +4181,16 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), async (re
   }
 });
 
+// Route to generate an expiring short-lived signed intake token for Quick Add (valid for 24 hours)
+app.get('/api/public/generate-intake-token', authenticateToken, checkPermission('settings', 'edit'), (req, res) => {
+  const token = jwt.sign(
+    { role: 'intake', type: 'quick-add' },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+  res.json({ success: true, token });
+});
+
 // Public Employee Quick-Add Intake Portal Form Submission
 app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req, res) => {
   const { website_url, module, payload, key } = req.body;
@@ -4182,8 +4200,38 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
     return res.status(200).json({ success: true, message: "Record added successfully." });
   }
 
-  if (key !== QUICK_ADD_KEY) {
-    return res.status(403).json({ error: "Invalid access token." });
+  let isAuthorized = false;
+  let decodedUser = null;
+
+  // Verify auth via standard Bearer Token
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    try {
+      decodedUser = jwt.verify(token, JWT_SECRET);
+      const employee = await getRecord('employees', decodedUser.id);
+      if (employee && employee.status === 'Active') {
+        isAuthorized = true;
+      }
+    } catch (e) {
+      // Ignore and proceed to check temp key token
+    }
+  }
+
+  // Verify auth via expiring signed intake token passed in the "key" field
+  if (!isAuthorized && key) {
+    try {
+      const decodedKey = jwt.verify(key, JWT_SECRET);
+      if (decodedKey && decodedKey.role === 'intake' && decodedKey.type === 'quick-add') {
+        isAuthorized = true;
+      }
+    } catch (e) {
+      // Ignore, unauthorized
+    }
+  }
+
+  if (!isAuthorized) {
+    return res.status(403).json({ error: "Invalid access token or expired session." });
   }
 
   // 2. Whitelist allowed modules to block backend backdoors

@@ -67,6 +67,32 @@ const Settings = () => {
   const [selectedUserForPerms, setSelectedUserForPerms] = useState('');
   const [userPermSelectedModule, setUserPermSelectedModule] = useState('leads');
 
+  // Temporary Intake Link States
+  const [intakeToken, setIntakeToken] = useState('');
+  const [intakeLoading, setIntakeLoading] = useState(false);
+  const [intakeError, setIntakeError] = useState('');
+
+  const handleGenerateIntakeLink = async () => {
+    setIntakeLoading(true);
+    setIntakeError('');
+    try {
+      const token = localStorage.getItem('gr_crm_token');
+      const res = await axios.get(`${API_BASE_URL}/public/generate-intake-token`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success) {
+        setIntakeToken(res.data.token);
+      } else {
+        setIntakeError('Failed to generate intake link.');
+      }
+    } catch (err) {
+      console.error(err);
+      setIntakeError(err.response?.data?.error || 'Failed to generate intake link.');
+    } finally {
+      setIntakeLoading(false);
+    }
+  };
+
 
 
   // Lead Rotation local form states
@@ -928,6 +954,10 @@ const Settings = () => {
                    <ListItem button onClick={() => setActiveTab('sidebar_categories')} selected={activeTab === 'sidebar_categories'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'sidebar_categories' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'sidebar_categories' ? '#2563EB' : '#4B5563' }}>
                      <Icons.FolderTree size={18} style={{ marginRight: 10 }} />
                      <Typography variant="body2" sx={{ fontWeight: 600 }}>Sidebar Groups</Typography>
+                   </ListItem>
+                   <ListItem button onClick={() => setActiveTab('intake')} selected={activeTab === 'intake'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'intake' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'intake' ? '#2563EB' : '#4B5563' }}>
+                     <Icons.KeyRound size={18} style={{ marginRight: 10 }} />
+                     <Typography variant="body2" sx={{ fontWeight: 600 }}>Quick Add Intake Link</Typography>
                    </ListItem>
                   <Divider sx={{ my: 1 }} />
                   <ListItem 
@@ -2290,6 +2320,77 @@ const Settings = () => {
                     </Paper>
                   </Grid>
                 </Grid>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TAB 9: QUICK ADD INTAKE LINK */}
+          {activeTab === 'intake' && (
+            <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '20px', fontFamily: 'Poppins', mb: 1 }}>
+                  Expiring Quick Add Intake Registration Link
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mb: 4 }}>
+                  Generate a temporary, expiring signed access link to allow external users or devices to submit new records (Leads, Customers, Properties, or Queries) via the Quick Add portal without requiring a full CRM user login.
+                </Typography>
+
+                {intakeError && (
+                  <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }}>
+                    {intakeError}
+                  </Alert>
+                )}
+
+                <Box sx={{ mb: 4 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleGenerateIntakeLink}
+                    disabled={intakeLoading}
+                    startIcon={intakeLoading ? <CircularProgress size={16} color="inherit" /> : <Icons.KeyRound size={16} />}
+                    sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 600 }}
+                  >
+                    {intakeLoading ? 'Generating...' : 'Generate New 24-Hour Link'}
+                  </Button>
+                </Box>
+
+                {intakeToken && (
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: '#1E293B' }}>
+                      Expiring Intake Link:
+                    </Typography>
+                    <Grid container spacing={1} alignItems="stretch">
+                      <Grid item xs={10}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          InputProps={{ readOnly: true }}
+                          value={`${window.location.origin}/quick-add?token=${intakeToken}`}
+                          sx={{
+                            backgroundColor: '#F8FAFC',
+                            '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '12px' }
+                          }}
+                        />
+                      </Grid>
+                      <Grid item xs={2}>
+                        <Button
+                          fullWidth
+                          variant="outlined"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/quick-add?token=${intakeToken}`);
+                            alert('Intake link copied to clipboard!');
+                          }}
+                          sx={{ textTransform: 'none', height: '100%', borderRadius: '8px', fontWeight: 600 }}
+                        >
+                          Copy
+                        </Button>
+                      </Grid>
+                    </Grid>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: '#EF4444', fontWeight: 600 }}>
+                      ⚠️ Security Notice: This link gives direct registration access and will expire automatically in exactly 24 hours.
+                    </Typography>
+                  </Box>
+                )}
               </CardContent>
             </Card>
           )}

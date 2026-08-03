@@ -230,11 +230,20 @@ const QuickAdd = () => {
         }
       });
 
+      const sessionToken = localStorage.getItem('gr_crm_token');
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token');
+
+      const headers = {};
+      if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+
       const response = await axios.post(`${API_BASE_URL}/public/quick-add`, {
         module: selectedModule,
         payload: payload,
-        key: import.meta.env.VITE_QUICK_ADD_KEY
-      });
+        key: urlToken || ''
+      }, { headers });
 
       if (response.data.success) {
         setSubmitSuccess(true);
