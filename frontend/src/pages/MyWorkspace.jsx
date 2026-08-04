@@ -3,7 +3,7 @@ import {
   Box, Grid, Typography, Card, CardContent, Button, Tabs, Tab, TextField, 
   IconButton, Tooltip, Chip, Dialog, DialogTitle, DialogContent, DialogActions, 
   Paper, Checkbox, List, ListItem, ListItemText, ListItemSecondaryAction, Select, MenuItem,
-  FormControl, InputLabel, Menu
+  FormControl, InputLabel, Menu, CircularProgress
 } from '@mui/material';
 import * as Icons from 'lucide-react';
 import axios from 'axios';
@@ -37,6 +37,7 @@ const MyWorkspace = () => {
   const [vaultDocName, setVaultDocName] = useState('');
   const [vaultFileUrl, setVaultFileUrl] = useState('');
   const [vaultExpiryDate, setVaultExpiryDate] = useState('');
+  const [uploadingVaultFile, setUploadingVaultFile] = useState(false);
 
   // --- SHORTCUTS STATE ---
   const [shortcuts, setShortcuts] = useState([]);
@@ -217,6 +218,35 @@ const MyWorkspace = () => {
       setVaultDocs(vaultDocs.filter(d => d.id !== docId));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleVaultFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingVaultFile(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target.result;
+        const res = await axios.post(`${API_BASE_URL}/upload`, {
+          fileName: file.name,
+          base64Data
+        }, { headers });
+        if (res.data && res.data.fileUrl) {
+          setVaultFileUrl(res.data.fileUrl);
+          if (!vaultDocName) {
+            setVaultDocName(file.name.split('.').slice(0, -1).join('.'));
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Vault upload failed:', err);
+      alert('Upload failed. Please check backend connections.');
+    } finally {
+      setUploadingVaultFile(false);
     }
   };
 
@@ -619,20 +649,20 @@ const MyWorkspace = () => {
                   {notes.map(note => {
                     const getNoteBg = (c) => {
                       switch (c) {
-                        case 'Blue': return '#EFF6FF';
-                        case 'Green': return '#F0FDF4';
-                        case 'Red': return '#FEF2F2';
-                        case 'Purple': return '#FAF5FF';
-                        default: return '#FEFCE8';
+                        case 'Blue': return '#1D4ED8';
+                        case 'Green': return '#047857';
+                        case 'Red': return '#B91C1C';
+                        case 'Purple': return '#6D28D9';
+                        default: return '#D97706'; // Amber / dark yellow
                       }
                     };
                     const getNoteBorder = (c) => {
                       switch (c) {
-                        case 'Blue': return '#BFDBFE';
-                        case 'Green': return '#BBF7D0';
-                        case 'Red': return '#FECACA';
-                        case 'Purple': return '#E9D5FF';
-                        default: return '#FEF08A';
+                        case 'Blue': return '#1E3A8A';
+                        case 'Green': return '#064E3B';
+                        case 'Red': return '#7F1D1D';
+                        case 'Purple': return '#4C1D95';
+                        default: return '#B45309';
                       }
                     };
 
@@ -642,22 +672,26 @@ const MyWorkspace = () => {
                           sx={{ 
                             backgroundColor: getNoteBg(note.color), 
                             border: `1px solid ${getNoteBorder(note.color)}`,
-                            boxShadow: 'none',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
                             borderRadius: '12px',
                             minHeight: 120,
                             display: 'flex',
                             flexDirection: 'column',
-                            justifyContent: 'space-between'
+                            justifyContent: 'space-between',
+                            transition: 'transform 0.2s',
+                            '&:hover': {
+                              transform: 'translateY(-2px)'
+                            }
                           }}
                         >
                           <CardContent sx={{ p: 2, pb: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B', whiteSpace: 'pre-wrap' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#FFFFFF', whiteSpace: 'pre-wrap' }}>
                               {note.content}
                             </Typography>
                           </CardContent>
-                          <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                            <IconButton size="small" onClick={() => handleDeleteNote(note.id)}>
-                              <Icons.Trash2 size={14} color="#EF4444" />
+                          <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                            <IconButton size="small" onClick={() => handleDeleteNote(note.id)} sx={{ color: 'rgba(255, 255, 255, 0.75)', '&:hover': { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.1)' } }}>
+                              <Icons.Trash2 size={14} color="currentColor" />
                             </IconButton>
                           </Box>
                         </Card>
@@ -723,13 +757,35 @@ const MyWorkspace = () => {
             <Card sx={{ borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: 'none' }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>🔒 Personal Document Vault</Typography>
-                <Box display="flex" gap={1.5} sx={{ mb: 3 }}>
-                  <TextField placeholder="Document Label (e.g. Aadhar Copy, Template)" fullWidth size="small" value={vaultDocName} onChange={(e) => setVaultDocName(e.target.value)} />
-                  <TextField placeholder="File URL Link" fullWidth size="small" value={vaultFileUrl} onChange={(e) => setVaultFileUrl(e.target.value)} />
-                  <TextField label="Expiry Date" type="date" InputLabelProps={{ shrink: true }} size="small" value={vaultExpiryDate} onChange={(e) => setVaultExpiryDate(e.target.value)} />
-                  <Button variant="contained" onClick={handleAddVaultDoc} sx={{ backgroundColor: '#1E293B', textTransform: 'none', fontWeight: 700 }}>
-                    Store File
-                  </Button>
+                <Box display="flex" flexDirection="column" gap={1.5} sx={{ mb: 3 }}>
+                  <Box display="flex" gap={1.5}>
+                    <TextField placeholder="Document Label (e.g. Aadhar Copy, Template)" fullWidth size="small" value={vaultDocName} onChange={(e) => setVaultDocName(e.target.value)} />
+                    <TextField label="Expiry Date" type="date" InputLabelProps={{ shrink: true }} size="small" value={vaultExpiryDate} onChange={(e) => setVaultExpiryDate(e.target.value)} />
+                  </Box>
+                  <Box display="flex" gap={1.5} alignItems="center">
+                    <TextField placeholder="File URL Link (or upload a file below)" fullWidth size="small" value={vaultFileUrl} onChange={(e) => setVaultFileUrl(e.target.value)} />
+                    <input
+                      accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                      style={{ display: 'none' }}
+                      id="vault-file-upload"
+                      type="file"
+                      onChange={handleVaultFileUpload}
+                    />
+                    <label htmlFor="vault-file-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        disabled={uploadingVaultFile}
+                        startIcon={uploadingVaultFile ? <CircularProgress size={16} /> : <Icons.Upload size={16} />}
+                        sx={{ textTransform: 'none', minWidth: 140, height: 40, borderColor: '#64748B', color: '#64748B' }}
+                      >
+                        {uploadingVaultFile ? 'Uploading...' : 'Upload File'}
+                      </Button>
+                    </label>
+                    <Button variant="contained" onClick={handleAddVaultDoc} sx={{ backgroundColor: '#1E293B', textTransform: 'none', fontWeight: 700, height: 40, px: 3 }}>
+                      Store File
+                    </Button>
+                  </Box>
                 </Box>
 
                 <Grid container spacing={2}>
