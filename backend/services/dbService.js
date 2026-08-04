@@ -835,6 +835,8 @@ async function handleTodoTriggers(moduleName, record, client, action) {
         await client.query('UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2', ['Completed', lid]);
       } else if (lm === 'leads') {
         await client.query('UPDATE leads SET status = $1, updated_at = now() WHERE id = $2', ['In-Progress', lid]);
+      } else if (lm === 'property_pitch_history') {
+        await client.query('UPDATE property_pitch_history SET interestLevel = $1, status = $1, updated_at = now() WHERE id = $2', ['Completed', lid]);
       }
     }
     return;
@@ -963,6 +965,66 @@ async function handleTodoTriggers(moduleName, record, client, action) {
         INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
       `, [newTodoId, todoTitle, record.assignedTo, record.dueDate, '18:00', record.priority || 'Medium', isCompleted ? 'Completed' : 'Pending', false, 'Pending', '', 'tasks', record.id]);
+    }
+  }
+
+  // 6. PROPERTY PITCH TRIGGER
+  if (moduleName === 'property_pitch_history') {
+    if (record.followUpDate) {
+      let custName = record.customerName || 'Customer';
+      if (!record.customerName && record.customerId) {
+        const custRes = await client.query('SELECT name FROM customers WHERE id = $1', [record.customerId]);
+        if (custRes.rows[0]) {
+          custName = custRes.rows[0].name;
+        } else {
+          const leadRes = await client.query('SELECT name FROM leads WHERE id = $1', [record.customerId]);
+          if (leadRes.rows[0]) custName = leadRes.rows[0].name;
+        }
+      }
+
+      let propLoc = 'Property';
+      if (record.propertyId) {
+        const propRes = await client.query('SELECT "propertyName", locality FROM properties WHERE id = $1', [record.propertyId]);
+        if (propRes.rows[0]) {
+          propLoc = propRes.rows[0].propertyName || propRes.rows[0].locality || 'Property';
+        }
+      }
+
+      const isSiteVisit = record.status === 'Site Visit Scheduled';
+      const todoTitle = isSiteVisit 
+        ? `Site visit: ${propLoc} for ${custName}` 
+        : `Call ${custName} (Follow-up for property pitch)`;
+      
+      const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['property_pitch_history', record.id]);
+      if (checkTodo.rows[0]) {
+        const todoId = checkTodo.rows[0].id;
+        await client.query('UPDATE todos SET title = $1, "dueDate" = $2, "assignedTo" = $3, priority = $4, updated_at = now() WHERE id = $5', [
+          todoTitle, 
+          record.followUpDate, 
+          record.employeeId || 'EMP-001', 
+          isSiteVisit ? 'High' : 'Medium',
+          todoId
+        ]);
+      } else {
+        const newTodoId = 'TODO-PITCH-' + record.id;
+        await client.query(`
+          INSERT INTO todos (id, title, "assignedTo", "dueDate", "dueTime", priority, status, personal, "reminderStatus", notes, "linkedModule", "linkedId", created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+        `, [
+          newTodoId, 
+          todoTitle, 
+          record.employeeId || 'EMP-001', 
+          record.followUpDate, 
+          '12:00', 
+          isSiteVisit ? 'High' : 'Medium', 
+          'Pending', 
+          false, 
+          'Pending', 
+          record.remarks || '', 
+          'property_pitch_history', 
+          record.id
+        ]);
+      }
     }
   }
 }
