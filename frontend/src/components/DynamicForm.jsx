@@ -147,12 +147,16 @@ const DynamicForm = ({
     }
     if (!allowed) return false;
 
-    if (moduleKey === 'leads') {
-      const type = formData.leadType;
+    if (moduleKey === 'leads' || moduleKey === 'properties') {
       if (f.name === 'referrer_type') return false;
       if (f.name === 'referrer_id') {
-        return ['Employee Referral', 'Client Referral', 'Dealer Referral'].includes(formData.source);
+        const src = formData.source || formData.lead_source;
+        return ['Employee Referral', 'Client Referral', 'Dealer Referral'].includes(src);
       }
+    }
+
+    if (moduleKey === 'leads') {
+      const type = formData.leadType;
       if (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy') {
         return false;
       }
@@ -1928,13 +1932,14 @@ const DynamicForm = ({
               if (f.name === 'referrer_id') {
                 let options = [];
                 let refModuleName = "";
-                if (formData.source === 'Employee Referral') {
+                const src = formData.source || formData.lead_source;
+                if (src === 'Employee Referral') {
                   options = moduleData.employees || [];
                   refModuleName = "employees";
-                } else if (formData.source === 'Client Referral') {
+                } else if (src === 'Client Referral') {
                   options = moduleData.customers || [];
                   refModuleName = "customers";
-                } else if (formData.source === 'Dealer Referral') {
+                } else if (src === 'Dealer Referral') {
                   options = moduleData.dealers || [];
                   refModuleName = "dealers";
                 }

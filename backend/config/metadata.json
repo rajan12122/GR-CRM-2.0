@@ -434,9 +434,18 @@
           "chipGroup": "dealtype"
         },
         {
-          "name": "date",
-          "label": "Date",
-          "type": "date",
+          "name": "dealerId",
+          "label": "Associated Dealer",
+          "type": "ref",
+          "refModule": "dealers",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "firm_name",
+          "label": "Firm Name",
+          "type": "text",
           "required": false,
           "showInTable": true,
           "editable": true
@@ -458,27 +467,18 @@
           "editable": true
         },
         {
-          "name": "firm_name",
-          "label": "Firm Name",
-          "type": "text",
-          "required": false,
-          "showInTable": true,
-          "editable": true
-        },
-        {
-          "name": "dealerId",
-          "label": "Associated Dealer",
-          "type": "ref",
-          "refModule": "dealers",
-          "required": false,
-          "showInTable": true,
-          "editable": true
-        },
-        {
           "name": "dealer_deal_type",
           "label": "Dealer Deal Type",
           "type": "select",
           "chipGroup": "dealerDealTypes",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "date",
+          "label": "Date",
+          "type": "date",
           "required": false,
           "showInTable": true,
           "editable": true
@@ -634,6 +634,22 @@
           "showInTable": true,
           "editable": true,
           "chipGroup": "leadSources"
+        },
+        {
+          "name": "referrer_type",
+          "label": "Referrer Type",
+          "type": "text",
+          "required": false,
+          "showInTable": false,
+          "editable": false
+        },
+        {
+          "name": "referrer_id",
+          "label": "Referrer Reference",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
         },
         {
           "name": "initial_notes",
