@@ -69,7 +69,7 @@ const MyWorkspace = () => {
 
   useEffect(() => {
     fetchWorkspaceData();
-  }, [token]);
+  }, [token, selectedStaffId]);
 
   useEffect(() => {
     calculatePerformance();
@@ -77,16 +77,24 @@ const MyWorkspace = () => {
 
   const fetchWorkspaceData = async () => {
     try {
-      const todoRes = await axios.get(`${API_BASE_URL}/workspace/todos`, { headers });
+      // Preload employees list for Staff dropdown selector
+      fetchModuleData('employees').catch(() => {});
+
+      const params = {};
+      if (selectedStaffId) {
+        params.employeeId = selectedStaffId;
+      }
+
+      const todoRes = await axios.get(`${API_BASE_URL}/workspace/todos`, { headers, params });
       setTodos(todoRes.data);
 
-      const notesRes = await axios.get(`${API_BASE_URL}/workspace/notes`, { headers });
+      const notesRes = await axios.get(`${API_BASE_URL}/workspace/notes`, { headers, params });
       setNotes(notesRes.data);
 
-      const vaultRes = await axios.get(`${API_BASE_URL}/workspace/documents`, { headers });
+      const vaultRes = await axios.get(`${API_BASE_URL}/workspace/documents`, { headers, params });
       setVaultDocs(vaultRes.data);
 
-      const shortRes = await axios.get(`${API_BASE_URL}/workspace/shortcuts`, { headers });
+      const shortRes = await axios.get(`${API_BASE_URL}/workspace/shortcuts`, { headers, params });
       setShortcuts(shortRes.data);
     } catch (err) {
       console.error('Error fetching workspace assets:', err);
@@ -333,7 +341,7 @@ const MyWorkspace = () => {
     if (filterType === 'all' || filterType === 'followup') {
       const followUps = moduleData.follow_ups || [];
       followUps.forEach(f => {
-        if (f.date === dateStr && String(f.employeeId) === String(user?.id)) {
+        if (f.date === dateStr && String(f.employeeId) === String(selectedStaffId)) {
           list.push({ type: 'followup', label: `Call: ${f.customerId}`, id: f.id });
         }
       });
@@ -343,7 +351,7 @@ const MyWorkspace = () => {
     if (filterType === 'all' || filterType === 'visit') {
       const visits = moduleData.site_visits || [];
       visits.forEach(v => {
-        if (v.date === dateStr && String(v.employeeId) === String(user?.id)) {
+        if (v.date === dateStr && String(v.employeeId) === String(selectedStaffId)) {
           list.push({ type: 'visit', label: `Site Visit: ${v.propertyId}`, id: v.id });
         }
       });
@@ -352,7 +360,7 @@ const MyWorkspace = () => {
     // Todos
     if (filterType === 'all' || filterType === 'todo') {
       todos.forEach(t => {
-        if (t.dueDate === dateStr && String(t.assignedTo) === String(user?.id)) {
+        if (t.dueDate === dateStr && String(t.assignedTo) === String(selectedStaffId)) {
           list.push({ type: 'todo', label: t.title, id: t.id, status: t.status });
         }
       });
@@ -403,16 +411,18 @@ const MyWorkspace = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Workspace Performance Metric Overview</Typography>
                   {user?.role === 'Admin' && (
-                    <FormControl size="small" sx={{ width: 200 }}>
+                    <FormControl size="small" sx={{ width: 220 }}>
                       <InputLabel>View Team Member</InputLabel>
                       <Select 
                         value={selectedStaffId} 
                         onChange={(e) => setSelectedStaffId(e.target.value)}
                         label="View Team Member"
                       >
-                        <MenuItem value="EMP-001">Gagan (Admin)</MenuItem>
-                        <MenuItem value="EMP-002">Rajan (Sales)</MenuItem>
-                        <MenuItem value="EMP-003">Pankaj (Sales)</MenuItem>
+                        {(moduleData.employees || []).map(emp => (
+                          <MenuItem key={emp.id} value={emp.id}>
+                            {emp.name} ({emp.role || 'Sales'})
+                          </MenuItem>
+                        ))}
                       </Select>
                     </FormControl>
                   )}
