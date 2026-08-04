@@ -46,7 +46,6 @@ const MyWorkspace = () => {
   const [shortcutRecordId, setShortcutRecordId] = useState('');
 
   // --- PERFORMANCE FILTER ---
-  const [selectedStaffId, setSelectedStaffId] = useState(user?.id || '');
   const [performanceData, setPerformanceData] = useState({
     completedFollowups: 0,
     overdueTasks: 0,
@@ -69,32 +68,24 @@ const MyWorkspace = () => {
 
   useEffect(() => {
     fetchWorkspaceData();
-  }, [token, selectedStaffId]);
+  }, [token]);
 
   useEffect(() => {
     calculatePerformance();
-  }, [todos, selectedStaffId, moduleData]);
+  }, [todos, moduleData]);
 
   const fetchWorkspaceData = async () => {
     try {
-      // Preload employees list for Staff dropdown selector
-      fetchModuleData('employees').catch(() => {});
-
-      const params = {};
-      if (selectedStaffId) {
-        params.employeeId = selectedStaffId;
-      }
-
-      const todoRes = await axios.get(`${API_BASE_URL}/workspace/todos`, { headers, params });
+      const todoRes = await axios.get(`${API_BASE_URL}/workspace/todos`, { headers });
       setTodos(todoRes.data);
 
-      const notesRes = await axios.get(`${API_BASE_URL}/workspace/notes`, { headers, params });
+      const notesRes = await axios.get(`${API_BASE_URL}/workspace/notes`, { headers });
       setNotes(notesRes.data);
 
-      const vaultRes = await axios.get(`${API_BASE_URL}/workspace/documents`, { headers, params });
+      const vaultRes = await axios.get(`${API_BASE_URL}/workspace/documents`, { headers });
       setVaultDocs(vaultRes.data);
 
-      const shortRes = await axios.get(`${API_BASE_URL}/workspace/shortcuts`, { headers, params });
+      const shortRes = await axios.get(`${API_BASE_URL}/workspace/shortcuts`, { headers });
       setShortcuts(shortRes.data);
     } catch (err) {
       console.error('Error fetching workspace assets:', err);
@@ -292,23 +283,23 @@ const MyWorkspace = () => {
   // --- PERFORMANCE CALCULATOR ---
   const calculatePerformance = () => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const userTodos = todos.filter(t => String(t.assignedTo) === String(selectedStaffId));
+    const userTodos = todos.filter(t => String(t.assignedTo) === String(user?.id));
     const finishedTodos = userTodos.filter(t => t.status === 'Completed');
     const overdue = userTodos.filter(t => t.status === 'Pending' && t.dueDate < todayStr).length;
 
     // Follow ups count
     const followUps = moduleData.follow_ups || [];
-    const userFollowUps = followUps.filter(f => String(f.employeeId) === String(selectedStaffId));
+    const userFollowUps = followUps.filter(f => String(f.employeeId) === String(user?.id));
     const completedF = userFollowUps.filter(f => f.status === 'Completed' && f.date === todayStr).length;
 
     // Site visits done
     const visits = moduleData.site_visits || [];
-    const completedV = visits.filter(v => String(v.employeeId) === String(selectedStaffId) && v.result && v.result !== '' && v.result !== 'Pending').length;
+    const completedV = visits.filter(v => String(v.employeeId) === String(user?.id) && v.result && v.result !== '' && v.result !== 'Pending').length;
 
     // Leads handled
     const leads = moduleData.leads || [];
-    const handledL = leads.filter(l => String(l.assignedEmployeeId) === String(selectedStaffId)).length;
-    const convertedL = leads.filter(l => String(l.assignedEmployeeId) === String(selectedStaffId) && l.status === 'Converted').length;
+    const handledL = leads.filter(l => String(l.assignedEmployeeId) === String(user?.id)).length;
+    const convertedL = leads.filter(l => String(l.assignedEmployeeId) === String(user?.id) && l.status === 'Converted').length;
     const conversionPercent = handledL > 0 ? Math.round((convertedL / handledL) * 100) : 0;
 
     setPerformanceData({
@@ -341,7 +332,7 @@ const MyWorkspace = () => {
     if (filterType === 'all' || filterType === 'followup') {
       const followUps = moduleData.follow_ups || [];
       followUps.forEach(f => {
-        if (f.date === dateStr && String(f.employeeId) === String(selectedStaffId)) {
+        if (f.date === dateStr && String(f.employeeId) === String(user?.id)) {
           list.push({ type: 'followup', label: `Call: ${f.customerId}`, id: f.id });
         }
       });
@@ -351,7 +342,7 @@ const MyWorkspace = () => {
     if (filterType === 'all' || filterType === 'visit') {
       const visits = moduleData.site_visits || [];
       visits.forEach(v => {
-        if (v.date === dateStr && String(v.employeeId) === String(selectedStaffId)) {
+        if (v.date === dateStr && String(v.employeeId) === String(user?.id)) {
           list.push({ type: 'visit', label: `Site Visit: ${v.propertyId}`, id: v.id });
         }
       });
@@ -360,7 +351,7 @@ const MyWorkspace = () => {
     // Todos
     if (filterType === 'all' || filterType === 'todo') {
       todos.forEach(t => {
-        if (t.dueDate === dateStr && String(t.assignedTo) === String(selectedStaffId)) {
+        if (t.dueDate === dateStr && String(t.assignedTo) === String(user?.id)) {
           list.push({ type: 'todo', label: t.title, id: t.id, status: t.status });
         }
       });
@@ -410,22 +401,7 @@ const MyWorkspace = () => {
               <CardContent sx={{ p: 2 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Workspace Performance Metric Overview</Typography>
-                  {user?.role === 'Admin' && (
-                    <FormControl size="small" sx={{ width: 220 }}>
-                      <InputLabel>View Team Member</InputLabel>
-                      <Select 
-                        value={selectedStaffId} 
-                        onChange={(e) => setSelectedStaffId(e.target.value)}
-                        label="View Team Member"
-                      >
-                        {(moduleData.employees || []).map(emp => (
-                          <MenuItem key={emp.id} value={emp.id}>
-                            {emp.name} ({emp.role || 'Sales'})
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  )}
+
                 </Box>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={2.4}>

@@ -324,22 +324,10 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
 // 1. To-Dos Endpoints
 app.get('/api/workspace/todos', authenticateToken, async (req, res) => {
   try {
-    const { id: userId, role } = req.user;
-    const { employeeId } = req.query;
+    const { id: userId } = req.user;
     
     let query = 'SELECT * FROM todos WHERE "assignedTo" = $1 OR personal = true';
     let params = [userId];
-    
-    // If Admin, let them see all, or filter by employeeId if requested
-    if (role === 'Admin') {
-      if (employeeId) {
-        query = 'SELECT * FROM todos WHERE "assignedTo" = $1';
-        params = [employeeId];
-      } else {
-        query = 'SELECT * FROM todos';
-        params = [];
-      }
-    }
     
     const dbRes = await pool.query(query, params);
     res.json(dbRes.rows);
@@ -415,17 +403,15 @@ app.delete('/api/workspace/todos/:id', authenticateToken, async (req, res) => {
 // 2. Sticky Notes Endpoints
 app.get('/api/workspace/notes', authenticateToken, async (req, res) => {
   try {
-    const { id: userId, role } = req.user;
-    const { linkedModule, linkedId, employeeId } = req.query;
-    
-    const targetEmpId = (role === 'Admin' && employeeId) ? employeeId : userId;
+    const { id: userId } = req.user;
+    const { linkedModule, linkedId } = req.query;
     
     let query = 'SELECT * FROM sticky_notes WHERE "employeeId" = $1';
-    let params = [targetEmpId];
+    let params = [userId];
     
     if (linkedModule && linkedId) {
       query = 'SELECT * FROM sticky_notes WHERE ("employeeId" = $1 OR shared = true) AND "linkedModule" = $2 AND "linkedId" = $3';
-      params = [targetEmpId, linkedModule, linkedId];
+      params = [userId, linkedModule, linkedId];
     }
     
     const dbRes = await pool.query(query, params);
@@ -501,10 +487,8 @@ app.delete('/api/workspace/notes/:id', authenticateToken, async (req, res) => {
 // 3. Pinned Shortcuts Endpoints
 app.get('/api/workspace/shortcuts', authenticateToken, async (req, res) => {
   try {
-    const { id: userId, role } = req.user;
-    const { employeeId } = req.query;
-    const targetEmpId = (role === 'Admin' && employeeId) ? employeeId : userId;
-    const dbRes = await pool.query('SELECT * FROM user_shortcuts WHERE "employeeId" = $1', [targetEmpId]);
+    const { id: userId } = req.user;
+    const dbRes = await pool.query('SELECT * FROM user_shortcuts WHERE "employeeId" = $1', [userId]);
     res.json(dbRes.rows);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching shortcuts' });
@@ -582,10 +566,8 @@ app.post('/api/workspace/drafts', authenticateToken, async (req, res) => {
 // 5. Personal Documents Vault Endpoints
 app.get('/api/workspace/documents', authenticateToken, async (req, res) => {
   try {
-    const { id: userId, role } = req.user;
-    const { employeeId } = req.query;
-    const targetEmpId = (role === 'Admin' && employeeId) ? employeeId : userId;
-    const dbRes = await pool.query('SELECT * FROM personal_documents WHERE "employeeId" = $1', [targetEmpId]);
+    const { id: userId } = req.user;
+    const dbRes = await pool.query('SELECT * FROM personal_documents WHERE "employeeId" = $1', [userId]);
     res.json(dbRes.rows);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching vault files' });
