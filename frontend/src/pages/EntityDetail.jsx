@@ -103,10 +103,9 @@ const EntityDetail = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = parseInt(searchParams.get('tab') || '0', 10);
   const setActiveTab = (val) => {
-    setSearchParams(prev => {
-      prev.set('tab', String(val));
-      return prev;
-    });
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', String(val));
+    setSearchParams(params);
   };
 
   const getPropertyName = (propId) => {
@@ -563,10 +562,11 @@ const EntityDetail = () => {
 
   // Reset tab to 0 on route change
   useEffect(() => {
-    setSearchParams(prev => {
-      prev.delete('tab');
-      return prev;
-    }, { replace: true });
+    const params = new URLSearchParams(searchParams);
+    if (params.has('tab')) {
+      params.delete('tab');
+      setSearchParams(params, { replace: true });
+    }
   }, [moduleName, id]);
 
   useEffect(() => {
