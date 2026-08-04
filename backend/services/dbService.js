@@ -656,14 +656,33 @@ async function handlePropertyDealerAssociation(payload, dbOrClient, dryRun = fal
   const isDealer = payload.dealer_owner_booked && String(payload.dealer_owner_booked).trim().toLowerCase() === 'dealer';
   if (!isDealer) return;
 
-  const contactPhone = payload.contact_number;
-  if (!contactPhone) return;
-  const cleanPhone = String(contactPhone).trim();
+  let dealer = null;
 
-  const res = await executor.query('SELECT * FROM dealers WHERE "contact_num" = $1', [cleanPhone]);
-  let dealer = res.rows[0];
+  // 1. If dealerId is provided, look up by dealerId
+  if (payload.dealerId && payload.dealerId !== 'DEAL-TEMP') {
+    const res = await executor.query('SELECT * FROM dealers WHERE id = $1', [payload.dealerId]);
+    dealer = res.rows[0];
+  }
+
+  // 2. If not found by ID but we have contact_number, lookup by dealer's main contact_num or check if it matches any contact person phone number!
+  if (!dealer && payload.contact_number) {
+    const cleanPhone = String(payload.contact_number).trim();
+    const res = await executor.query(
+      `SELECT * FROM dealers WHERE "contact_num" = $1 
+       OR EXISTS (
+         SELECT 1 FROM jsonb_to_recordset(contact_persons) AS x(phone text) 
+         WHERE x.phone = $1
+       )`, 
+      [cleanPhone]
+    );
+    dealer = res.rows[0];
+  }
 
   if (!dealer) {
+    const contactPhone = payload.contact_number;
+    if (!contactPhone) return;
+    const cleanPhone = String(contactPhone).trim();
+
     if (dryRun) {
       payload.dealerId = 'DEAL-TEMP';
       return;
@@ -680,12 +699,41 @@ async function handlePropertyDealerAssociation(payload, dbOrClient, dryRun = fal
       remarks: 'Auto-created from property registration.',
       callOutcome: '',
       assignedEmployeeId: payload.assignedEmployeeId || 'EMP-001',
-      visitStatus: ''
+      visitStatus: '',
+      contact_persons: JSON.stringify([{
+        name: payload.contact_person_name ? String(payload.contact_person_name).trim() : 'Contact Person',
+        phone: cleanPhone
+      }])
     };
     await insertRecord('dealers', newDealer, executor);
     payload.dealerId = dealerId;
   } else {
     payload.dealerId = dealer.id;
+    if (dealer.firm_name) {
+      payload.firm_name = dealer.firm_name;
+    }
+
+    if (payload.contact_person_name && payload.contact_number) {
+      let cp = [];
+      try {
+        cp = typeof dealer.contact_persons === 'string' ? JSON.parse(dealer.contact_persons) : dealer.contact_persons;
+        if (!Array.isArray(cp)) cp = [];
+      } catch (e) {
+        cp = [];
+      }
+
+      const cleanPhone = String(payload.contact_number).trim();
+      const exists = cp.some(person => String(person.phone).trim() === cleanPhone);
+      if (!exists) {
+        cp.push({
+          name: String(payload.contact_person_name).trim(),
+          phone: cleanPhone
+        });
+        if (!dryRun) {
+          await executor.query('UPDATE dealers SET contact_persons = $1 WHERE id = $2', [JSON.stringify(cp), dealer.id]);
+        }
+      }
+    }
   }
 }
 

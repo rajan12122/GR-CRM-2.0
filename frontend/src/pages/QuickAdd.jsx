@@ -839,34 +839,49 @@ const QuickAdd = () => {
                       <Grid item xs={12} sm={6}>
                         <TextField label="Demand (Price)" size="small" fullWidth value={nestedPropertyData.demand || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, demand: e.target.value }))} sx={{ input: { color: '#FFFFFF' }, '.MuiInputLabel-root': { color: '#94A3B8' }, '& .MuiOutlinedInput-root': { backgroundColor: '#0F172A', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } } }} />
                       </Grid>
-                      {nestedPropertyData.r_c_i !== 'Land' && (
+                      {nestedPropertyData.r_c_i === 'Land Parcel' && (
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth size="small">
-                            <InputLabel sx={{ color: '#94A3B8' }}>Property Type</InputLabel>
+                            <InputLabel sx={{ color: '#94A3B8' }}>Zone</InputLabel>
                             <Select
-                              value={nestedPropertyData.propertyType || ''}
-                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
-                              label="Property Type"
+                              value={nestedPropertyData.zone || ''}
+                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, zone: e.target.value }))}
+                              label="Zone"
                               sx={{ color: '#FFFFFF', backgroundColor: '#0F172A', '.MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } }}
                             >
-                              {(() => {
-                                const currentRCI = nestedPropertyData.r_c_i || 'Residential';
-                                const mapping = {
-                                  Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Marla', 'Kanal', 'Farm House'],
-                                  Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
-                                  Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                                  Land: []
-                                };
-                                const allowed = mapping[currentRCI] || [];
-                                return [
-                                  ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
-                                  <MenuItem key="Other" value="Other">Other</MenuItem>
-                                ];
-                              })()}
+                              {['Land Zone', 'R Zone', 'Agriculture Land', 'Baghleani', 'Commercial', 'Industrial'].map(z => (
+                                <MenuItem key={z} value={z}>{z}</MenuItem>
+                              ))}
                             </Select>
                           </FormControl>
                         </Grid>
                       )}
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel sx={{ color: '#94A3B8' }}>Property Type</InputLabel>
+                          <Select
+                            value={nestedPropertyData.propertyType || ''}
+                            onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
+                            label="Property Type"
+                            sx={{ color: '#FFFFFF', backgroundColor: '#0F172A', '.MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } }}
+                          >
+                            {(() => {
+                              const currentRCI = nestedPropertyData.r_c_i || 'Residential';
+                              const mapping = {
+                                Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
+                                Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
+                                Industrial: ['Factory', 'Operational Business'],
+                                'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
+                              };
+                              const allowed = mapping[currentRCI] || [];
+                              return [
+                                ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
+                                <MenuItem key="Other" value="Other">Other</MenuItem>
+                              ];
+                            })()}
+                          </Select>
+                        </FormControl>
+                      </Grid>
                       <Grid item xs={12} sm={6}>
                         <FormControl fullWidth size="small">
                           <InputLabel sx={{ color: '#94A3B8' }}>R/C/I</InputLabel>
@@ -879,28 +894,10 @@ const QuickAdd = () => {
                             <MenuItem value="Residential">Residential</MenuItem>
                             <MenuItem value="Commercial">Commercial</MenuItem>
                             <MenuItem value="Industrial">Industrial</MenuItem>
-                            <MenuItem value="Land">Land</MenuItem>
+                            <MenuItem value="Land Parcel">Land Parcel</MenuItem>
                           </Select>
                         </FormControl>
                       </Grid>
-
-                      {nestedPropertyData.r_c_i === 'Land' && (
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth size="small">
-                            <InputLabel sx={{ color: '#94A3B8' }}>Land Type</InputLabel>
-                            <Select
-                              value={nestedPropertyData.land_type || ''}
-                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, land_type: e.target.value }))}
-                              label="Land Type"
-                              sx={{ color: '#FFFFFF', backgroundColor: '#0F172A', '.MuiOutlinedInput-notchedOutline': { borderColor: '#334155' } }}
-                            >
-                              <MenuItem value="Gamada Aquired Land">Gamada Aquired Land</MenuItem>
-                              <MenuItem value="private">Private</MenuItem>
-                              <MenuItem value="others">Others</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                      )}
                       <Grid item xs={12} sm={6}>
                         <FormControl fullWidth size="small">
                           <InputLabel sx={{ color: '#94A3B8' }}>Status</InputLabel>

@@ -38,11 +38,11 @@ const PublicIntake = () => {
   const handlePropertyTypeChange = (val) => {
     setPropertyType(val);
     if (val === 'Residential') setOptionType('Kothi');
-    else if (val === 'Commercial') setOptionType('Booth');
-    else if (val === 'Industrial') setOptionType('Industrial Plot');
-    else if (val === 'Land') {
+    else if (val === 'Commercial') setOptionType('SCO Plot');
+    else if (val === 'Industrial') setOptionType('Factory');
+    else if (val === 'Land Parcel') {
       setOptionType('');
-      setLandType('Gamada Aquired Land');
+      setLandType('Land Zone');
     }
   };
 
@@ -223,12 +223,12 @@ const PublicIntake = () => {
                     <MenuItem value="Residential">Residential</MenuItem>
                     <MenuItem value="Commercial">Commercial</MenuItem>
                     <MenuItem value="Industrial">Industrial</MenuItem>
-                    <MenuItem value="Land">Land</MenuItem>
+                    <MenuItem value="Land Parcel">Land Parcel</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
 
-              {propertyType !== 'Land' && (
+              {propertyType !== 'Land Parcel' && (
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
                     <InputLabel>Property Sub-Option</InputLabel>
@@ -240,40 +240,64 @@ const PublicIntake = () => {
                       {propertyType === 'Residential' && [
                         <MenuItem key="kothi" value="Kothi">Kothi</MenuItem>,
                         <MenuItem key="plot" value="Plot">Plot</MenuItem>,
-                        <MenuItem key="apartments" value="Apartments">Apartments</MenuItem>
+                        <MenuItem key="apartments" value="Apartments">Apartments</MenuItem>,
+                        <MenuItem key="built_up_plot" value="25% Built Up Plot">25% Built Up Plot</MenuItem>
                       ]}
                       {propertyType === 'Commercial' && [
-                        <MenuItem key="booth" value="Booth">Booth</MenuItem>,
-                        <MenuItem key="bayshop" value="Bay Shop">Bay Shop</MenuItem>,
-                        <MenuItem key="showroom" value="Showroom">Showroom</MenuItem>,
-                        <MenuItem key="scoplot" value="Sco Plot.">Sco Plot.</MenuItem>,
-                        <MenuItem key="officespace" value="Office Space">Office Space</MenuItem>
+                        <MenuItem key="sco_plot" value="SCO Plot">SCO Plot</MenuItem>,
+                        <MenuItem key="sco_builtup" value="SCO Builtup">SCO Builtup</MenuItem>,
+                        <MenuItem key="sco_loi" value="SCO LOI">SCO LOI</MenuItem>,
+                        <MenuItem key="bayshop_plot" value="Bay Shop Plot">Bay Shop Plot</MenuItem>,
+                        <MenuItem key="bayshop_builtup" value="Bay Shop Builtup">Bay Shop Builtup</MenuItem>,
+                        <MenuItem key="bayshop_loi" value="Bay Shop LOI">Bay Shop LOI</MenuItem>,
+                        <MenuItem key="booth_plot" value="Booth Plot">Booth Plot</MenuItem>,
+                        <MenuItem key="booth_builtup" value="Booth Builtup">Booth Builtup</MenuItem>,
+                        <MenuItem key="booth_loi" value="Booth LOI">Booth LOI</MenuItem>,
+                        <MenuItem key="officespace" value="Office Space">Office Space</MenuItem>,
+                        <MenuItem key="hotelsite" value="Hotel Site">Hotel Site</MenuItem>,
+                        <MenuItem key="hotelbuiltup" value="Hotel Builtup">Hotel Builtup</MenuItem>,
+                        <MenuItem key="restaurant" value="Restaurant">Restaurant</MenuItem>
                       ]}
                       {propertyType === 'Industrial' && [
-                        <MenuItem key="indplot" value="Industrial Plot">Industrial Plot</MenuItem>,
-                        <MenuItem key="shed" value="Shed">Shed</MenuItem>,
-                        <MenuItem key="warehouse" value="Warehouse">Warehouse</MenuItem>
+                        <MenuItem key="factory" value="Factory">Factory</MenuItem>,
+                        <MenuItem key="operational" value="Operational Business">Operational Business</MenuItem>
                       ]}
                     </Select>
                   </FormControl>
                 </Grid>
               )}
 
-              {propertyType === 'Land' && (
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Land Type</InputLabel>
-                    <Select
-                      value={landType}
-                      label="Land Type"
-                      onChange={(e) => setLandType(e.target.value)}
-                    >
-                      <MenuItem value="Gamada Aquired Land">Gamada Aquired Land</MenuItem>
-                      <MenuItem value="private">Private</MenuItem>
-                      <MenuItem value="others">Others</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
+              {propertyType === 'Land Parcel' && (
+                <>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Zone</InputLabel>
+                      <Select
+                        value={landType}
+                        label="Zone"
+                        onChange={(e) => setLandType(e.target.value)}
+                      >
+                        {['Land Zone', 'R Zone', 'Agriculture Land', 'Baghleani', 'Commercial', 'Industrial'].map(z => (
+                          <MenuItem key={z} value={z}>{z}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Property Sub-Option</InputLabel>
+                      <Select
+                        value={optionType}
+                        label="Property Sub-Option"
+                        onChange={(e) => setOptionType(e.target.value)}
+                      >
+                        {['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land'].map(opt => (
+                          <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
               )}
 
               <Grid item xs={12} sm={6}>

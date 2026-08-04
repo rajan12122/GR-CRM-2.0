@@ -492,6 +492,27 @@ const EntityDetail = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
 
+  // Dealer contact persons registry states
+  const [openAddContact, setOpenAddContact] = useState(false);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+
+  const updateDealerContactPersons = async (updatedContacts) => {
+    try {
+      const token = localStorage.getItem('gr_crm_token');
+      await axios.put(`${API_BASE_URL}/data/dealers/${id}`, {
+        ...record,
+        contact_persons: updatedContacts
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await loadData();
+    } catch (e) {
+      console.error(e);
+      alert('Error updating contact persons: ' + (e.response?.data?.message || e.message));
+    }
+  };
+
   // Remarks Form State
   const [remarkInput, setRemarkInput] = useState('');
   // Document Upload State
@@ -850,189 +871,361 @@ const EntityDetail = () => {
       </Box>
 
       {/* 1. Horizontal Profile Fields Card at the very top */}
-      <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mb: 3 }}>
-        <CardContent sx={{ p: 3 }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', mb: 2.5, fontFamily: 'Poppins' }}>
-            Profile Details
-          </Typography>
-          <Grid container spacing={2.5}>
-            {moduleConfig.fields.filter(f => {
-              if (moduleName === 'leads' && (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy')) {
-                return false;
-              }
-              return true;
-            }).map(f => {
-              let allowed = true;
-              if (user && user.role !== 'Admin') {
-                if (metadata?.userColumnPermissions?.[user.id]?.[moduleName]) {
-                  const userOverriden = metadata.userColumnPermissions[user.id][moduleName][f.name];
-                  if (userOverriden !== undefined) {
-                    allowed = userOverriden.includes('view');
-                  }
-                } else if (metadata?.fieldPermissions?.[user.role]?.[moduleName]) {
-                  allowed = metadata.fieldPermissions[user.role][moduleName].includes(f.name);
-                }
-              }
-              if (!allowed) return null;
+      {moduleName === 'dealers' ? (
+        <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mb: 3, background: 'linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)' }}>
+          <CardContent sx={{ p: 4 }}>
+            {/* Firm Name Header */}
+            <Box sx={{ mb: 4, pb: 3, borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 800, fontSize: '10px', letterSpacing: '0.1em' }}>
+                  FIRM NAME
+                </Typography>
+                <Typography variant="h3" sx={{ fontWeight: 800, color: '#1E293B', mt: 0.5, fontFamily: 'Poppins', fontSize: '26px' }}>
+                  {record.firm_name || 'N/A'}
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 800, fontSize: '10px', letterSpacing: '0.1em' }}>
+                  System ID Reference
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 800, color: '#2563EB', mt: 0.5, fontSize: '16px' }}>
+                  {record.id}
+                </Typography>
+              </Box>
+            </Box>
 
-              const val = record[f.name];
-              return (
-                <Grid item xs={6} sm={4} md={3} lg={2.4} key={f.name}>
+            {/* Other Dealer Fields */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              {[
+                { label: 'Address', val: record.address, isAddress: true },
+                { label: 'Area/Sector/Block', val: record.sector_block },
+                { label: 'Date Added', val: record.dateAdded },
+                { label: 'Call Notes/Remarks', val: record.remarks },
+                { label: 'Visit Status', val: record.visitStatus },
+                { label: 'Call Outcome', val: record.callOutcome },
+              ].map(f => (
+                <Grid item xs={12} sm={6} md={4} key={f.label}>
                   <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 700, fontSize: '9px', letterSpacing: '0.05em' }}>
                     {f.label}
                   </Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F172A', mt: 0.5 }}>
-                    {val === undefined || val === null || val === '' ? (
+                    {f.val === undefined || f.val === null || f.val === '' ? (
                       <span style={{ color: '#94A3B8', fontWeight: 400 }}>Not Specified</span>
-                    ) : f.type === 'select' ? ( (() => {
-                      const chipList = metadata?.chips?.[f.chipGroup] || [];
-                      const chipConfig = chipList.find(c => String(c.value).toLowerCase() === String(val).toLowerCase());
-                      return (
-                        <Chip 
-                          label={chipConfig?.label || val} 
-                          size="small" 
-                          sx={{ 
-                            height: 20, 
-                            fontSize: '10px', 
-                            fontWeight: 700,
-                            backgroundColor: chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9',
-                            color: chipConfig?.color || '#475569',
-                            border: `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
-                          }} 
-                        />
-                      );
-                    })() ) : ['phone', 'contact_number', 'contact_num', 'mobile'].includes(f.name) ? (
-                      <Box display="inline-flex" alignItems="center" gap={0.5}>
-                        <a href={`tel:${String(val).trim()}`} style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          {val}
-                          <Icons.PhoneCall size={14} />
-                        </a>
-                        <IconButton 
-                          size="small" 
-                          onClick={() => window.open(`https://wa.me/91${String(val).replace(/[^0-9]/g, '')}`, '_blank')}
-                          sx={{ p: '2px', color: '#25D366' }}
-                        >
-                          <Icons.MessageCircle size={14} />
-                        </IconButton>
-                      </Box>
-                    ) : ['locality', 'sector_block', 'city', 'address'].includes(f.name) ? (
-                      <a 
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(val).trim())}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        style={{ color: '#2563EB', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
-                      >
-                        {val}
+                    ) : f.isAddress ? (
+                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(f.val).trim())}`} target="_blank" rel="noopener noreferrer" style={{ color: '#2563EB', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        {f.val}
                         <Icons.MapPin size={14} />
                       </a>
-                    ) : f.name === 'referrer_id' && record.referrer_type ? (
-                      <EntityTooltip moduleName={record.referrer_type} id={val}>
-                        <Chip 
-                          label={(() => {
-                            const refArray = moduleData[record.referrer_type] || [];
-                            const referencedRecord = refArray.find(r => String(r.id) === String(val));
-                            let disp = val;
-                            if (referencedRecord) {
-                              disp = referencedRecord.firm_name || referencedRecord.name || referencedRecord.person_name || val;
-                            }
-                            return `${disp} (${record.referrer_type.slice(0, -1)})`;
-                          })()} 
-                          size="small" 
-                          onClick={() => navigate(`/module/${record.referrer_type}/${val}`)}
-                          sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
-                        />
-                      </EntityTooltip>
-                    ) : f.type === 'ref' ? ( (() => {
-                      let isClickable = true;
-                      let resolvedLabel = '';
-                      let onClickAction = () => navigate(`/module/${f.refModule}/${val}`);
+                    ) : f.val}
+                  </Typography>
+                </Grid>
+              ))}
+            </Grid>
 
-                      if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
-                        const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
-                        if (prop) {
-                          if (prop.dealer_owner_booked === 'Dealer') {
-                            if (prop.dealerId) {
-                              const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
-                              if (dealer) {
-                                resolvedLabel = dealer.firm_name || dealer.name || dealer.id;
-                                onClickAction = () => navigate(`/module/dealers/${prop.dealerId}`);
-                              } else {
-                                resolvedLabel = 'Dealer N/A';
-                                isClickable = false;
-                              }
-                            } else {
-                              resolvedLabel = 'Dealer N/A';
-                              isClickable = false;
-                            }
-                          } else {
-                            resolvedLabel = prop.contact_person_name || 'Direct Owner';
-                            isClickable = false;
-                          }
-                        }
-                      }
+            <Divider sx={{ my: 3 }} />
 
-                      if (!resolvedLabel) {
-                        const refArray = moduleData[f.refModule] || [];
-                        const referencedRecord = refArray.find(r => String(r.id) === String(val));
-                        resolvedLabel = referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || val) : val;
-                      }
+            {/* Dynamic Contact Persons Registry */}
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', fontFamily: 'Poppins', color: '#1E293B' }}>
+                  Contact Persons Registry
+                </Typography>
+                <Button 
+                  variant="contained" 
+                  size="small" 
+                  startIcon={<Icons.UserPlus size={16} />}
+                  onClick={() => setOpenAddContact(true)}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+                >
+                  Add Contact Person
+                </Button>
+              </Box>
 
-                      return (
-                        <EntityTooltip moduleName={f.refModule} id={val} disabled={!isClickable}>
+              {/* Contact Person Cards Grid */}
+              <Grid container spacing={2}>
+                {(() => {
+                  let cp = [];
+                  try {
+                    cp = record.contact_persons;
+                    if (typeof cp === 'string') cp = JSON.parse(cp);
+                    if (!Array.isArray(cp)) cp = [];
+                  } catch (e) {}
+
+                  // Include the primary contact if not already in the array
+                  const hasPrimary = cp.some(p => String(p.phone).trim() === String(record.contact_num).trim());
+                  const allContacts = [...cp];
+                  if (record.person_name && record.contact_num && !hasPrimary) {
+                    allContacts.unshift({ name: record.person_name, phone: record.contact_num, isPrimary: true });
+                  }
+
+                  if (allContacts.length === 0) {
+                    return (
+                      <Grid item xs={12}>
+                        <Box sx={{ p: 3, border: '1px dashed #CBD5E1', borderRadius: '12px', textAlign: 'center', color: '#64748B' }}>
+                          No contact persons registered for this firm.
+                        </Box>
+                      </Grid>
+                    );
+                  }
+
+                  return allContacts.map((c, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={index}>
+                      <Card sx={{ 
+                        border: c.isPrimary ? '1px solid #3B82F6' : '1px solid #E2E8F0', 
+                        borderRadius: '12px', 
+                        backgroundColor: c.isPrimary ? '#EFF6FF' : '#FFFFFF',
+                        boxShadow: 'none',
+                        '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }
+                      }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <Icons.User size={18} style={{ color: c.isPrimary ? '#3B82F6' : '#64748B' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1E293B' }}>
+                                {c.name}
+                              </Typography>
+                              {c.isPrimary && (
+                                <Chip label="Primary" size="small" color="primary" sx={{ height: 16, fontSize: '8px', fontWeight: 800 }} />
+                              )}
+                            </Box>
+                            {!c.isPrimary && (
+                              <IconButton 
+                                size="small" 
+                                color="error" 
+                                onClick={async () => {
+                                  if (window.confirm(`Are you sure you want to remove ${c.name}?`)) {
+                                    const updatedCp = cp.filter(item => String(item.phone).trim() !== String(c.phone).trim());
+                                    await updateDealerContactPersons(updatedCp);
+                                  }
+                                }}
+                                sx={{ p: 0.5 }}
+                              >
+                                <Icons.Trash size={14} />
+                              </IconButton>
+                            )}
+                          </Box>
+                          
+                          <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mt: 2 }}>
+                            <Box display="flex" alignItems="center" gap={0.5}>
+                              <a href={`tel:${String(c.phone).trim()}`} style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 700, fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                {c.phone}
+                                <Icons.PhoneCall size={14} />
+                              </a>
+                            </Box>
+                          </Box>
+                          <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                            <Button 
+                              size="small" 
+                              variant="outlined" 
+                              startIcon={<Icons.MessageCircle size={12} />}
+                              onClick={() => window.open(`https://wa.me/91${String(c.phone).replace(/[^0-9]/g, '')}`, '_blank')}
+                              sx={{ 
+                                flex: 1, 
+                                fontSize: '10px', 
+                                py: '2px', 
+                                borderRadius: '6px', 
+                                color: '#25D366', 
+                                borderColor: '#25D366',
+                                '&:hover': { backgroundColor: '#25D36610', borderColor: '#25D366' }
+                              }}
+                            >
+                              WhatsApp
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ));
+                })()}
+              </Grid>
+            </Box>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mb: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', mb: 2.5, fontFamily: 'Poppins' }}>
+              Profile Details
+            </Typography>
+            <Grid container spacing={2.5}>
+              {moduleConfig.fields.filter(f => {
+                if (moduleName === 'leads' && (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy')) {
+                  return false;
+                }
+                return true;
+              }).map(f => {
+                let allowed = true;
+                if (user && user.role !== 'Admin') {
+                  if (metadata?.userColumnPermissions?.[user.id]?.[moduleName]) {
+                    const userOverriden = metadata.userColumnPermissions[user.id][moduleName][f.name];
+                    if (userOverriden !== undefined) {
+                      allowed = userOverriden.includes('view');
+                    }
+                  } else if (metadata?.fieldPermissions?.[user.role]?.[moduleName]) {
+                    allowed = metadata.fieldPermissions[user.role][moduleName].includes(f.name);
+                  }
+                }
+                if (!allowed) return null;
+
+                const val = record[f.name];
+                return (
+                  <Grid item xs={6} sm={4} md={3} lg={2.4} key={f.name}>
+                    <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 700, fontSize: '9px', letterSpacing: '0.05em' }}>
+                      {f.label}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F172A', mt: 0.5 }}>
+                      {val === undefined || val === null || val === '' ? (
+                        <span style={{ color: '#94A3B8', fontWeight: 400 }}>Not Specified</span>
+                      ) : f.type === 'select' ? ( (() => {
+                        const chipList = metadata?.chips?.[f.chipGroup] || [];
+                        const chipConfig = chipList.find(c => String(c.value).toLowerCase() === String(val).toLowerCase());
+                        return (
                           <Chip 
-                            label={resolvedLabel} 
+                            label={chipConfig?.label || val} 
                             size="small" 
-                            onClick={isClickable ? onClickAction : undefined}
                             sx={{ 
                               height: 20, 
                               fontSize: '10px', 
-                              fontWeight: 700, 
-                              cursor: isClickable ? 'pointer' : 'default',
-                              ...(!isClickable ? {
-                                color: '#64748B',
-                                backgroundColor: '#F1F5F9',
-                                border: '1px solid #E2E8F0'
-                              } : {})
+                              fontWeight: 700,
+                              backgroundColor: chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9',
+                              color: chipConfig?.color || '#475569',
+                              border: `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
                             }} 
                           />
+                        );
+                      })() ) : ['phone', 'contact_number', 'contact_num', 'mobile'].includes(f.name) ? (
+                        <Box display="inline-flex" alignItems="center" gap={0.5}>
+                          <a href={`tel:${String(val).trim()}`} style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            {val}
+                            <Icons.PhoneCall size={14} />
+                          </a>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => window.open(`https://wa.me/91${String(val).replace(/[^0-9]/g, '')}`, '_blank')}
+                            sx={{ p: '2px', color: '#25D366' }}
+                          >
+                            <Icons.MessageCircle size={14} />
+                          </IconButton>
+                        </Box>
+                      ) : ['locality', 'sector_block', 'city', 'address'].includes(f.name) ? (
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(val).trim())}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          style={{ color: '#2563EB', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                        >
+                          {val}
+                          <Icons.MapPin size={14} />
+                        </a>
+                      ) : f.name === 'referrer_id' && record.referrer_type ? (
+                        <EntityTooltip moduleName={record.referrer_type} id={val}>
+                          <Chip 
+                            label={(() => {
+                              const refArray = moduleData[record.referrer_type] || [];
+                              const referencedRecord = refArray.find(r => String(r.id) === String(val));
+                              let disp = val;
+                              if (referencedRecord) {
+                                disp = referencedRecord.firm_name || referencedRecord.name || referencedRecord.person_name || val;
+                              }
+                              return `${disp} (${record.referrer_type.slice(0, -1)})`;
+                            })()} 
+                            size="small" 
+                            onClick={() => navigate(`/module/${record.referrer_type}/${val}`)}
+                            sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
+                          />
                         </EntityTooltip>
-                      );
-                    })()
-                    ) : f.type === 'multiref' ? (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {String(val).split(',').filter(Boolean).map(itemId => (
-                          <EntityTooltip key={itemId} moduleName={f.refModule} id={itemId}>
+                      ) : f.type === 'ref' ? ( (() => {
+                        let isClickable = true;
+                        let resolvedLabel = '';
+                        let onClickAction = () => navigate(`/module/${f.refModule}/${val}`);
+
+                        if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
+                          const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
+                          if (prop) {
+                            if (prop.dealer_owner_booked === 'Dealer') {
+                              if (prop.dealerId) {
+                                const dealer = (moduleData.dealers || []).find(dl => String(dl.id) === String(prop.dealerId));
+                                if (dealer) {
+                                  resolvedLabel = dealer.firm_name || dealer.name || dealer.id;
+                                  onClickAction = () => navigate(`/module/dealers/${prop.dealerId}`);
+                                } else {
+                                  resolvedLabel = 'Dealer N/A';
+                                  isClickable = false;
+                                }
+                              } else {
+                                  resolvedLabel = 'Dealer N/A';
+                                  isClickable = false;
+                              }
+                            } else {
+                              resolvedLabel = prop.contact_person_name || 'Direct Owner';
+                              isClickable = false;
+                            }
+                          }
+                        }
+
+                        if (!resolvedLabel) {
+                          const refArray = moduleData[f.refModule] || [];
+                          const referencedRecord = refArray.find(r => String(r.id) === String(val));
+                          resolvedLabel = referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || val) : val;
+                        }
+
+                        return (
+                          <EntityTooltip moduleName={f.refModule} id={val} disabled={!isClickable}>
                             <Chip 
-                              label={(() => {
-                                const refArray = moduleData[f.refModule] || [];
-                                const referencedRecord = refArray.find(r => String(r.id) === String(itemId));
-                                return referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || itemId) : itemId;
-                              })()} 
+                              label={resolvedLabel} 
                               size="small" 
-                              onClick={() => navigate(`/module/${f.refModule}/${itemId}`)}
-                              sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
+                              onClick={isClickable ? onClickAction : undefined}
+                              sx={{ 
+                                height: 20, 
+                                fontSize: '10px', 
+                                fontWeight: 700, 
+                                cursor: isClickable ? 'pointer' : 'default',
+                                ...(!isClickable ? {
+                                  color: '#64748B',
+                                  backgroundColor: '#F1F5F9',
+                                  border: '1px solid #E2E8F0'
+                                } : {})
+                              }} 
                             />
                           </EntityTooltip>
-                        ))}
-                      </Box>
-                    ) : f.name === 'price' || f.name === 'budget' || f.name === 'salary' ? (
-                      (() => {
-                        const str = String(val).trim();
-                        if (/[a-zA-Z]/.test(str)) return str;
-                        const num = Number(str.replace(/,/g, ''));
-                        if (isNaN(num)) return str;
-                        return `₹${num.toLocaleString('en-IN')}`;
+                        );
                       })()
-                    ) : (
-                      String(val)
-                    )}
-                  </Typography>
-                </Grid>
-              );
-            })}
-          </Grid>
-        </CardContent>
-      </Card>
+                      ) : f.type === 'multiref' ? (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {String(val).split(',').filter(Boolean).map(itemId => (
+                            <EntityTooltip key={itemId} moduleName={f.refModule} id={itemId}>
+                              <Chip 
+                                label={(() => {
+                                  const refArray = moduleData[f.refModule] || [];
+                                  const referencedRecord = refArray.find(r => String(r.id) === String(itemId));
+                                  return referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || itemId) : itemId;
+                                })()} 
+                                size="small" 
+                                onClick={() => navigate(`/module/${f.refModule}/${itemId}`)}
+                                sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
+                              />
+                            </EntityTooltip>
+                          ))}
+                        </Box>
+                      ) : f.name === 'price' || f.name === 'budget' || f.name === 'salary' ? (
+                        (() => {
+                          const str = String(val).trim();
+                          if (/[a-zA-Z]/.test(str)) return str;
+                          const num = Number(str.replace(/,/g, ''));
+                          if (isNaN(num)) return str;
+                          return `₹${num.toLocaleString('en-IN')}`;
+                        })()
+                      ) : (
+                        String(val)
+                      )}
+                    </Typography>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 2. Main content Split */}
       <Grid container spacing={3}>
@@ -3822,9 +4015,9 @@ const EntityDetail = () => {
                         setQueryRCI(newRCI);
                         const mapping = {
                           Residential: 'Plots',
-                          Commercial: 'Bay Shop',
-                          Industrial: 'Built up',
-                          Land: 'Other'
+                          Commercial: 'SCO Plot',
+                          Industrial: 'Factory',
+                          'Land Parcel': 'Private Land Under MC'
                         };
                         setQueryPropType(mapping[newRCI] || 'Plots');
                       }} 
@@ -3833,7 +4026,7 @@ const EntityDetail = () => {
                       <MenuItem value="Residential">Residential</MenuItem>
                       <MenuItem value="Commercial">Commercial</MenuItem>
                       <MenuItem value="Industrial">Industrial</MenuItem>
-                      <MenuItem value="Land">Land</MenuItem>
+                      <MenuItem value="Land Parcel">Land Parcel</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -3843,10 +4036,10 @@ const EntityDetail = () => {
                     <Select value={queryPropType} onChange={(e) => setQueryPropType(e.target.value)} label="Property Type">
                       {(() => {
                         const mapping = {
-                          Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                          Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
-                          Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                          Land: []
+                          Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
+                          Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
+                          Industrial: ['Factory', 'Operational Business'],
+                          'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
                         };
                         const allowed = mapping[queryRCI] || [];
                         return [
@@ -4381,55 +4574,53 @@ const EntityDetail = () => {
                             <MenuItem value="Residential">Residential</MenuItem>
                             <MenuItem value="Commercial">Commercial</MenuItem>
                             <MenuItem value="Industrial">Industrial</MenuItem>
-                            <MenuItem value="Land">Land</MenuItem>
+                            <MenuItem value="Land Parcel">Land Parcel</MenuItem>
                           </Select>
                         </FormControl>
                       </Grid>
 
-                      {nestedPropertyData.r_c_i !== 'Land' && (
+                      {nestedPropertyData.r_c_i === 'Land Parcel' && (
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth size="small">
-                            <InputLabel>Property Type</InputLabel>
+                            <InputLabel>Zone</InputLabel>
                             <Select
-                              value={nestedPropertyData.propertyType || ''}
-                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
-                              label="Property Type"
+                              value={nestedPropertyData.zone || ''}
+                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, zone: e.target.value }))}
+                              label="Zone"
                             >
-                              {(() => {
-                                const currentRCI = nestedPropertyData.r_c_i || 'Residential';
-                                const mapping = {
-                                  Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                                  Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
-                                  Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                                  Land: []
-                                };
-                                const allowed = mapping[currentRCI] || [];
-                                return [
-                                  ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
-                                  <MenuItem key="Other" value="Other">Other</MenuItem>
-                                ];
-                              })()}
+                              {['Land Zone', 'R Zone', 'Agriculture Land', 'Baghleani', 'Commercial', 'Industrial'].map(z => (
+                                <MenuItem key={z} value={z}>{z}</MenuItem>
+                              ))}
                             </Select>
                           </FormControl>
                         </Grid>
                       )}
 
-                      {nestedPropertyData.r_c_i === 'Land' && (
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth size="small">
-                            <InputLabel>Land Type</InputLabel>
-                            <Select
-                              value={nestedPropertyData.land_type || ''}
-                              onChange={(e) => setNestedPropertyData(prev => ({ ...prev, land_type: e.target.value }))}
-                              label="Land Type"
-                            >
-                              <MenuItem value="Gamada Aquired Land">Gamada Aquired Land</MenuItem>
-                              <MenuItem value="private">Private</MenuItem>
-                              <MenuItem value="others">Others</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                      )}
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Property Type</InputLabel>
+                          <Select
+                            value={nestedPropertyData.propertyType || ''}
+                            onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
+                            label="Property Type"
+                          >
+                            {(() => {
+                              const currentRCI = nestedPropertyData.r_c_i || 'Residential';
+                              const mapping = {
+                                Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
+                                Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
+                                Industrial: ['Factory', 'Operational Business'],
+                                'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
+                              };
+                              const allowed = mapping[currentRCI] || [];
+                              return [
+                                ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
+                                <MenuItem key="Other" value="Other">Other</MenuItem>
+                              ];
+                            })()}
+                          </Select>
+                        </FormControl>
+                      </Grid>
 
                       {nestedPropertyData.propertyType === 'Showroom' && (
                         <Grid item xs={12} sm={6}>
@@ -4453,7 +4644,7 @@ const EntityDetail = () => {
                       {(() => {
                         const currentRCI = nestedPropertyData.r_c_i || 'Residential';
                         const units = ['Sq. ft.', 'Sq. yd.', 'Marla', 'Kanal', 'Acre'];
-                        if (currentRCI === 'Land') {
+                        if (currentRCI === 'Land' || currentRCI === 'Land Parcel') {
                           return (
                             <Grid item xs={12}>
                               <Typography variant="caption" sx={{ fontWeight: 700, mb: 1, display: 'block', color: '#475569' }}>
@@ -5091,6 +5282,68 @@ const EntityDetail = () => {
               alert("Failed to submit meeting report");
             }
           }}>Submit Visit Report</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add New Contact Person Dialog for Dealers */}
+      <Dialog 
+        open={openAddContact} 
+        onClose={() => setOpenAddContact(false)}
+        PaperProps={{ sx: { borderRadius: '16px', p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Add New Contact Person</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Contact Person Name"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newContactName}
+            onChange={(e) => setNewContactName(e.target.value)}
+            sx={{ mb: 2, mt: 1 }}
+          />
+          <TextField
+            margin="dense"
+            label="Phone Number"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newContactPhone}
+            onChange={(e) => setNewContactPhone(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenAddContact(false)} sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600 }}>Cancel</Button>
+          <Button 
+            variant="contained"
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+            onClick={async () => {
+              if (!newContactName.trim() || !newContactPhone.trim()) {
+                alert('Please fill out all fields');
+                return;
+              }
+              const cleanPhone = newContactPhone.trim();
+              if (cleanPhone.length !== 10 || isNaN(Number(cleanPhone))) {
+                alert('Phone number must be exactly 10 digits.');
+                return;
+              }
+              let cp = [];
+              try {
+                cp = record.contact_persons;
+                if (typeof cp === 'string') cp = JSON.parse(cp);
+                if (!Array.isArray(cp)) cp = [];
+              } catch (e) {}
+              const updatedCp = [...cp, { name: newContactName.trim(), phone: cleanPhone }];
+              await updateDealerContactPersons(updatedCp);
+              setNewContactName('');
+              setNewContactPhone('');
+              setOpenAddContact(false);
+            }}
+          >
+            Save Contact
+          </Button>
         </DialogActions>
       </Dialog>
 

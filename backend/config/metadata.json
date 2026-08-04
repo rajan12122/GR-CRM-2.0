@@ -425,6 +425,15 @@
           "chipGroup": "propertyStatus"
         },
         {
+          "name": "dealer_owner_booked",
+          "label": "Dealer/Owner/Booked",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "dealtype"
+        },
+        {
           "name": "date",
           "label": "Date",
           "type": "date",
@@ -455,15 +464,6 @@
           "required": false,
           "showInTable": true,
           "editable": true
-        },
-        {
-          "name": "dealer_owner_booked",
-          "label": "Dealer/Owner/Booked",
-          "type": "select",
-          "required": false,
-          "showInTable": true,
-          "editable": true,
-          "chipGroup": "dealtype"
         },
         {
           "name": "dealerId",
@@ -500,6 +500,15 @@
           "showInTable": true,
           "editable": true,
           "chipGroup": "rci"
+        },
+        {
+          "name": "zone",
+          "label": "Zone",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "zones"
         },
         {
           "name": "propertyType",
@@ -3031,14 +3040,14 @@
         "color": "#2563EB"
       },
       {
-        "value": "Direct",
-        "label": "Direct",
-        "color": "#10B981"
+        "value": "Booked",
+        "label": "Booked",
+        "color": "#F59E0B"
       },
       {
-        "value": "Booked By Us",
-        "label": "Booked By Us",
-        "color": "#F59E0B"
+        "value": "Owned",
+        "label": "Owned",
+        "color": "#10B981"
       }
     ],
     "dealerDealTypes": [
@@ -3097,17 +3106,30 @@
         "color": "#10B981"
       },
       {
-        "value": "Land",
-        "label": "Land",
+        "value": "Land Parcel",
+        "label": "Land Parcel",
         "color": "#8B5CF6"
       }
     ],
+    "zones": [
+      { "value": "Land Zone", "label": "Land Zone", "color": "#3B82F6" },
+      { "value": "R Zone", "label": "R Zone", "color": "#10B981" },
+      { "value": "Agriculture Land", "label": "Agriculture Land", "color": "#F59E0B" },
+      { "value": "Baghleani", "label": "Baghleani", "color": "#8B5CF6" },
+      { "value": "Commercial", "label": "Commercial", "color": "#EC4899" },
+      { "value": "Industrial", "label": "Industrial", "color": "#EF4444" }
+    ],
     "locationTypes": [
-      {
-        "value": "Normal",
-        "label": "Normal",
-        "color": "#6B7280"
-      }
+      { "value": "Normal", "label": "Normal", "color": "#6B7280" },
+      { "value": "Corner", "label": "Corner", "color": "#3B82F6" },
+      { "value": "Park Facing", "label": "Park Facing", "color": "#10B981" },
+      { "value": "Corner + Park Facing", "label": "Corner + Park Facing", "color": "#F59E0B" },
+      { "value": "Single Line", "label": "Single Line", "color": "#8B5CF6" },
+      { "value": "Corner + Front Row", "label": "Corner + Front Row", "color": "#EC4899" },
+      { "value": "Road Facing", "label": "Road Facing", "color": "#14B8A6" },
+      { "value": "Corner + Road Facing", "label": "Corner + Road Facing", "color": "#06B6D4" },
+      { "value": "Other PLC Location(Specify)", "label": "Other PLC Location(Specify)", "color": "#374151" },
+      { "value": "Other Compromised Location(Specify)", "label": "Other Compromised Location(Specify)", "color": "#374151" }
     ],
     "facings": [
       {
@@ -3129,6 +3151,26 @@
         "value": "West",
         "label": "West Facing",
         "color": "#F59E0B"
+      },
+      {
+        "value": "North East",
+        "label": "North East",
+        "color": "#8B5CF6"
+      },
+      {
+        "value": "North West",
+        "label": "North West",
+        "color": "#EC4899"
+      },
+      {
+        "value": "South East",
+        "label": "South East",
+        "color": "#14B8A6"
+      },
+      {
+        "value": "South West",
+        "label": "South West",
+        "color": "#06B6D4"
       }
     ],
     "reraStatus": [

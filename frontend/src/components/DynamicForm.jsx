@@ -200,6 +200,9 @@ const DynamicForm = ({
     }
     if (moduleKey === 'properties') {
       if (f.name === 'current_owner_id') return false;
+      if (f.name === 'contact_number') {
+        return !(formData.dealer_owner_booked === 'Dealer' && formData.dealerId);
+      }
       if (f.name === 'dealerId' || f.name === 'dealer_deal_type') {
         return formData.dealer_owner_booked === 'Dealer';
       }
@@ -210,10 +213,13 @@ const DynamicForm = ({
         return formData.dealer_owner_booked === 'Booked By Us';
       }
       if (f.name === 'land_type') {
-        return formData.r_c_i === 'Land';
+        return false;
+      }
+      if (f.name === 'zone') {
+        return formData.r_c_i === 'Land Parcel';
       }
       if (f.name === 'propertyType') {
-        return formData.r_c_i !== 'Land';
+        return true;
       }
     }
     if (moduleKey === 'wanted_properties') {
@@ -319,7 +325,7 @@ const DynamicForm = ({
         if (initialData.size) {
           const sizeStr = String(initialData.size);
           const currentRCI = initialData.r_c_i || 'Residential';
-          if (currentRCI === 'Land') {
+          if (currentRCI === 'Land' || currentRCI === 'Land Parcel') {
             const parts = sizeStr.split(',').map(p => p.trim());
             const comp1Part = parts[0] || '';
             const comp2Part = parts[1] || '';
@@ -425,6 +431,14 @@ const DynamicForm = ({
     }
   }, [open, initialData, fields, user]);
 
+  useEffect(() => {
+    if (open) {
+      fetchModuleData('employees').catch(() => {});
+      fetchModuleData('customers').catch(() => {});
+      fetchModuleData('dealers').catch(() => {});
+    }
+  }, [open]);
+
   const isSellerLead = moduleKey === 'leads' && (formData.leadType === 'Seller' || formData.leadType === 'Seller Client');
   const isSellerQuery = moduleKey === 'queries' && formData.queryType === 'Sell Property';
   const showSellerPropertyForm = isSellerLead || isSellerQuery;
@@ -462,7 +476,15 @@ const DynamicForm = ({
   const handleNestedPropertyChange = (name, val) => {
     setNestedPropertyData(prev => {
       const updated = { ...prev, [name]: val };
-      if (name === 'dealer_owner_booked' && val === 'Direct') {
+      if (name === 'dealerId') {
+        const selectedDealer = (moduleData.dealers || []).find(d => String(d.id) === String(val));
+        if (selectedDealer) {
+          updated.firm_name = selectedDealer.firm_name || '';
+          updated.contact_person_name = selectedDealer.person_name || '';
+          updated.contact_number = selectedDealer.contact_num || '';
+        }
+      }
+      if (name === 'dealer_owner_booked' && (val === 'Direct' || val === 'Owned')) {
         const ownerName = formData.name || formData.person_name || '';
         const ownerPhone = formData.phone || formData.contact_num || '';
         if (!updated.contact_person_name) {
@@ -482,6 +504,15 @@ const DynamicForm = ({
         ...prev,
         [name]: type === 'number' && val !== '' ? Number(val) : val
       };
+
+      if (name === 'dealerId') {
+        const selectedDealer = (moduleData.dealers || []).find(d => String(d.id) === String(val));
+        if (selectedDealer) {
+          updated.firm_name = selectedDealer.firm_name || '';
+          updated.contact_person_name = selectedDealer.person_name || '';
+          updated.contact_number = selectedDealer.contact_num || '';
+        }
+      }
 
       if (name === 'contact_number' || name === 'dealerContactNum') {
         const cleanVal = String(val).replace(/[^0-9]/g, '');
@@ -642,7 +673,7 @@ const DynamicForm = ({
 
   const compileSize = (payload, isNested = false) => {
     const currentRCI = isNested ? nestedPropertyData.r_c_i : payload.r_c_i;
-    if (currentRCI === 'Land') {
+    if (currentRCI === 'Land' || currentRCI === 'Land Parcel') {
       const parts = [];
       const c1 = isNested ? nestedPropertyData.size_comp1 : payload.size_comp1;
       const u1 = isNested ? nestedPropertyData.size_unit1 : payload.size_unit1;
@@ -946,10 +977,10 @@ const DynamicForm = ({
                 if (f.name === 'propertyType') {
                   const currentRCI = formData.r_c_i || 'Residential';
                   const mapping = {
-                    Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                    Commercial: ['Showroom', 'Bay Shop', 'Booth', 'Booth Built Up', 'SCO Plot', 'Office Space'],
-                    Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                    Land: []
+                    Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
+                    Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
+                    Industrial: ['Factory', 'Operational Business'],
+                    'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
                   };
                   const allowed = mapping[currentRCI] || [];
                   options = allowed.map(val => ({
@@ -1099,23 +1130,27 @@ const DynamicForm = ({
                                   Create New Property Detail
                                 </Typography>
                                 <Grid container spacing={1.5}>
-                                  <Grid item xs={12} sm={6}>
-                                    <TextField label="Contact Person Name" size="small" fullWidth value={nestedPropertyData.contact_person_name || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, contact_person_name: e.target.value }))} />
-                                  </Grid>
-                                  <Grid item xs={12} sm={6}>
-                                    <TextField label="Contact Number" size="small" fullWidth value={nestedPropertyData.contact_number || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, contact_number: e.target.value }))} />
-                                  </Grid>
+                                  {nestedPropertyData.dealer_owner_booked !== 'Dealer' && (
+                                    <>
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField label="Contact Person Name" size="small" fullWidth value={nestedPropertyData.contact_person_name || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, contact_person_name: e.target.value }))} />
+                                      </Grid>
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField label="Contact Number" size="small" fullWidth value={nestedPropertyData.contact_number || ''} onChange={(e) => setNestedPropertyData(prev => ({ ...prev, contact_number: e.target.value }))} />
+                                      </Grid>
+                                    </>
+                                  )}
                                   <Grid item xs={12} sm={6}>
                                     <FormControl fullWidth size="small">
-                                      <InputLabel>Dealer/Owner/Booked</InputLabel>
+                                      <InputLabel>Dealer/Booked/Owned</InputLabel>
                                       <Select
-                                        value={nestedPropertyData.dealer_owner_booked || 'Direct'}
+                                        value={nestedPropertyData.dealer_owner_booked || 'Owned'}
                                         onChange={(e) => setNestedPropertyData(prev => ({ ...prev, dealer_owner_booked: e.target.value }))}
-                                        label="Dealer/Owner/Booked"
+                                        label="Dealer/Booked/Owned"
                                       >
-                                        <MenuItem value="Dealer">Dealer</MenuItem>
-                                        <MenuItem value="Direct">Direct</MenuItem>
-                                        <MenuItem value="Booked By Us">Booked By Us</MenuItem>
+                        <MenuItem value="Dealer">Dealer</MenuItem>
+                                        <MenuItem value="Booked">Booked</MenuItem>
+                                        <MenuItem value="Owned">Owned</MenuItem>
                                       </Select>
                                     </FormControl>
                                   </Grid>
@@ -1127,7 +1162,7 @@ const DynamicForm = ({
                                           <InputLabel>Associated Dealer</InputLabel>
                                           <Select
                                             value={nestedPropertyData.dealerId || ''}
-                                            onChange={(e) => setNestedPropertyData(prev => ({ ...prev, dealerId: e.target.value }))}
+                                            onChange={(e) => handleNestedPropertyChange('dealerId', e.target.value)}
                                             label="Associated Dealer"
                                           >
                                             <MenuItem value="">-- Select --</MenuItem>
@@ -1140,12 +1175,94 @@ const DynamicForm = ({
                                           </Select>
                                         </FormControl>
                                       </Grid>
+
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField 
+                                          label="Firm Name" 
+                                          size="small" 
+                                          fullWidth 
+                                          value={nestedPropertyData.firm_name || ''} 
+                                          onChange={(e) => handleNestedPropertyChange('firm_name', e.target.value)} 
+                                        />
+                                      </Grid>
+
+                                      {(() => {
+                                        const selectedDealer = (moduleData.dealers || []).find(d => String(d.id) === String(nestedPropertyData.dealerId));
+                                        let contactPersonsList = [];
+                                        if (selectedDealer) {
+                                          try {
+                                            let cp = selectedDealer.contact_persons;
+                                            if (typeof cp === 'string') cp = JSON.parse(cp);
+                                            if (Array.isArray(cp)) contactPersonsList = cp;
+                                          } catch (e) {}
+                                        }
+
+                                        if (contactPersonsList.length > 0) {
+                                          return (
+                                            <Grid item xs={12}>
+                                              <FormControl fullWidth size="small">
+                                                <InputLabel>Select Existing Contact Person</InputLabel>
+                                                <Select
+                                                  label="Select Existing Contact Person"
+                                                  value={nestedPropertyData.contact_person_name || ''}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (val === 'CUSTOM_NEW') {
+                                                      handleNestedPropertyChange('contact_person_name', '');
+                                                      handleNestedPropertyChange('contact_number', '');
+                                                    } else {
+                                                      const matched = contactPersonsList.find(p => p.name === val);
+                                                      if (matched) {
+                                                        handleNestedPropertyChange('contact_person_name', matched.name);
+                                                        handleNestedPropertyChange('contact_number', matched.phone);
+                                                      } else {
+                                                        handleNestedPropertyChange('contact_person_name', val);
+                                                      }
+                                                    }
+                                                  }}
+                                                >
+                                                  <MenuItem value="CUSTOM_NEW" sx={{ fontStyle: 'italic', fontWeight: 600, color: '#2563EB' }}>
+                                                    + Add/Write Custom Contact Person...
+                                                  </MenuItem>
+                                                  {contactPersonsList.map(person => (
+                                                    <MenuItem key={person.phone} value={person.name}>
+                                                      {person.name} ({person.phone})
+                                                    </MenuItem>
+                                                  ))}
+                                                </Select>
+                                              </FormControl>
+                                            </Grid>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField 
+                                          label="Contact Person Name" 
+                                          size="small" 
+                                          fullWidth 
+                                          value={nestedPropertyData.contact_person_name || ''} 
+                                          onChange={(e) => handleNestedPropertyChange('contact_person_name', e.target.value)} 
+                                        />
+                                      </Grid>
+
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField 
+                                          label="Contact Number" 
+                                          size="small" 
+                                          fullWidth 
+                                          value={nestedPropertyData.contact_number || ''} 
+                                          onChange={(e) => handleNestedPropertyChange('contact_number', e.target.value)} 
+                                        />
+                                      </Grid>
+
                                       <Grid item xs={12} sm={6}>
                                         <FormControl fullWidth size="small">
                                           <InputLabel>Dealer Deal Type</InputLabel>
                                           <Select
                                             value={nestedPropertyData.dealer_deal_type || ''}
-                                            onChange={(e) => setNestedPropertyData(prev => ({ ...prev, dealer_deal_type: e.target.value }))}
+                                            onChange={(e) => handleNestedPropertyChange('dealer_deal_type', e.target.value)}
                                             label="Dealer Deal Type"
                                           >
                                             <MenuItem value="Dealer To Dealer">Dealer To Dealer</MenuItem>
@@ -1154,8 +1271,10 @@ const DynamicForm = ({
                                           </Select>
                                         </FormControl>
                                       </Grid>
+                                    </>
+                                  )}
 
-                                      {nestedPropertyData.dealerId === 'Other_Dealer' && (
+                                  {nestedPropertyData.dealerId === 'Other_Dealer' && (
                                         <Grid item xs={12}>
                                           <Paper sx={{ p: 2, border: '1px solid #3B82F6', borderRadius: '12px', backgroundColor: '#EFF6FF', boxShadow: 'none' }}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5, color: '#1E3A8A' }}>
@@ -1215,59 +1334,56 @@ const DynamicForm = ({
                                         value={nestedPropertyData.r_c_i || 'Residential'}
                                         onChange={(e) => setNestedPropertyData(prev => ({ ...prev, r_c_i: e.target.value }))}
                                         label="R/C/I Segment"
-                                      >
                                         <MenuItem value="Residential">Residential</MenuItem>
                                         <MenuItem value="Commercial">Commercial</MenuItem>
                                         <MenuItem value="Industrial">Industrial</MenuItem>
-                                        <MenuItem value="Land">Land</MenuItem>
+                                        <MenuItem value="Land Parcel">Land Parcel</MenuItem>
                                       </Select>
                                     </FormControl>
                                   </Grid>
 
-                                  {nestedPropertyData.r_c_i !== 'Land' && (
+                                  {nestedPropertyData.r_c_i === 'Land Parcel' && (
                                     <Grid item xs={12} sm={6}>
                                       <FormControl fullWidth size="small">
-                                        <InputLabel>Property Type</InputLabel>
+                                        <InputLabel>Zone</InputLabel>
                                         <Select
-                                          value={nestedPropertyData.propertyType || ''}
-                                          onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
-                                          label="Property Type"
+                                          value={nestedPropertyData.zone || ''}
+                                          onChange={(e) => setNestedPropertyData(prev => ({ ...prev, zone: e.target.value }))}
+                                          label="Zone"
                                         >
-                                          {(() => {
-                                            const currentRCI = nestedPropertyData.r_c_i || 'Residential';
-                                            const mapping = {
-                                              Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                                              Commercial: ['Bay Shop', 'Booth', 'Booth Built Up', 'Showroom', 'SCO Plot', 'Office Space'],
-                                              Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                                              Land: []
-                                            };
-                                            const allowed = mapping[currentRCI] || [];
-                                            return [
-                                              ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
-                                              <MenuItem key="Other" value="Other">Other</MenuItem>
-                                            ];
-                                          })()}
+                                          {['Land Zone', 'R Zone', 'Agriculture Land', 'Baghleani', 'Commercial', 'Industrial'].map(z => (
+                                            <MenuItem key={z} value={z}>{z}</MenuItem>
+                                          ))}
                                         </Select>
                                       </FormControl>
                                     </Grid>
                                   )}
 
-                                  {nestedPropertyData.r_c_i === 'Land' && (
-                                    <Grid item xs={12} sm={6}>
-                                      <FormControl fullWidth size="small">
-                                        <InputLabel>Land Type</InputLabel>
-                                        <Select
-                                          value={nestedPropertyData.land_type || ''}
-                                          onChange={(e) => setNestedPropertyData(prev => ({ ...prev, land_type: e.target.value }))}
-                                          label="Land Type"
-                                        >
-                                          <MenuItem value="Gamada Aquired Land">Gamada Aquired Land</MenuItem>
-                                          <MenuItem value="private">Private</MenuItem>
-                                          <MenuItem value="others">Others</MenuItem>
-                                        </Select>
-                                      </FormControl>
-                                    </Grid>
-                                  )}
+                                  <Grid item xs={12} sm={6}>
+                                    <FormControl fullWidth size="small">
+                                      <InputLabel>Property Type</InputLabel>
+                                      <Select
+                                        value={nestedPropertyData.propertyType || ''}
+                                        onChange={(e) => setNestedPropertyData(prev => ({ ...prev, propertyType: e.target.value }))}
+                                        label="Property Type"
+                                      >
+                                        {(() => {
+                                          const currentRCI = nestedPropertyData.r_c_i || 'Residential';
+                                          const mapping = {
+                                            Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
+                                            Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
+                                            Industrial: ['Factory', 'Operational Business'],
+                                            'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
+                                          };
+                                          const allowed = mapping[currentRCI] || [];
+                                          return [
+                                            ...allowed.map(val => <MenuItem key={val} value={val}>{val}</MenuItem>),
+                                            <MenuItem key="Other" value="Other">Other</MenuItem>
+                                          ];
+                                        })()}
+                                      </Select>
+                                    </FormControl>
+                                  </Grid>
 
                                   {nestedPropertyData.propertyType === 'Showroom' && (
                                     <Grid item xs={12} sm={6}>
@@ -1291,7 +1407,7 @@ const DynamicForm = ({
                                   {(() => {
                                     const currentRCI = nestedPropertyData.r_c_i || 'Residential';
                                     const units = ['Sq. ft.', 'Sq. yd.', 'Marla', 'Kanal', 'Acre'];
-                                    if (currentRCI === 'Land') {
+                                    if (currentRCI === 'Land' || currentRCI === 'Land Parcel') {
                                       return (
                                         <Grid item xs={12}>
                                           <Typography variant="caption" sx={{ fontWeight: 700, mb: 1, display: 'block', color: '#475569' }}>
@@ -1720,7 +1836,7 @@ const DynamicForm = ({
                 const currentRCI = formData.r_c_i || 'Residential';
                 const units = ['Sq. ft.', 'Sq. yd.', 'Marla', 'Kanal', 'Acre'];
                 
-                if (currentRCI === 'Land') {
+                if (currentRCI === 'Land' || currentRCI === 'Land Parcel') {
                   return (
                     <Grid item xs={12} key={f.name}>
                       <Typography variant="caption" sx={{ fontWeight: 700, mb: 1, display: 'block', color: '#475569' }}>
@@ -1862,6 +1978,88 @@ const DynamicForm = ({
                 );
               }
 
+              if (f.name === 'contact_person_name' && formData.dealer_owner_booked === 'Dealer' && formData.dealerId) {
+                const selectedDealer = (moduleData.dealers || []).find(d => String(d.id) === String(formData.dealerId));
+                let contactPersonsList = [];
+                if (selectedDealer) {
+                  try {
+                    let cp = selectedDealer.contact_persons;
+                    if (typeof cp === 'string') cp = JSON.parse(cp);
+                    if (Array.isArray(cp)) contactPersonsList = cp;
+                  } catch (e) {}
+                }
+
+                return (
+                  <Grid item xs={12} key={f.name}>
+                    <Box sx={{ p: 2, border: '1px solid #CBD5E1', borderRadius: '12px', mb: 2, backgroundColor: '#F8FAFC' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, mb: 1, display: 'block', color: '#64748B', textTransform: 'uppercase' }}>
+                        Firm Contact Details
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Select Existing Contact Person</InputLabel>
+                            <Select
+                              label="Select Existing Contact Person"
+                              value={formData.contact_person_name || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === 'CUSTOM_NEW') {
+                                  handleChange('contact_person_name', '');
+                                  handleChange('contact_number', '');
+                                } else {
+                                  const matched = contactPersonsList.find(p => p.name === val);
+                                  if (matched) {
+                                    handleChange('contact_person_name', matched.name);
+                                    handleChange('contact_number', matched.phone);
+                                  } else {
+                                    handleChange('contact_person_name', val);
+                                  }
+                                }
+                              }}
+                              disabled={isReadOnly}
+                            >
+                              <MenuItem value="CUSTOM_NEW" sx={{ fontStyle: 'italic', fontWeight: 600, color: '#2563EB' }}>
+                                + Add/Write Custom Contact Person...
+                              </MenuItem>
+                              {contactPersonsList.map(person => (
+                                <MenuItem key={person.phone} value={person.name}>
+                                  {person.name} ({person.phone})
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            label="Contact Person Name"
+                            size="small"
+                            fullWidth
+                            value={formData.contact_person_name || ''}
+                            onChange={(e) => handleChange('contact_person_name', e.target.value)}
+                            error={!!errors.contact_person_name}
+                            helperText={errors.contact_person_name}
+                            disabled={isReadOnly}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            label="Contact Number"
+                            size="small"
+                            fullWidth
+                            value={formData.contact_number || ''}
+                            onChange={(e) => handleChange('contact_number', e.target.value)}
+                            error={!!errors.contact_number}
+                            helperText={errors.contact_number}
+                            disabled={isReadOnly}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Grid>
+                );
+              }
+
               // 4. STANDARD TEXT/NUMBER/DATE FIELD
               return (
                 <Grid item xs={f.name === 'id' ? 12 : 6} key={f.name}>
@@ -1905,10 +2103,13 @@ const DynamicForm = ({
                         return nestedPropertyData.propertyType === 'Showroom';
                       }
                       if (f.name === 'land_type') {
-                        return nestedPropertyData.r_c_i === 'Land';
+                        return false;
+                      }
+                      if (f.name === 'zone') {
+                        return nestedPropertyData.r_c_i === 'Land Parcel';
                       }
                       if (f.name === 'propertyType') {
-                        return nestedPropertyData.r_c_i !== 'Land';
+                        return true;
                       }
                       return true;
                     }).map(f => {
@@ -1917,7 +2118,7 @@ const DynamicForm = ({
                         const currentRCI = nestedPropertyData.r_c_i || 'Residential';
                         const units = ['Sq. ft.', 'Sq. yd.', 'Marla', 'Kanal', 'Acre'];
                         
-                        if (currentRCI === 'Land') {
+                        if (currentRCI === 'Land' || currentRCI === 'Land Parcel') {
                           return (
                             <Grid item xs={12} key={f.name}>
                               <Typography variant="caption" sx={{ fontWeight: 700, mb: 1, display: 'block', color: '#475569' }}>
@@ -2014,10 +2215,10 @@ const DynamicForm = ({
                         if (f.name === 'propertyType') {
                           const currentRCI = nestedPropertyData.r_c_i || 'Residential';
                           const mapping = {
-                            Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House'],
-                            Commercial: ['Showroom', 'Bay Shop', 'Booth', 'Booth Built Up', 'SCO Plot', 'Office Space'],
-                            Industrial: ['Built up', 'Plot', 'LOI', 'Floors'],
-                            Land: []
+                            Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
+                            Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
+                            Industrial: ['Factory', 'Operational Business'],
+                            'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
                           };
                           const allowed = mapping[currentRCI] || [];
                           options = allowed.map(val => ({
@@ -2027,6 +2228,17 @@ const DynamicForm = ({
                           }));
                           options.push({ value: 'Other', label: 'Other (Specify...)', color: '#2563EB' });
                         }
+                        if (f.name === 'zone') {
+                          options = [
+                            { value: 'Land Zone', label: 'Land Zone', color: '#2563EB' },
+                            { value: 'R Zone', label: 'R Zone', color: '#2563EB' },
+                            { value: 'Agriculture Land', label: 'Agriculture Land', color: '#2563EB' },
+                            { value: 'Baghleani', label: 'Baghleani', color: '#2563EB' },
+                            { value: 'Commercial', label: 'Commercial', color: '#2563EB' },
+                            { value: 'Industrial', label: 'Industrial', color: '#2563EB' }
+                          ];
+                        }
+                        const isSpecifiable = nestedPropertyData[f.name] === 'Other' || String(nestedPropertyData[f.name] || '').includes('(Specify)');
                         return (
                           <Grid item xs={12} sm={6} key={f.name}>
                             <FormControl fullWidth size="small">
@@ -2041,6 +2253,20 @@ const DynamicForm = ({
                                 ))}
                               </Select>
                             </FormControl>
+                            {isSpecifiable && (
+                              <TextField
+                                fullWidth
+                                size="small"
+                                multiline
+                                rows={2}
+                                label={`Specify Custom ${f.label}`}
+                                value={nestedPropertyData[f.name + '_custom'] || ''}
+                                onChange={(e) => handleNestedPropertyChange(f.name + '_custom', e.target.value)}
+                                placeholder="Type custom details here..."
+                                sx={{ mt: 1 }}
+                                required
+                              />
+                            )}
                           </Grid>
                         );
                       }
