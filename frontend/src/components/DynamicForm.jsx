@@ -1271,10 +1271,8 @@ const DynamicForm = ({
                                           </Select>
                                         </FormControl>
                                       </Grid>
-                                    </>
-                                  )}
-
-                                  {nestedPropertyData.dealerId === 'Other_Dealer' && (
+                                      
+                                      {nestedPropertyData.dealerId === 'Other_Dealer' && (
                                         <Grid item xs={12}>
                                           <Paper sx={{ p: 2, border: '1px solid #3B82F6', borderRadius: '12px', backgroundColor: '#EFF6FF', boxShadow: 'none' }}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5, color: '#1E3A8A' }}>
@@ -1334,6 +1332,7 @@ const DynamicForm = ({
                                         value={nestedPropertyData.r_c_i || 'Residential'}
                                         onChange={(e) => setNestedPropertyData(prev => ({ ...prev, r_c_i: e.target.value }))}
                                         label="R/C/I Segment"
+                                      >
                                         <MenuItem value="Residential">Residential</MenuItem>
                                         <MenuItem value="Commercial">Commercial</MenuItem>
                                         <MenuItem value="Industrial">Industrial</MenuItem>
