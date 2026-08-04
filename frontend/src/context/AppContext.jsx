@@ -28,7 +28,10 @@ export const AppProvider = ({ children }) => {
   const [activityLogs, setActivityLogs] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const triggerAppReload = () => setReloadKey(prev => prev + 1);
+  const triggerAppReload = () => {
+    setModuleData({});
+    setReloadKey(prev => prev + 1);
+  };
 
   // Background Location Tracking state & references
   const [sharingLocation, setSharingLocation] = useState(
@@ -323,7 +326,10 @@ export const AppProvider = ({ children }) => {
   };
 
   // Fetch data records for a specific module
-  const fetchModuleData = async (moduleName) => {
+  const fetchModuleData = async (moduleName, forceReload = false) => {
+    if (!forceReload && moduleData[moduleName] && moduleData[moduleName].length > 0) {
+      return moduleData[moduleName];
+    }
     setLoadingData(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/data/${moduleName}`);
@@ -404,14 +410,14 @@ export const AppProvider = ({ children }) => {
       // Auto-refresh related modules when pitch, deal, site_visit, query, or follow_up changes to keep UI consistent
       const relatedModules = ['property_pitch_history', 'deals', 'site_visits', 'queries', 'follow_ups'];
       if (relatedModules.includes(moduleName)) {
-        fetchModuleData('properties');
-        fetchModuleData('deals');
-        fetchModuleData('customers');
-        fetchModuleData('leads');
-        fetchModuleData('dealers');
-        fetchModuleData('site_visits');
-        fetchModuleData('queries');
-        fetchModuleData('follow_ups');
+        fetchModuleData('properties', true);
+        fetchModuleData('deals', true);
+        fetchModuleData('customers', true);
+        fetchModuleData('leads', true);
+        fetchModuleData('dealers', true);
+        fetchModuleData('site_visits', true);
+        fetchModuleData('queries', true);
+        fetchModuleData('follow_ups', true);
       }
 
       return { success: true, data: res.data };
@@ -458,14 +464,14 @@ export const AppProvider = ({ children }) => {
       // Auto-refresh related modules when pitch, deal, site_visit, query, or follow_up changes to keep UI consistent
       const relatedModules = ['property_pitch_history', 'deals', 'site_visits', 'queries', 'follow_ups'];
       if (relatedModules.includes(moduleName)) {
-        fetchModuleData('properties');
-        fetchModuleData('deals');
-        fetchModuleData('customers');
-        fetchModuleData('leads');
-        fetchModuleData('dealers');
-        fetchModuleData('site_visits');
-        fetchModuleData('queries');
-        fetchModuleData('follow_ups');
+        fetchModuleData('properties', true);
+        fetchModuleData('deals', true);
+        fetchModuleData('customers', true);
+        fetchModuleData('leads', true);
+        fetchModuleData('dealers', true);
+        fetchModuleData('site_visits', true);
+        fetchModuleData('queries', true);
+        fetchModuleData('follow_ups', true);
       }
 
       return { success: true, data: res.data };
@@ -513,14 +519,14 @@ export const AppProvider = ({ children }) => {
       
       const relatedModules = ['property_pitch_history', 'deals', 'site_visits', 'queries', 'follow_ups'];
       if (relatedModules.includes(moduleName)) {
-        fetchModuleData('properties');
-        fetchModuleData('deals');
-        fetchModuleData('customers');
-        fetchModuleData('leads');
-        fetchModuleData('dealers');
-        fetchModuleData('site_visits');
-        fetchModuleData('queries');
-        fetchModuleData('follow_ups');
+        fetchModuleData('properties', true);
+        fetchModuleData('deals', true);
+        fetchModuleData('customers', true);
+        fetchModuleData('leads', true);
+        fetchModuleData('dealers', true);
+        fetchModuleData('site_visits', true);
+        fetchModuleData('queries', true);
+        fetchModuleData('follow_ups', true);
       }
 
       return { success: true };
