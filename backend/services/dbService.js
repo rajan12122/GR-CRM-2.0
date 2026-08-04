@@ -634,7 +634,7 @@ async function generateNextId(dbOrClient, moduleName, prefix) {
     tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
     daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
     property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET',
-    dealers: 'DEAL'
+    dealers: 'DEALER'
   };
   const effPrefix = prefix || prefixMap[moduleName] || String(moduleName).substring(0, 4).toUpperCase();
 
@@ -687,7 +687,7 @@ async function handlePropertyDealerAssociation(payload, dbOrClient, dryRun = fal
       payload.dealerId = 'DEAL-TEMP';
       return;
     }
-    const dealerId = await generateNextId(executor, 'dealers', 'DEAL');
+    const dealerId = await generateNextId(executor, 'dealers', 'DEALER');
     const newDealer = {
       id: dealerId,
       firm_name: payload.firm_name ? String(payload.firm_name).trim() : 'Property Dealer',

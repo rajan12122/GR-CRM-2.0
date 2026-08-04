@@ -2432,7 +2432,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
             await updateRecord('dealers', dealer.id, updatedDealer, client);
           }
         } else {
-          const nextDealerId = await generateNextIdAsync(client, 'dealers', 'DEAL');
+          const nextDealerId = await generateNextIdAsync(client, 'dealers', 'DEALER');
           const newDealer = {
             id: nextDealerId,
             contact_num: dealerContactNum,
@@ -2732,7 +2732,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
               await updateRecord('dealers', dealer.id, updatedDealer, client);
             }
           } else {
-            const nextDealerId = await generateNextIdAsync(client, 'dealers', 'DEAL');
+            const nextDealerId = await generateNextIdAsync(client, 'dealers', 'DEALER');
             const newDealer = {
               id: nextDealerId,
               contact_num: dealerContactNum,
@@ -4668,7 +4668,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
         tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
         daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-        property_pitch_history: 'PITCH', dealer_calls: 'CALL'
+        property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealers: 'DEALER'
       };
       const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
       payload.id = await generateNextIdAsync(client, module, prefix);
