@@ -80,6 +80,18 @@ async function initializeMetadata() {
                 }
               }
             }
+            if (!needsUpdate) {
+              if (JSON.stringify(localMetadata.sidebarCategories) !== JSON.stringify(metadataCache.sidebarCategories)) {
+                console.log(`Local sidebar categories differ from PostgreSQL. Syncing...`);
+                needsUpdate = true;
+              }
+            }
+            if (!needsUpdate) {
+              if (JSON.stringify(localMetadata.chips?.propertyStatus) !== JSON.stringify(metadataCache.chips?.propertyStatus)) {
+                console.log(`Local propertyStatus chips differ from PostgreSQL. Syncing...`);
+                needsUpdate = true;
+              }
+            }
           }
           if (needsUpdate) {
             metadataCache = localMetadata;
