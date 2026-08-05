@@ -39,6 +39,8 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   if (!metadata) return null;
 
+  const categories = metadata.sidebarCategories || [];
+
   const customPipelines = [
     'property_pipeline', 
     'property_interest_pipeline', 
