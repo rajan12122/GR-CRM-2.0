@@ -3966,11 +3966,7 @@
         "queries",
         "follow_ups",
         "property_pitch_history",
-        "site_visits",
-        "property_interest_pipeline",
-        "customer_pipeline",
-        "buyer_query_pipeline",
-        "seller_query_pipeline"
+        "site_visits"
       ]
     },
     {
@@ -3980,8 +3976,18 @@
         "properties",
         "wanted_properties",
         "projects",
-        "daily_prices",
-        "property_pipeline"
+        "daily_prices"
+      ]
+    },
+    {
+      "id": "pipeline_stages",
+      "label": "📈 Pipeline Stages",
+      "modules": [
+        "property_pipeline",
+        "property_interest_pipeline",
+        "customer_pipeline",
+        "buyer_query_pipeline",
+        "seller_query_pipeline"
       ]
     },
     {

@@ -983,7 +983,7 @@ const DynamicForm = ({
                   const mapping = {
                     Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
                     Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
-                    Industrial: ['Factory', 'Operational Business'],
+                    Industrial: ['Plot', 'Builtup', 'LOI', 'Floors'],
                     'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
                   };
                   const allowed = mapping[currentRCI] || [];
@@ -1375,7 +1375,7 @@ const DynamicForm = ({
                                           const mapping = {
                                             Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
                                             Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
-                                            Industrial: ['Factory', 'Operational Business'],
+                                            Industrial: ['Plot', 'Builtup', 'LOI', 'Floors'],
                                             'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
                                           };
                                           const allowed = mapping[currentRCI] || [];
@@ -2221,7 +2221,7 @@ const DynamicForm = ({
                           const mapping = {
                             Residential: ['Plots', 'LOI', 'Villa', 'Kothi', 'Apartment', 'Farm House', '25% Built Up Plot'],
                             Commercial: ['SCO Plot', 'SCO Builtup', 'SCO LOI', 'Bay Shop Plot', 'Bay Shop Builtup', 'Bay Shop LOI', 'Booth Plot', 'Booth Builtup', 'Booth LOI', 'Office Space', 'Hotel Site', 'Hotel Builtup', 'Restaurant'],
-                            Industrial: ['Factory', 'Operational Business'],
+                            Industrial: ['Plot', 'Builtup', 'LOI', 'Floors'],
                             'Land Parcel': ['Private Land Under MC', 'Private Land Not Under MC', 'Lal Dora Land']
                           };
                           const allowed = mapping[currentRCI] || [];

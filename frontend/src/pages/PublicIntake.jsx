@@ -39,7 +39,7 @@ const PublicIntake = () => {
     setPropertyType(val);
     if (val === 'Residential') setOptionType('Kothi');
     else if (val === 'Commercial') setOptionType('SCO Plot');
-    else if (val === 'Industrial') setOptionType('Factory');
+    else if (val === 'Industrial') setOptionType('Plot');
     else if (val === 'Land Parcel') {
       setOptionType('');
       setLandType('Land Zone');
@@ -259,8 +259,10 @@ const PublicIntake = () => {
                         <MenuItem key="restaurant" value="Restaurant">Restaurant</MenuItem>
                       ]}
                       {propertyType === 'Industrial' && [
-                        <MenuItem key="factory" value="Factory">Factory</MenuItem>,
-                        <MenuItem key="operational" value="Operational Business">Operational Business</MenuItem>
+                        <MenuItem key="plot" value="Plot">Plot</MenuItem>,
+                        <MenuItem key="builtup" value="Builtup">Builtup</MenuItem>,
+                        <MenuItem key="loi" value="LOI">LOI</MenuItem>,
+                        <MenuItem key="floors" value="Floors">Floors</MenuItem>
                       ]}
                     </Select>
                   </FormControl>
