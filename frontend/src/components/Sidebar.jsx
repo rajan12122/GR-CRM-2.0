@@ -39,7 +39,13 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   if (!metadata) return null;
 
-  const categories = metadata.sidebarCategories || [];
+  const customPipelines = [
+    'property_pipeline', 
+    'property_interest_pipeline', 
+    'customer_pipeline', 
+    'buyer_query_pipeline', 
+    'seller_query_pipeline'
+  ];
 
   // Group modules by category dynamically
   const groupedModules = (() => {
@@ -49,23 +55,47 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
     // 1. Process custom categories
     categories.forEach(cat => {
       const catModules = (cat.modules || [])
-        .filter(key => (metadata.modules[key] || key === 'dashboard' || key === 'property_pipeline') && (key === 'dashboard' || key === 'property_pipeline' || hasPermission(key, 'view')))
+        .filter(key => (metadata.modules[key] || customPipelines.includes(key)) && (customPipelines.includes(key) || hasPermission(key, 'view')))
         .map(key => {
           groupedKeys.add(key);
-          if (key === 'dashboard') {
-            return {
-              id: key,
-              label: 'Dashboard',
-              icon: 'LayoutDashboard',
-              path: '/'
-            };
-          }
           if (key === 'property_pipeline') {
             return {
               id: key,
               label: 'Property Pipeline',
               icon: 'Layers',
               path: '/pipeline/properties'
+            };
+          }
+          if (key === 'property_interest_pipeline') {
+            return {
+              id: key,
+              label: 'Property Interest Pipeline',
+              icon: 'CheckSquare',
+              path: '/pipeline/property_pitches'
+            };
+          }
+          if (key === 'customer_pipeline') {
+            return {
+              id: key,
+              label: 'Customer Pipeline',
+              icon: 'GitCommit',
+              path: '/pipeline/customers'
+            };
+          }
+          if (key === 'buyer_query_pipeline') {
+            return {
+              id: key,
+              label: 'Buyer Query Pipeline',
+              icon: 'TrendingUp',
+              path: '/pipeline/buyer_query'
+            };
+          }
+          if (key === 'seller_query_pipeline') {
+            return {
+              id: key,
+              label: 'Seller Query Pipeline',
+              icon: 'TrendingDown',
+              path: '/pipeline/seller_query'
             };
           }
           return {
@@ -80,7 +110,6 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
         result.push({
           id: cat.id,
           label: cat.label,
-          description: cat.description,
           modules: catModules
         });
       }
@@ -156,6 +185,35 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
         <Divider sx={{ borderColor: '#1E293B', mb: 2 }} />
 
+        {/* Dashboard Link */}
+        <List sx={{ px: 1.5, py: 0 }}>
+          <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              onClick={() => handleNavClick('/')}
+              selected={activePath === '/'}
+              sx={{
+                borderRadius: '8px',
+                py: 1.2,
+                px: 2,
+                backgroundColor: activePath === '/' ? 'rgba(37, 99, 235, 0.15) !important' : 'transparent',
+                color: activePath === '/' ? '#3B82F6' : '#94A3B8',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  color: '#FFFFFF'
+                }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
+                <Icons.LayoutDashboard size={20} />
+              </ListItemIcon>
+              <ListItemText 
+                primary="📊 Dashboard" 
+                primaryTypographyProps={{ fontSize: '14px', fontWeight: 600 }} 
+              />
+            </ListItemButton>
+          </ListItem>
+        </List>
+
 
 
         {/* Workspace Link */}
@@ -212,36 +270,19 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
                 transition: 'all 0.2s ease'
               }}
             >
-              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    textTransform: 'uppercase', 
-                    fontSize: '12.5px', // Increased size!
-                    fontWeight: 800, // Thicker font!
-                    letterSpacing: '0.05em',
-                    fontFamily: 'Poppins, Roboto, sans-serif',
-                    color: '#E2E8F0'
-                  }}
-                >
-                  {group.label}
-                </Typography>
-                {group.description && (
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      fontSize: '10.5px',
-                      color: '#64748B',
-                      fontWeight: 500,
-                      mt: 0.25,
-                      textTransform: 'none',
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                  >
-                    {group.description}
-                  </Typography>
-                )}
-              </Box>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  textTransform: 'uppercase', 
+                  fontSize: '12.5px', // Increased size!
+                  fontWeight: 800, // Thicker font!
+                  letterSpacing: '0.05em',
+                  fontFamily: 'Poppins, Roboto, sans-serif',
+                  color: '#E2E8F0'
+                }}
+              >
+                {group.label}
+              </Typography>
               {expandedCategories[group.id] ? (
                 <Icons.ChevronDown size={16} sx={{ opacity: 0.8 }} />
               ) : (

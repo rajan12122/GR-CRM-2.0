@@ -3957,45 +3957,66 @@
   },
   "sidebarCategories": [
     {
-      "id": "dashboard",
-      "label": "📊 Dashboard",
-      "modules": ["dashboard"]
-    },
-    {
       "id": "sales",
       "label": "🤝 Sales & CRM",
-      "description": "Everything related to customers and sales.",
-      "modules": ["leads", "customers", "deals", "queries", "follow_ups", "property_pitch_history", "site_visits"]
+      "modules": [
+        "leads",
+        "customers",
+        "deals",
+        "queries",
+        "follow_ups",
+        "property_pitch_history",
+        "site_visits",
+        "property_interest_pipeline",
+        "customer_pipeline",
+        "buyer_query_pipeline",
+        "seller_query_pipeline"
+      ]
     },
     {
       "id": "property_management",
       "label": "🏡 Property Management",
-      "description": "Everything related to inventory and properties.",
-      "modules": ["properties", "wanted_properties", "projects", "daily_prices", "property_pipeline"]
+      "modules": [
+        "properties",
+        "wanted_properties",
+        "projects",
+        "daily_prices",
+        "property_pipeline"
+      ]
     },
     {
       "id": "dealer_management",
       "label": "👥 Dealer Management",
-      "description": "Everything involving dealers.",
-      "modules": ["dealers", "dealer_calls", "dealer_meetings"]
+      "modules": [
+        "dealers",
+        "dealer_calls",
+        "dealer_meetings"
+      ]
     },
     {
       "id": "work_management",
       "label": "✅ Work Management",
-      "description": "Employee daily work.",
-      "modules": ["tasks", "notices"]
+      "modules": [
+        "tasks",
+        "notices"
+      ]
     },
     {
       "id": "hr_attendance",
       "label": "👨💼 HR & Attendance",
-      "description": "Everything employee related.",
-      "modules": ["employees", "attendance", "leaves", "salaries"]
+      "modules": [
+        "employees",
+        "attendance",
+        "leaves",
+        "salaries"
+      ]
     },
     {
       "id": "field_operations",
       "label": "📍 Field Operations",
-      "description": "For field staff.",
-      "modules": ["location_tracker"]
+      "modules": [
+        "location_tracker"
+      ]
     }
   ]
 }
