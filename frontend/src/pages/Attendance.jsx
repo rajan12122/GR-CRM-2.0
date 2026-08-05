@@ -77,6 +77,15 @@ const Attendance = () => {
     endLocationSharing
   } = useApp();
 
+  const getPhotoUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http://localhost:5000') || url.startsWith('http://127.0.0.1:5000')) {
+      const backendOrigin = API_BASE_URL.replace('/api', '');
+      return url.replace(/http:\/\/(localhost|127\.0\.0\.1):5000/, backendOrigin);
+    }
+    return url;
+  };
+
   // Payroll / Salary Settlement states
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [payMonth, setPayMonth] = useState(new Date().getMonth() + 1); // 1-12
@@ -1072,7 +1081,7 @@ const Attendance = () => {
                             <Box display="flex" alignItems="center" gap={0.5}>
                               {log.odometerStart} KM
                               {log.odometerStartPhoto && (
-                                <a href={log.odometerStartPhoto} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', color: '#2563EB' }}>
+                                <a href={getPhotoUrl(log.odometerStartPhoto)} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', color: '#2563EB' }}>
                                   <Icons.Image size={14} />
                                 </a>
                               )}
@@ -1084,7 +1093,7 @@ const Attendance = () => {
                             <Box display="flex" alignItems="center" gap={0.5}>
                               {log.odometerEnd} KM
                               {log.odometerEndPhoto && (
-                                <a href={log.odometerEndPhoto} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', color: '#2563EB' }}>
+                                <a href={getPhotoUrl(log.odometerEndPhoto)} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', color: '#2563EB' }}>
                                   <Icons.Image size={14} />
                                 </a>
                               )}
