@@ -140,7 +140,7 @@ const Settings = () => {
     reader.onload = async () => {
       try {
         const token = localStorage.getItem('gr_crm_token');
-        const res = await axios.post(`${API_BASE_URL}/api/upload`, {
+        const res = await axios.post(`${API_BASE_URL}/upload`, {
           fileName: file.name,
           base64Data: reader.result
         }, {
@@ -224,7 +224,7 @@ const Settings = () => {
     setWaCampaignLoading(true);
     try {
       const token = localStorage.getItem('gr_crm_token');
-      const res = await axios.post(`${API_BASE_URL}/api/whatsapp/send-bulk`, {
+      const res = await axios.post(`${API_BASE_URL}/whatsapp/send-bulk`, {
         numbers,
         message: waMessageBody,
         mediaUrl: waMediaUrl || undefined,
@@ -264,7 +264,7 @@ const Settings = () => {
   const handleAbortCampaign = async () => {
     try {
       const token = localStorage.getItem('gr_crm_token');
-      await axios.post(`${API_BASE_URL}/api/whatsapp/campaign-abort`, {}, {
+      await axios.post(`${API_BASE_URL}/whatsapp/campaign-abort`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       showStatus('success', 'Campaign aborted successfully.');
@@ -306,7 +306,7 @@ const Settings = () => {
       intervalId = setInterval(async () => {
         try {
           const token = localStorage.getItem('gr_crm_token');
-          const res = await axios.get(`${API_BASE_URL}/api/whatsapp/campaign-status`, {
+          const res = await axios.get(`${API_BASE_URL}/whatsapp/campaign-status`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           setWaCampaignStatus(res.data);
