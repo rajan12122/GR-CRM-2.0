@@ -4219,6 +4219,171 @@ app.post('/api/documents', authenticateToken, async (req, res) => {
   }
 });
 
+// --- WHATSAPP INTEGRATION & BULK SENDING ---
+
+const https = require('https');
+
+function sendHttpsPost(url, data, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const postData = JSON.stringify(data);
+
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || 443,
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        ...headers
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(body);
+        } else {
+          reject(new Error(`Status Code: ${res.statusCode}, Body: ${body}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(postData);
+    req.end();
+  });
+}
+
+let currentCampaign = {
+  id: null,
+  total: 0,
+  sent: 0,
+  failed: 0,
+  status: 'idle',
+  logs: []
+};
+
+async function startCampaign(campaignId, numbers, message, mediaUrl, mediaType, mediaName, config) {
+  currentCampaign = {
+    id: campaignId,
+    total: numbers.length,
+    sent: 0,
+    failed: 0,
+    status: 'sending',
+    logs: [`[${new Date().toLocaleTimeString()}] Campaign started: sending to ${numbers.length} recipients...`]
+  };
+
+  const delayMs = 1000;
+  
+  for (let i = 0; i < numbers.length; i++) {
+    const number = numbers[i];
+    
+    if (currentCampaign.id !== campaignId) {
+      break;
+    }
+
+    try {
+      if (!config || !config.apiKey || config.gateway === 'Simulator') {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        currentCampaign.sent++;
+        currentCampaign.logs.push(`[${new Date().toLocaleTimeString()}] [Sent] To ${number} (Simulated)`);
+      } else {
+        if (config.gateway === 'UltraMsg') {
+          let url = `https://api.ultramsg.com/${config.instanceId}/messages/chat`;
+          let data = {
+            token: config.apiKey,
+            to: number,
+            body: message
+          };
+          if (mediaUrl) {
+            if (mediaType === 'image') {
+              url = `https://api.ultramsg.com/${config.instanceId}/messages/image`;
+              data = { token: config.apiKey, to: number, image: mediaUrl, caption: message };
+            } else {
+              url = `https://api.ultramsg.com/${config.instanceId}/messages/document`;
+              data = { token: config.apiKey, to: number, document: mediaUrl, filename: mediaName || 'document', caption: message };
+            }
+          }
+          await sendHttpsPost(url, data);
+        } else if (config.gateway === 'Wassenger') {
+          const url = 'https://api.wassenger.com/v1/messages';
+          const data = {
+            phone: number,
+            message: message,
+            media: mediaUrl ? { url: mediaUrl } : undefined
+          };
+          const headers = { 'Token': config.apiKey };
+          await sendHttpsPost(url, data, headers);
+        } else if (config.gateway === 'Meta Cloud API') {
+          const url = `https://graph.facebook.com/v17.0/${config.instanceId}/messages`;
+          const data = {
+            messaging_product: "whatsapp",
+            to: number,
+            type: "text",
+            text: { body: message }
+          };
+          const headers = { 'Authorization': `Bearer ${config.apiKey}` };
+          await sendHttpsPost(url, data, headers);
+        } else {
+          const url = config.instanceId;
+          const data = { to: number, message: message, mediaUrl: mediaUrl };
+          const headers = {};
+          if (config.apiKey) {
+            headers['Authorization'] = `Bearer ${config.apiKey}`;
+          }
+          await sendHttpsPost(url, data, headers);
+        }
+        
+        currentCampaign.sent++;
+        currentCampaign.logs.push(`[${new Date().toLocaleTimeString()}] [Sent] To ${number}`);
+      }
+    } catch (err) {
+      console.error(`WhatsApp send failed to ${number}:`, err);
+      currentCampaign.failed++;
+      currentCampaign.logs.push(`[${new Date().toLocaleTimeString()}] [Failed] To ${number}: ${err.message}`);
+    }
+
+    if (i < numbers.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  currentCampaign.status = 'completed';
+  currentCampaign.logs.push(`[${new Date().toLocaleTimeString()}] Campaign completed. Sent: ${currentCampaign.sent}, Failed: ${currentCampaign.failed}`);
+}
+
+app.post('/api/whatsapp/send-bulk', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {
+  const { numbers, message, mediaUrl, mediaType, mediaName, config } = req.body;
+  if (!numbers || !Array.isArray(numbers) || numbers.length === 0 || !message) {
+    return res.status(400).json({ message: 'Recipients list (numbers) and message body are required.' });
+  }
+
+  if (currentCampaign.status === 'sending') {
+    return res.status(400).json({ message: 'Another bulk sending campaign is currently active. Please wait for it to complete.' });
+  }
+
+  const campaignId = 'CAMP_' + Date.now();
+  
+  startCampaign(campaignId, numbers, message, mediaUrl, mediaType, mediaName, config || {});
+
+  res.json({ success: true, message: 'Campaign queued successfully.', campaignId });
+});
+
+app.get('/api/whatsapp/campaign-status', authenticateToken, (req, res) => {
+  res.json(currentCampaign);
+});
+
+app.post('/api/whatsapp/campaign-abort', authenticateToken, checkPermission('settings', 'edit'), (req, res) => {
+  currentCampaign.id = null;
+  currentCampaign.status = 'idle';
+  currentCampaign.logs.push(`[${new Date().toLocaleTimeString()}] Campaign aborted by administrator.`);
+  res.json({ success: true, message: 'Campaign aborted.' });
+});
+
 // --- SETTINGS / SHEET CONTROL ---
 
 app.post('/api/settings/test-sheets', authenticateToken, checkPermission('settings', 'edit'), async (req, res) => {

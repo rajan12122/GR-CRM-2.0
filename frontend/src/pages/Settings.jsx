@@ -67,10 +67,261 @@ const Settings = () => {
   const [selectedUserForPerms, setSelectedUserForPerms] = useState('');
   const [userPermSelectedModule, setUserPermSelectedModule] = useState('leads');
 
-  // Temporary Intake Link States
-  const [intakeToken, setIntakeToken] = useState('');
-  const [intakeLoading, setIntakeLoading] = useState(false);
-  const [intakeError, setIntakeError] = useState('');
+  // WhatsApp Integration States
+  const [waGateway, setWaGateway] = useState('Simulator'); // Simulator, UltraMsg, Wassenger, Meta Cloud API, Custom API
+  const [waApiKey, setWaApiKey] = useState('');
+  const [waInstanceId, setWaInstanceId] = useState('');
+  const [waSenderNumber, setWaSenderNumber] = useState('');
+  
+  // Custom WhatsApp Templates Lists
+  const [waTemplatesList, setWaTemplatesList] = useState([]);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateBody, setNewTemplateBody] = useState('');
+  
+  // WhatsApp Campaign setup
+  const [waRecipientType, setWaRecipientType] = useState('manual'); // manual, csv
+  const [waManualNumbers, setWaManualNumbers] = useState('');
+  const [waCsvNumbers, setWaCsvNumbers] = useState([]);
+  const [waSelectedTemplate, setWaSelectedTemplate] = useState('');
+  const [waMessageBody, setWaMessageBody] = useState('');
+  const [waCampaignLoading, setWaCampaignLoading] = useState(false);
+  const [waCampaignStatus, setWaCampaignStatus] = useState({ id: null, total: 0, sent: 0, failed: 0, status: 'idle', logs: [] });
+  
+  // Media files uploads
+  const [waMediaFile, setWaMediaFile] = useState(null);
+  const [waMediaUrl, setWaMediaUrl] = useState('');
+  const [waMediaType, setWaMediaType] = useState(''); // image, video, document
+  const [waUploadLoading, setWaUploadLoading] = useState(false);
+
+  const handleSaveWaConfig = async () => {
+    const updated = {
+      ...metadata,
+      whatsappConfig: {
+        gateway: waGateway,
+        apiKey: waApiKey,
+        instanceId: waInstanceId,
+        senderNumber: waSenderNumber
+      }
+    };
+    const res = await saveMetadata(updated);
+    if (res?.success !== false) {
+      showStatus('success', 'WhatsApp configuration saved successfully!');
+    } else {
+      showStatus('error', 'Failed to save WhatsApp configuration.');
+    }
+  };
+
+  const handleSaveWaTemplates = async (newTemplates) => {
+    const updated = {
+      ...metadata,
+      whatsappTemplates: newTemplates
+    };
+    const res = await saveMetadata(updated);
+    if (res?.success !== false) {
+      setWaTemplatesList(newTemplates);
+      showStatus('success', 'WhatsApp templates updated successfully!');
+    } else {
+      showStatus('error', 'Failed to update WhatsApp templates.');
+    }
+  };
+
+  const handleMediaUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setWaMediaFile(file);
+    setWaUploadLoading(true);
+
+    if (file.type.startsWith('image/')) setWaMediaType('image');
+    else if (file.type.startsWith('video/')) setWaMediaType('video');
+    else setWaMediaType('document');
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const token = localStorage.getItem('gr_crm_token');
+        const res = await axios.post(`${API_BASE_URL}/api/upload`, {
+          fileName: file.name,
+          base64Data: reader.result
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.data?.success) {
+          setWaMediaUrl(res.data.fileUrl);
+          showStatus('success', `Media file "${file.name}" uploaded successfully!`);
+        } else {
+          showStatus('error', 'Media upload failed.');
+        }
+      } catch (err) {
+        console.error(err);
+        showStatus('error', 'Media upload failed.');
+      } finally {
+        setWaUploadLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const parseCSV = (csvText) => {
+    const lines = csvText.split('\n');
+    const numbers = [];
+    lines.forEach(line => {
+      const cols = line.split(',');
+      if (cols.length > 0) {
+        const num = cols[0].replace(/[^0-9+]/g, '').trim();
+        if (num && num.length >= 10) {
+          numbers.push(num);
+        }
+      }
+    });
+    return numbers;
+  };
+
+  const handleCsvUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvText = event.target.result;
+      const parsedNumbers = parseCSV(csvText);
+      setWaCsvNumbers(parsedNumbers);
+      showStatus('success', `CSV parsed successfully! Found ${parsedNumbers.length} valid numbers.`);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleStartCampaign = async () => {
+    let numbers = [];
+    if (waRecipientType === 'manual') {
+      if (!waManualNumbers.trim()) {
+        showStatus('error', 'Please enter at least one phone number.');
+        return;
+      }
+      numbers = waManualNumbers
+        .split(/[\n,]/)
+        .map(n => n.replace(/[^0-9+]/g, '').trim())
+        .filter(n => n.length >= 10);
+    } else {
+      if (waCsvNumbers.length === 0) {
+        showStatus('error', 'Please upload a CSV file with valid phone numbers.');
+        return;
+      }
+      numbers = waCsvNumbers;
+    }
+
+    if (numbers.length === 0) {
+      showStatus('error', 'No valid recipient phone numbers found.');
+      return;
+    }
+
+    if (!waMessageBody.trim()) {
+      showStatus('error', 'Please enter a message body.');
+      return;
+    }
+
+    setWaCampaignLoading(true);
+    try {
+      const token = localStorage.getItem('gr_crm_token');
+      const res = await axios.post(`${API_BASE_URL}/api/whatsapp/send-bulk`, {
+        numbers,
+        message: waMessageBody,
+        mediaUrl: waMediaUrl || undefined,
+        mediaType: waMediaType || undefined,
+        mediaName: waMediaFile ? waMediaFile.name : undefined,
+        config: {
+          gateway: waGateway,
+          apiKey: waApiKey,
+          instanceId: waInstanceId,
+          senderNumber: waSenderNumber
+        }
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.data?.success) {
+        showStatus('success', 'Bulk sending campaign started successfully!');
+        setWaCampaignStatus({
+          id: res.data.campaignId,
+          total: numbers.length,
+          sent: 0,
+          failed: 0,
+          status: 'sending',
+          logs: [`[${new Date().toLocaleTimeString()}] Campaign queued...`]
+        });
+      } else {
+        showStatus('error', 'Failed to start campaign.');
+        setWaCampaignLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      showStatus('error', err.response?.data?.message || 'Failed to start campaign.');
+      setWaCampaignLoading(false);
+    }
+  };
+
+  const handleAbortCampaign = async () => {
+    try {
+      const token = localStorage.getItem('gr_crm_token');
+      await axios.post(`${API_BASE_URL}/api/whatsapp/campaign-abort`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showStatus('success', 'Campaign aborted successfully.');
+      setWaCampaignStatus(prev => ({ ...prev, status: 'idle' }));
+      setWaCampaignLoading(false);
+    } catch (err) {
+      console.error(err);
+      showStatus('error', 'Failed to abort campaign.');
+    }
+  };
+
+  const handleAddWaTemplate = () => {
+    if (!newTemplateName.trim() || !newTemplateBody.trim()) {
+      showStatus('error', 'Please enter template name and body.');
+      return;
+    }
+
+    const newTemplates = [
+      ...waTemplatesList,
+      {
+        id: 'T_' + Date.now(),
+        name: newTemplateName,
+        body: newTemplateBody
+      }
+    ];
+    handleSaveWaTemplates(newTemplates);
+    setNewTemplateName('');
+    setNewTemplateBody('');
+  };
+
+  const handleDeleteWaTemplate = (id) => {
+    const newTemplates = waTemplatesList.filter(t => t.id !== id);
+    handleSaveWaTemplates(newTemplates);
+  };
+
+  useEffect(() => {
+    let intervalId;
+    if (waCampaignStatus.status === 'sending') {
+      intervalId = setInterval(async () => {
+        try {
+          const token = localStorage.getItem('gr_crm_token');
+          const res = await axios.get(`${API_BASE_URL}/api/whatsapp/campaign-status`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setWaCampaignStatus(res.data);
+          if (res.data.status !== 'sending') {
+            setWaCampaignLoading(false);
+          }
+        } catch (err) {
+          console.error('Error polling campaign status:', err);
+        }
+      }, 1000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [waCampaignStatus.status]);
 
   const handleGenerateIntakeLink = async () => {
     setIntakeLoading(true);
@@ -153,6 +404,15 @@ const Settings = () => {
       setRotationActive(metadata.automationConfig.leadRotationActive || false);
       setRotationHours(metadata.automationConfig.rotationHours || '24');
       setRotatedSources(metadata.automationConfig.rotatedSources || []);
+    }
+    if (metadata?.whatsappConfig) {
+      setWaGateway(metadata.whatsappConfig.gateway || 'Simulator');
+      setWaApiKey(metadata.whatsappConfig.apiKey || '');
+      setWaInstanceId(metadata.whatsappConfig.instanceId || '');
+      setWaSenderNumber(metadata.whatsappConfig.senderNumber || '');
+    }
+    if (metadata?.whatsappTemplates) {
+      setWaTemplatesList(metadata.whatsappTemplates || []);
     }
   }, [metadata]);
 
@@ -959,6 +1219,10 @@ const Settings = () => {
                      <Icons.KeyRound size={18} style={{ marginRight: 10 }} />
                      <Typography variant="body2" sx={{ fontWeight: 600 }}>Quick Add Intake Link</Typography>
                    </ListItem>
+                   <ListItem button onClick={() => setActiveTab('whatsapp')} selected={activeTab === 'whatsapp'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'whatsapp' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'whatsapp' ? '#2563EB' : '#4B5563' }}>
+                      <Icons.MessageCircle size={18} style={{ marginRight: 10 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>WhatsApp Integration</Typography>
+                    </ListItem>
                   <Divider sx={{ my: 1 }} />
                   <ListItem 
                     button 
@@ -2393,6 +2657,452 @@ const Settings = () => {
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {/* TAB 10: WHATSAPP INTEGRATION & BROADCASTS */}
+          {activeTab === 'whatsapp' && (
+            <Grid container spacing={3}>
+              {/* Left Column: API Configuration & Templates */}
+              <Grid item xs={12} md={5}>
+                {/* 1. API Config Card */}
+                <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mb: 3 }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Box display="flex" alignItems="center" gap={1.5} mb={2}>
+                      <Icons.Settings size={22} color="#2563EB" />
+                      <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '18px', fontFamily: 'Poppins' }}>
+                        API Gateway Settings
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ color: '#64748B', mb: 3 }}>
+                      Integrate your CRM with WhatsApp using instance-based API providers or Meta's official cloud API.
+                    </Typography>
+
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Select Gateway / Provider</InputLabel>
+                          <Select
+                            value={waGateway}
+                            onChange={(e) => setWaGateway(e.target.value)}
+                            label="Select Gateway / Provider"
+                          >
+                            <MenuItem value="Simulator">Simulated / Test Gateway</MenuItem>
+                            <MenuItem value="UltraMsg">UltraMsg API Gateway</MenuItem>
+                            <MenuItem value="Wassenger">Wassenger API Gateway</MenuItem>
+                            <MenuItem value="Meta Cloud API">Meta WhatsApp Cloud API</MenuItem>
+                            <MenuItem value="Custom API">Custom API Gateway</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+
+                      {waGateway !== 'Simulator' && (
+                        <>
+                          <Grid item xs={12}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label={waGateway === 'Custom API' ? 'Authorization Header / Token' : 'API Key / Access Token'}
+                              type="password"
+                              value={waApiKey}
+                              onChange={(e) => setWaApiKey(e.target.value)}
+                            />
+                          </Grid>
+                          <Grid item xs={12}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label={waGateway === 'Custom API' ? 'Custom API Request URL' : 'Instance ID / Phone Number ID'}
+                              value={waInstanceId}
+                              onChange={(e) => setWaInstanceId(e.target.value)}
+                            />
+                          </Grid>
+                          {waGateway !== 'Custom API' && (
+                            <Grid item xs={12}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Sender Phone Number"
+                                placeholder="+919999999999"
+                                value={waSenderNumber}
+                                onChange={(e) => setWaSenderNumber(e.target.value)}
+                              />
+                            </Grid>
+                          )}
+                        </>
+                      )}
+
+                      <Grid item xs={12}>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          fullWidth
+                          onClick={handleSaveWaConfig}
+                          sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 600, mt: 1 }}
+                        >
+                          Save Connection Configuration
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+
+                {/* 2. Message Templates Manager Card */}
+                <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Box display="flex" alignItems="center" gap={1.5} mb={2}>
+                      <Icons.MessageSquare size={22} color="#2563EB" />
+                      <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '18px', fontFamily: 'Poppins' }}>
+                        WhatsApp Templates
+                      </Typography>
+                    </Box>
+                    
+                    {/* Add new template */}
+                    <Box sx={{ mb: 3, p: 2, border: '1px dashed #CBD5E1', borderRadius: '12px', backgroundColor: '#F8FAFC' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: '#1E293B' }}>
+                        Create New Template
+                      </Typography>
+                      <Grid container spacing={1.5}>
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Template Name"
+                            value={newTemplateName}
+                            onChange={(e) => setNewTemplateName(e.target.value)}
+                          />
+                        </Grid>
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            multiline
+                            rows={3}
+                            label="Template Body"
+                            placeholder="Use placeholders like [Client Name], [Property Name], [Price]"
+                            value={newTemplateBody}
+                            onChange={(e) => setNewTemplateBody(e.target.value)}
+                          />
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            fullWidth
+                            startIcon={<Icons.Plus size={16} />}
+                            onClick={handleAddWaTemplate}
+                            sx={{ textTransform: 'none', borderRadius: '6px', fontWeight: 600 }}
+                          >
+                            Create Template
+                          </Button>
+                        </Grid>
+                      </Grid>
+                    </Box>
+
+                    {/* Template list */}
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#1E293B' }}>
+                      Existing Custom Templates ({waTemplatesList.length})
+                    </Typography>
+                    {waTemplatesList.length === 0 ? (
+                      <Typography variant="body2" sx={{ color: '#94A3B8', fontStyle: 'italic', py: 1 }}>
+                        No custom templates configured yet.
+                      </Typography>
+                    ) : (
+                      <List sx={{ p: 0, maxHeight: 200, overflowY: 'auto' }}>
+                        {waTemplatesList.map(tmpl => (
+                          <Paper key={tmpl.id} sx={{ p: 1.5, mb: 1, border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: 'white' }}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                              <Typography variant="body2" sx={{ fontWeight: 700, color: '#2563EB' }}>
+                                {tmpl.name}
+                              </Typography>
+                              <IconButton size="small" onClick={() => handleDeleteWaTemplate(tmpl.id)} color="error">
+                                <Icons.Trash2 size={16} />
+                              </IconButton>
+                            </Box>
+                            <Typography variant="caption" sx={{ color: '#475569', display: 'block', whiteSpace: 'pre-wrap' }}>
+                              {tmpl.body}
+                            </Typography>
+                          </Paper>
+                        ))}
+                      </List>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Right Column: Campaign Setup & Realtime Logs */}
+              <Grid item xs={12} md={7}>
+                {/* 1. Broadcast Setup Card */}
+                <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mb: 3 }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Box display="flex" alignItems="center" gap={1.5} mb={2}>
+                      <Icons.Users size={22} color="#2563EB" />
+                      <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '18px', fontFamily: 'Poppins' }}>
+                        Bulk WhatsApp Broadcast Campaign
+                      </Typography>
+                    </Box>
+
+                    <Grid container spacing={3}>
+                      {/* Recipient Source Selection */}
+                      <Grid item xs={12}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                          Select Recipient Source
+                        </Typography>
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={waRecipientType}
+                            onChange={(e) => setWaRecipientType(e.target.value)}
+                          >
+                            <MenuItem value="manual">Enter Numbers Manually</MenuItem>
+                            <MenuItem value="csv">Upload CSV File</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+
+                      {/* Recipient Inputs */}
+                      {waRecipientType === 'manual' ? (
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            multiline
+                            rows={3}
+                            label="Recipient Numbers (manual entry)"
+                            placeholder="Enter phone numbers separated by commas or newlines (e.g. +919999999999, +918888888888)"
+                            value={waManualNumbers}
+                            onChange={(e) => setWaManualNumbers(e.target.value)}
+                          />
+                        </Grid>
+                      ) : (
+                        <Grid item xs={12}>
+                          <Box 
+                            sx={{ 
+                              border: '2px dashed #CBD5E1', 
+                              borderRadius: '12px', 
+                              p: 3, 
+                              textAlign: 'center', 
+                              backgroundColor: '#F8FAFC',
+                              cursor: 'pointer',
+                              '&:hover': { borderColor: '#2563EB' }
+                            }}
+                            component="label"
+                          >
+                            <input 
+                              type="file" 
+                              accept=".csv" 
+                              hidden 
+                              onChange={handleCsvUpload} 
+                            />
+                            <Icons.Upload size={32} color="#64748B" style={{ marginBottom: 8 }} />
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                              Click to select and parse CSV file
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', mt: 0.5 }}>
+                              Note: Phone numbers should be in the very first column.
+                            </Typography>
+                            {waCsvNumbers.length > 0 && (
+                              <Chip 
+                                label={`Successfully loaded ${waCsvNumbers.length} recipients`} 
+                                color="success" 
+                                size="small" 
+                                sx={{ mt: 2 }} 
+                              />
+                            )}
+                          </Box>
+                        </Grid>
+                      )}
+
+                      {/* Select Template shortcut */}
+                      <Grid item xs={12}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Insert Message Template</InputLabel>
+                          <Select
+                            value={waSelectedTemplate}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setWaSelectedTemplate(val);
+                              const selected = waTemplatesList.find(t => t.id === val);
+                              if (selected) {
+                                setWaMessageBody(selected.body);
+                              }
+                            }}
+                            label="Insert Message Template"
+                          >
+                            <MenuItem value=""><em>None (Write Custom Message)</em></MenuItem>
+                            {waTemplatesList.map(t => (
+                              <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+
+                      {/* Message Body */}
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={4}
+                          label="Message Content"
+                          value={waMessageBody}
+                          onChange={(e) => setWaMessageBody(e.target.value)}
+                        />
+                      </Grid>
+
+                      {/* Attachment Selector */}
+                      <Grid item xs={12}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                          Add Media Attachment (Photo, Video, PDF or Document)
+                        </Typography>
+                        <Box display="flex" alignItems="center" gap={2}>
+                          <Button
+                            variant="outlined"
+                            component="label"
+                            startIcon={waUploadLoading ? <CircularProgress size={16} /> : <Icons.Upload size={16} />}
+                            disabled={waUploadLoading}
+                            sx={{ textTransform: 'none', borderRadius: '8px' }}
+                          >
+                            Upload File
+                            <input 
+                              type="file" 
+                              hidden 
+                              onChange={handleMediaUpload} 
+                              accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                            />
+                          </Button>
+                          {waMediaFile && (
+                            <Box display="flex" flexDirection="column">
+                              <Typography variant="body2" sx={{ fontWeight: 600, color: '#1E293B' }}>
+                                {waMediaFile.name}
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: '#64748B' }}>
+                                Type: {waMediaType.toUpperCase()} ({Math.round(waMediaFile.size / 1024)} KB)
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                        {waMediaUrl && (
+                          <Typography variant="caption" sx={{ color: '#10B981', mt: 1, display: 'block', wordBreak: 'break-all' }}>
+                            File uploaded successfully: <a href={waMediaUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>{waMediaUrl}</a>
+                          </Typography>
+                        )}
+                      </Grid>
+
+                      {/* Send Button */}
+                      <Grid item xs={12}>
+                        <Button
+                          variant="contained"
+                          color="success"
+                          fullWidth
+                          size="large"
+                          disabled={waCampaignLoading}
+                          onClick={handleStartCampaign}
+                          startIcon={waCampaignLoading ? <CircularProgress size={20} color="inherit" /> : <Icons.Send size={20} />}
+                          sx={{ textTransform: 'none', borderRadius: '10px', py: 1.5, fontSize: '15px', fontWeight: 700 }}
+                        >
+                          {waCampaignLoading ? 'Processing Broadcast Campaign...' : 'Share / Broadcast with Single Click'}
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+
+                {/* 2. Realtime Tracking Console (Background Task monitor) */}
+                {waCampaignStatus.status !== 'idle' && (
+                  <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', backgroundColor: '#020617', color: '#F8FAFC' }}>
+                    <CardContent sx={{ p: 3 }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                        <Box display="flex" alignItems="center" gap={1.5}>
+                          <CircularProgress size={18} thickness={5} color={waCampaignStatus.status === 'sending' ? 'primary' : 'inherit'} />
+                          <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '18px', fontFamily: 'Poppins' }}>
+                            Campaign Console: {waCampaignStatus.status.toUpperCase()}
+                          </Typography>
+                        </Box>
+                        {waCampaignStatus.status === 'sending' && (
+                          <Button 
+                            variant="contained" 
+                            color="error" 
+                            size="small" 
+                            onClick={handleAbortCampaign}
+                            startIcon={<Icons.XCircle size={14} />}
+                            sx={{ textTransform: 'none', borderRadius: '6px', fontSize: '12px' }}
+                          >
+                            Abort Campaign
+                          </Button>
+                        )}
+                      </Box>
+
+                      {/* Campaign progress details */}
+                      <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={4}>
+                          <Paper sx={{ p: 1.5, textAlign: 'center', backgroundColor: '#1E293B', color: 'white' }}>
+                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>Total Recipients</Typography>
+                            <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5 }}>{waCampaignStatus.total}</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={4}>
+                          <Paper sx={{ p: 1.5, textAlign: 'center', backgroundColor: '#1E293B', color: '#10B981' }}>
+                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>Sent</Typography>
+                            <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5 }}>{waCampaignStatus.sent}</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={4}>
+                          <Paper sx={{ p: 1.5, textAlign: 'center', backgroundColor: '#1E293B', color: '#EF4444' }}>
+                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>Failed</Typography>
+                            <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5 }}>{waCampaignStatus.failed}</Typography>
+                          </Paper>
+                        </Grid>
+                      </Grid>
+
+                      {/* Progress Bar */}
+                      <Box sx={{ mb: 3 }}>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ color: '#94A3B8' }}>Broadcast Progress</Typography>
+                          <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                            {Math.round(((waCampaignStatus.sent + waCampaignStatus.failed) / waCampaignStatus.total) * 100) || 0}%
+                          </Typography>
+                        </Box>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={((waCampaignStatus.sent + waCampaignStatus.failed) / waCampaignStatus.total) * 100 || 0} 
+                          sx={{ height: 8, borderRadius: 4, backgroundColor: '#334155', '& .MuiLinearProgress-bar': { borderRadius: 4 } }}
+                        />
+                      </Box>
+
+                      {/* Log Screen */}
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#94A3B8' }}>
+                        Live Broadcast Logs
+                      </Typography>
+                      <Box 
+                        sx={{ 
+                          height: 180, 
+                          overflowY: 'auto', 
+                          fontFamily: 'monospace', 
+                          fontSize: '12px', 
+                          p: 2, 
+                          backgroundColor: '#0F172A', 
+                          border: '1px solid #1E293B', 
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 0.5
+                        }}
+                      >
+                        {waCampaignStatus.logs.slice().reverse().map((log, idx) => (
+                          <Typography 
+                            key={idx} 
+                            variant="caption" 
+                            sx={{ 
+                              color: log.includes('[Sent]') ? '#10B981' : log.includes('[Failed]') ? '#EF4444' : '#E2E8F0',
+                              fontFamily: 'monospace'
+                            }}
+                          >
+                            {log}
+                          </Typography>
+                        ))}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                )}
+              </Grid>
+            </Grid>
           )}
         </Grid>
       </Grid>
