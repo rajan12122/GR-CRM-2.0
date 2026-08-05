@@ -2745,8 +2745,8 @@
     ],
     "propertyStatus": [
       {
-        "value": "Available for Purchase",
-        "label": "Available for Purchase",
+        "value": "Available for Sale",
+        "label": "Available for Sale",
         "color": "#3B82F6"
       },
       {
@@ -3957,24 +3957,45 @@
   },
   "sidebarCategories": [
     {
+      "id": "dashboard",
+      "label": "📊 Dashboard",
+      "modules": ["dashboard"]
+    },
+    {
       "id": "sales",
-      "label": "Sales & CRM",
-      "modules": ["deals", "leads", "customers", "property_pitch_history"]
+      "label": "🤝 Sales & CRM",
+      "description": "Everything related to customers and sales.",
+      "modules": ["leads", "customers", "deals", "queries", "follow_ups", "property_pitch_history", "site_visits"]
     },
     {
-      "id": "operations",
-      "label": "Operations & Attendance",
-      "modules": ["tasks", "attendance", "leaves", "salaries"]
+      "id": "property_management",
+      "label": "🏡 Property Management",
+      "description": "Everything related to inventory and properties.",
+      "modules": ["properties", "wanted_properties", "projects", "daily_prices", "property_pipeline"]
     },
     {
-      "id": "inventory",
-      "label": "Inventory & Dealers",
-      "modules": ["properties", "projects", "dealers"]
+      "id": "dealer_management",
+      "label": "👥 Dealer Management",
+      "description": "Everything involving dealers.",
+      "modules": ["dealers", "dealer_calls", "dealer_meetings"]
     },
     {
-      "id": "others",
-      "label": "Communication & Other",
-      "modules": ["queries", "daily_price_lists", "notices", "wanted_properties"]
+      "id": "work_management",
+      "label": "✅ Work Management",
+      "description": "Employee daily work.",
+      "modules": ["tasks", "notices"]
+    },
+    {
+      "id": "hr_attendance",
+      "label": "👨💼 HR & Attendance",
+      "description": "Everything employee related.",
+      "modules": ["employees", "attendance", "leaves", "salaries"]
+    },
+    {
+      "id": "field_operations",
+      "label": "📍 Field Operations",
+      "description": "For field staff.",
+      "modules": ["location_tracker"]
     }
   ]
 }

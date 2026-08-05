@@ -4742,7 +4742,7 @@ const EntityDetail = () => {
                         <FormControl fullWidth size="small">
                           <InputLabel>Status</InputLabel>
                           <Select
-                            value={nestedPropertyData.status || (metadata.chips?.propertyStatus?.[0]?.value || 'Available for Purchase')}
+                            value={nestedPropertyData.status || (metadata.chips?.propertyStatus?.[0]?.value || 'Available for Sale')}
                             onChange={(e) => setNestedPropertyData(prev => ({ ...prev, status: e.target.value }))}
                             label="Status"
                           >
@@ -5023,7 +5023,7 @@ const EntityDetail = () => {
                 <MenuItem value="">-- Keep Current / None --</MenuItem>
                 {(metadata?.chips?.propertyStatus || [])
                   .filter(chip => 
-                    chip.value !== 'Available for Purchase' && 
+                    chip.value !== 'Available for Sale' && 
                     chip.value !== 'IN active listings' && 
                     chip.value !== 'Sold By Someone/Deal Lost'
                   )
