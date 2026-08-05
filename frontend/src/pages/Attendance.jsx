@@ -1025,8 +1025,10 @@ const Attendance = () => {
               </TableHead>
               <TableBody>
                 {(() => {
+                  const now = new Date();
+                  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                   const myMonthLogs = attendanceList
-                    .filter(a => String(a.employeeId) === String(user?.id))
+                    .filter(a => String(a.employeeId) === String(user?.id) && a.date.startsWith(currentYearMonth))
                     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
                   if (myMonthLogs.length === 0) {
