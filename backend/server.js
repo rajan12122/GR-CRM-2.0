@@ -1430,8 +1430,8 @@ async function handlePitchStatusChange(p, dbOrClient, req) {
   if (isSiteVisitStage) {
     const targetDate = formatToInDate(p.followUpDate || p.pitchDate);
     const visitRes = await client.query(
-      'SELECT * FROM site_visits WHERE "linkedPitchId" = $1 OR ("customerId" = $2 AND "propertyId" = $3 AND date = $4)',
-      [p.id, p.customerId, p.propertyId || 'PROP-001', targetDate]
+      'SELECT * FROM site_visits WHERE "linkedPitchId" = $1 OR ("customerId" = $2 AND "propertyId" = $3)',
+      [p.id, p.customerId, p.propertyId || 'PROP-001']
     );
     const existingVisit = visitRes.rows[0];
 
@@ -1776,8 +1776,8 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req) {
   const isSiteVisitStage = action === 'Site Visit Arranged' || action === 'Site Visit' || action === 'Site Visit Scheduled' || action === 'Lead_VisitScheduled';
   if (isSiteVisitStage) {
     const visitRes = await client.query(
-      'SELECT * FROM site_visits WHERE "linkedFollowUpId" = $1 OR ("customerId" = $2 AND "propertyId" = $3 AND date = $4)',
-      [f.id, customerId, f.pitchedPropertyId || 'PROP-001', f.date || new Date().toLocaleDateString('en-IN')]
+      'SELECT * FROM site_visits WHERE "linkedFollowUpId" = $1 OR ("customerId" = $2 AND "propertyId" = $3)',
+      [f.id, customerId, f.pitchedPropertyId || 'PROP-001']
     );
     const existingVisit = visitRes.rows[0];
     
@@ -2264,6 +2264,24 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           const updated = await updateRecord('property_pitch_history', existingPitch.id, updatePayload, client);
           await handlePitchStatusChange(updated, client, req);
           try { syncToSheets('property_pitch_history'); } catch(e) {}
+          return updated;
+        }
+      }
+      if (module === 'site_visits' && payload.customerId && payload.propertyId) {
+        const existingVisitRes = await client.query('SELECT * FROM site_visits WHERE "customerId" = $1 AND "propertyId" = $2', [payload.customerId, payload.propertyId]);
+        if (existingVisitRes.rows[0]) {
+          const existingVisit = normalizeRow('site_visits', existingVisitRes.rows[0]);
+          const updatePayload = {
+            date: payload.date || existingVisit.date,
+            time: payload.time || existingVisit.time,
+            result: payload.result || existingVisit.result,
+            remarks: payload.remarks || existingVisit.remarks,
+            employeeId: payload.employeeId || existingVisit.employeeId,
+            linkedPitchId: payload.linkedPitchId || existingVisit.linkedPitchId,
+            linkedFollowUpId: payload.linkedFollowUpId || existingVisit.linkedFollowUpId
+          };
+          const updated = await updateRecord('site_visits', existingVisit.id, updatePayload, client);
+          try { syncToSheets('site_visits'); } catch(e) {}
           return updated;
         }
       }
