@@ -437,7 +437,6 @@ const QuickAdd = () => {
                                         ...(metadata?.chips?.callOutcomes || [])
                                       ]
                                     : [
-                                        { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
                                         ...(metadata?.chips?.pipelineActionGroup || []),
                                         ...(metadata?.chips?.customerStages || [])
                                       ]
@@ -465,14 +464,10 @@ const QuickAdd = () => {
                             >
                                {(selectedModule === 'follow_ups'
                                  ? (f.name === 'status'
-                                    ? [
-                                        ...(metadata?.chips?.followUpStatus || []),
-                                        ...(metadata?.chips?.callOutcomes || [])
-                                      ]
+                                    ? (metadata?.chips?.followUpStatus || [])
                                     : [
                                         { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
-                                        ...(metadata?.chips?.pipelineActionGroup || []),
-                                        ...(metadata?.chips?.customerStages || [])
+                                        ...(metadata?.chips?.pipelineActionGroup || [])
                                       ]
                                    )
                                  : (metadata.chips[f.chipGroup] || [])

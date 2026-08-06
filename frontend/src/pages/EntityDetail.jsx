@@ -1144,16 +1144,22 @@ const EntityDetail = () => {
                         <span style={{ color: '#94A3B8', fontWeight: 400 }}>Not Specified</span>
                       ) : f.type === 'select' ? ( (() => {
                         let chipList = metadata?.chips?.[f.chipGroup] || [];
+                        let menuChoices = chipList;
                         if (moduleName === 'follow_ups') {
                           if (f.name === 'status') {
                             chipList = [
                               ...(metadata?.chips?.followUpStatus || []),
                               ...(metadata?.chips?.callOutcomes || [])
                             ];
+                            menuChoices = metadata?.chips?.followUpStatus || [];
                           } else if (f.name === 'pipelineAction') {
                             chipList = [
                               ...(metadata?.chips?.pipelineActionGroup || []),
                               ...(metadata?.chips?.customerStages || [])
+                            ];
+                            menuChoices = [
+                              { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
+                              ...(metadata?.chips?.pipelineActionGroup || [])
                             ];
                           }
                         }
@@ -1202,7 +1208,7 @@ const EntityDetail = () => {
                                   }
                                 }}
                               >
-                                {chipList.map(opt => (
+                                {menuChoices.map(opt => (
                                   <MenuItem 
                                     key={opt.value} 
                                     onClick={() => handleQuickUpdate(f.name, opt.value)}

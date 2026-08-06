@@ -968,15 +968,11 @@ const DynamicForm = ({
                 let options = metadata.chips[f.chipGroup];
                 if (moduleKey === 'follow_ups') {
                   if (f.name === 'status') {
-                    options = [
-                      ...(metadata?.chips?.followUpStatus || []),
-                      ...(metadata?.chips?.callOutcomes || [])
-                    ];
+                    options = metadata?.chips?.followUpStatus || [];
                   } else if (f.name === 'pipelineAction') {
                     options = [
                       { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
-                      ...(metadata?.chips?.pipelineActionGroup || []),
-                      ...(metadata?.chips?.customerStages || [])
+                      ...(metadata?.chips?.pipelineActionGroup || [])
                     ];
                   }
                 }
@@ -1011,7 +1007,21 @@ const DynamicForm = ({
                         disabled={isReadOnly}
                         renderValue={(selected) => {
                           if (!selected) return null;
-                          const opt = options.find(o => String(o.value) === String(selected)) || { value: selected, label: selected };
+                          let searchList = options;
+                          if (moduleKey === 'follow_ups') {
+                            if (f.name === 'status') {
+                              searchList = [
+                                ...(metadata?.chips?.followUpStatus || []),
+                                ...(metadata?.chips?.callOutcomes || [])
+                              ];
+                            } else if (f.name === 'pipelineAction') {
+                              searchList = [
+                                ...(metadata?.chips?.pipelineActionGroup || []),
+                                ...(metadata?.chips?.customerStages || [])
+                              ];
+                            }
+                          }
+                          const opt = searchList.find(o => String(o.value).toLowerCase() === String(selected).toLowerCase()) || { value: selected, label: selected };
                           const color = opt.color || '#475569';
                           const isFollowupHighlighted = moduleKey === 'follow_ups' && (f.name === 'status' || f.name === 'pipelineAction');
                           return (
