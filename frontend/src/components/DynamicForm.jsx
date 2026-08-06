@@ -966,11 +966,19 @@ const DynamicForm = ({
               // 1. SELECT TYPE FIELD
               if (f.type === 'select' && f.chipGroup && metadata?.chips[f.chipGroup]) {
                 let options = metadata.chips[f.chipGroup];
-                if (f.name === 'pipelineAction' && moduleKey === 'follow_ups') {
-                  options = [
-                    { value: 'None', label: 'Keep Current Stage' },
-                    ...(metadata?.chips?.pipelineActionGroup || [])
-                  ];
+                if (moduleKey === 'follow_ups') {
+                  if (f.name === 'status') {
+                    options = [
+                      ...(metadata?.chips?.followUpStatus || []),
+                      ...(metadata?.chips?.callOutcomes || [])
+                    ];
+                  } else if (f.name === 'pipelineAction') {
+                    options = [
+                      { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
+                      ...(metadata?.chips?.pipelineActionGroup || []),
+                      ...(metadata?.chips?.customerStages || [])
+                    ];
+                  }
                 }
                 if (f.name === 'propertyType') {
                   const currentRCI = formData.r_c_i || 'Residential';

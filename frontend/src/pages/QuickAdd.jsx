@@ -430,8 +430,18 @@ const QuickAdd = () => {
                               }}
                               renderValue={(selected) => {
                                 if (!selected) return null;
-                                const choiceList = (f.name === 'pipelineAction' && selectedModule === 'follow_ups')
-                                  ? (metadata?.chips?.customerStages || [])
+                                const choiceList = selectedModule === 'follow_ups'
+                                  ? (f.name === 'status'
+                                    ? [
+                                        ...(metadata?.chips?.followUpStatus || []),
+                                        ...(metadata?.chips?.callOutcomes || [])
+                                      ]
+                                    : [
+                                        { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
+                                        ...(metadata?.chips?.pipelineActionGroup || []),
+                                        ...(metadata?.chips?.customerStages || [])
+                                      ]
+                                    )
                                   : (metadata.chips[f.chipGroup] || []);
                                 const opt = choiceList.find(o => String(typeof o === 'object' ? o.value : o).toLowerCase() === String(selected).toLowerCase());
                                 const optLabel = typeof opt === 'object' ? opt.label : selected;
@@ -453,9 +463,19 @@ const QuickAdd = () => {
                                 );
                               }}
                             >
-                               {((f.name === 'pipelineAction' && selectedModule === 'follow_ups')
-                                 ? (metadata?.chips?.customerStages || [])
-                                 : metadata.chips[f.chipGroup]
+                               {(selectedModule === 'follow_ups'
+                                 ? (f.name === 'status'
+                                    ? [
+                                        ...(metadata?.chips?.followUpStatus || []),
+                                        ...(metadata?.chips?.callOutcomes || [])
+                                      ]
+                                    : [
+                                        { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
+                                        ...(metadata?.chips?.pipelineActionGroup || []),
+                                        ...(metadata?.chips?.customerStages || [])
+                                      ]
+                                   )
+                                 : (metadata.chips[f.chipGroup] || [])
                                ).map(choice => {
                                  const choiceVal = typeof choice === 'object' ? choice.value : choice;
                                  const choiceLabel = typeof choice === 'object' ? choice.label : choice;

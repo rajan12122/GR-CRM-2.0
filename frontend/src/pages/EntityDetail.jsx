@@ -14,6 +14,7 @@ import {
   Tabs, 
   Tab, 
   Chip, 
+  Menu, 
   List, 
   ListItem, 
   ListItemText,
@@ -147,7 +148,21 @@ const EntityDetail = () => {
   const [pitchRemarks, setPitchRemarks] = useState('');
   const [pitchWarning, setPitchWarning] = useState('');
   const [pitchItemType, setPitchItemType] = useState('Property');
-  const [editingPitch, setEditingPitch] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [activeFieldName, setActiveFieldName] = useState(null);
+
+  const handleQuickUpdate = async (fieldName, newValue) => {
+    setMenuAnchor(null);
+    setActiveFieldName(null);
+    const payload = { ...record, [fieldName]: newValue };
+    const res = await updateRecord(moduleName, id, payload);
+    if (res.success) {
+      await loadData();
+    } else {
+      alert(res.message || 'Failed to update field.');
+    }
+  };
+
   const [formOpen, setFormOpen] = useState(false);
   const handleFormSubmit = async (formData) => {
     const res = await updateRecord(moduleName, id, formData);
@@ -1127,27 +1142,86 @@ const EntityDetail = () => {
                       {val === undefined || val === null || val === '' ? (
                         <span style={{ color: '#94A3B8', fontWeight: 400 }}>Not Specified</span>
                       ) : f.type === 'select' ? ( (() => {
-                        const chipList = metadata?.chips?.[f.chipGroup] || [];
+                        let chipList = metadata?.chips?.[f.chipGroup] || [];
+                        if (moduleName === 'follow_ups') {
+                          if (f.name === 'status') {
+                            chipList = [
+                              ...(metadata?.chips?.followUpStatus || []),
+                              ...(metadata?.chips?.callOutcomes || [])
+                            ];
+                          } else if (f.name === 'pipelineAction') {
+                            chipList = [
+                              ...(metadata?.chips?.pipelineActionGroup || []),
+                              ...(metadata?.chips?.customerStages || [])
+                            ];
+                          }
+                        }
                         const chipConfig = chipList.find(c => String(c.value).toLowerCase() === String(val).toLowerCase());
                         return (
-                          <Chip 
-                            label={chipConfig?.label || val} 
-                            size={isHighlightedField ? "medium" : "small"} 
-                            sx={{ 
-                              height: isHighlightedField ? 28 : 20, 
-                              fontSize: isHighlightedField ? '12px' : '10px', 
-                              fontWeight: isHighlightedField ? 800 : 700,
-                              backgroundColor: isHighlightedField 
-                                ? (chipConfig?.color || '#64748B')
-                                : (chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9'),
-                              color: isHighlightedField ? '#FFFFFF' : (chipConfig?.color || '#475569'),
-                              border: isHighlightedField 
-                                ? 'none'
-                                : `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
-                              boxShadow: isHighlightedField ? '0 2px 4px rgba(0,0,0,0.15)' : 'none',
-                              px: isHighlightedField ? 1 : 0
-                            }} 
-                          />
+                          <>
+                            <Chip 
+                              label={chipConfig?.label || val} 
+                              size={isHighlightedField ? "medium" : "small"} 
+                              sx={{ 
+                                height: isHighlightedField ? 28 : 20, 
+                                fontSize: isHighlightedField ? '12px' : '10px', 
+                                fontWeight: isHighlightedField ? 800 : 700,
+                                backgroundColor: isHighlightedField 
+                                  ? (chipConfig?.color || '#64748B')
+                                  : (chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9'),
+                                color: isHighlightedField ? '#FFFFFF' : (chipConfig?.color || '#475569'),
+                                border: isHighlightedField 
+                                  ? 'none'
+                                  : `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
+                                boxShadow: isHighlightedField ? '0 2px 4px rgba(0,0,0,0.15)' : 'none',
+                                px: isHighlightedField ? 1 : 0,
+                                cursor: isHighlightedField ? 'pointer' : 'default',
+                                '&:hover': isHighlightedField ? {
+                                  opacity: 0.9,
+                                  transform: 'scale(1.02)'
+                                } : {}
+                              }} 
+                              onClick={isHighlightedField ? (e) => {
+                                setMenuAnchor(e.currentTarget);
+                                setActiveFieldName(f.name);
+                              } : undefined}
+                            />
+                            {isHighlightedField && activeFieldName === f.name && (
+                              <Menu
+                                anchorEl={menuAnchor}
+                                open={Boolean(menuAnchor)}
+                                onClose={() => { setMenuAnchor(null); setActiveFieldName(null); }}
+                                PaperProps={{
+                                  sx: {
+                                    maxHeight: 300,
+                                    width: '240px',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                    border: '1px solid #E2E8F0'
+                                  }
+                                }}
+                              >
+                                {chipList.map(opt => (
+                                  <MenuItem 
+                                    key={opt.value} 
+                                    onClick={() => handleQuickUpdate(f.name, opt.value)}
+                                    sx={{ 
+                                      py: 1,
+                                      px: 2,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 1.5,
+                                      color: opt.color || '#475569',
+                                      fontWeight: 700
+                                    }}
+                                  >
+                                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: opt.color || '#64748B' }} />
+                                    {opt.label}
+                                  </MenuItem>
+                                ))}
+                              </Menu>
+                            )}
+                          </>
                         );
                       })() ) : ['phone', 'contact_number', 'contact_num', 'mobile'].includes(f.name) ? (
                         <Box display="inline-flex" alignItems="center" gap={0.5}>
