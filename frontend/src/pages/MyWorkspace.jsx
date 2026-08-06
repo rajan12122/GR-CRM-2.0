@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, Grid, Typography, Card, CardContent, Button, Tabs, Tab, TextField, 
   IconButton, Tooltip, Chip, Dialog, DialogTitle, DialogContent, DialogActions, 
@@ -29,6 +30,7 @@ const parseDate = (dateStr) => {
 };
 
 const MyWorkspace = () => {
+  const navigate = useNavigate();
   const { user, token, fetchModuleData, moduleData } = useApp();
   const [activeTab, setActiveTab] = useState(0);
 
@@ -374,7 +376,7 @@ const MyWorkspace = () => {
       todos.forEach(t => {
         const p = parseDate(t.dueDate);
         if (p && p.toISOString().split('T')[0] === dateStr && String(t.assignedTo) === String(user?.id)) {
-          list.push({ type: 'todo', label: t.title, id: t.id, status: t.status });
+          list.push({ type: 'todo', label: t.title, id: t.id, status: t.status, rawTodo: t });
         }
       });
     }
@@ -556,8 +558,24 @@ const MyWorkspace = () => {
                                   fontSize: '8px', 
                                   backgroundColor: ev.type === 'visit' ? '#F59E0B20' : ev.type === 'followup' ? '#3B82F620' : '#10B98120',
                                   color: ev.type === 'visit' ? '#D97706' : ev.type === 'followup' ? '#2563EB' : '#059669',
-                                  textDecoration: ev.status === 'Completed' ? 'line-through' : 'none'
+                                  textDecoration: ev.status === 'Completed' ? 'line-through' : 'none',
+                                  cursor: 'pointer',
+                                  '&:hover': {
+                                    opacity: 0.85,
+                                    transform: 'scale(1.02)'
+                                  },
+                                  transition: 'all 0.1s ease'
                                 }} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (ev.type === 'followup') {
+                                    navigate(`/module/follow_ups/${ev.id}`);
+                                  } else if (ev.type === 'visit') {
+                                    navigate(`/module/site_visits/${ev.id}`);
+                                  } else if (ev.type === 'todo') {
+                                    handleToggleTodo(ev.rawTodo);
+                                  }
+                                }}
                               />
                             ))}
                           </Box>
