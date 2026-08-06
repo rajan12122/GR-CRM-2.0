@@ -148,6 +148,7 @@ const EntityDetail = () => {
   const [pitchRemarks, setPitchRemarks] = useState('');
   const [pitchWarning, setPitchWarning] = useState('');
   const [pitchItemType, setPitchItemType] = useState('Property');
+  const [editingPitch, setEditingPitch] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [activeFieldName, setActiveFieldName] = useState(null);
 
