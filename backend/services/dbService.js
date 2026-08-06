@@ -386,6 +386,11 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
       if (tableCols.includes('queryId')) {
         searchClauses.push(`"queryId" IN (SELECT id FROM queries WHERE requirement ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR "propertyType" ILIKE ${searchPlaceholder})`);
       }
+      if (tableCols.includes('referrer_id') || tableCols.includes('referrerId')) {
+        const colName = tableCols.includes('referrer_id') ? 'referrer_id' : 'referrerId';
+        searchClauses.push(`"${colName}" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"${colName}" IN (SELECT id FROM dealers WHERE firm_name ILIKE ${searchPlaceholder} OR person_name ILIKE ${searchPlaceholder})`);
+      }
 
       whereClauses.push(`(${searchClauses.join(' OR ')})`);
     }
@@ -496,6 +501,11 @@ async function getRecordsCount(moduleName, dbOrClient, options = {}) {
       }
       if (tableCols.includes('queryId')) {
         searchClauses.push(`"queryId" IN (SELECT id FROM queries WHERE requirement ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR "propertyType" ILIKE ${searchPlaceholder})`);
+      }
+      if (tableCols.includes('referrer_id') || tableCols.includes('referrerId')) {
+        const colName = tableCols.includes('referrer_id') ? 'referrer_id' : 'referrerId';
+        searchClauses.push(`"${colName}" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"${colName}" IN (SELECT id FROM dealers WHERE firm_name ILIKE ${searchPlaceholder} OR person_name ILIKE ${searchPlaceholder})`);
       }
 
       whereClauses.push(`(${searchClauses.join(' OR ')})`);
