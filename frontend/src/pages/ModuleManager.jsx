@@ -957,13 +957,44 @@ const ModuleManager = () => {
         }
       }
 
-      // Global Search
+      // Global Search (searching flat fields and dynamically resolving referenced fields client-side)
       const keywords = searchTerm.toLowerCase().trim().split(/\s+/).filter(w => w.length > 0);
       const matchesSearch = keywords.length === 0 || keywords.every(word => {
         return Object.keys(rec).some(key => {
           const val = rec[key];
           if (val === undefined || val === null) return false;
-          return String(val).toLowerCase().includes(word);
+          if (String(val).toLowerCase().includes(word)) return true;
+
+          // Check if key is a reference column that can be resolved
+          const fieldObj = fields.find(f => f.name === key);
+          let resolvedModule = fieldObj?.refModule;
+          if (key === 'referrer_id') {
+            if (String(val).startsWith('EMP-')) resolvedModule = 'employees';
+            else if (String(val).startsWith('CUST-')) resolvedModule = 'customers';
+            else if (String(val).startsWith('LEAD-')) resolvedModule = 'leads';
+            else resolvedModule = 'employees';
+          }
+          if (!resolvedModule) {
+            if (key === 'employeeId') resolvedModule = 'employees';
+            else if (key === 'customerId') resolvedModule = 'customers';
+            else if (key === 'propertyId') resolvedModule = 'properties';
+            else if (key === 'pitchedPropertyId') resolvedModule = 'properties';
+            else if (key === 'queryId') resolvedModule = 'queries';
+            else if (key === 'assignedEmployeeId') resolvedModule = 'employees';
+          }
+
+          if (resolvedModule) {
+            const list = moduleData[resolvedModule] || [];
+            const record = list.find(r => String(r.id) === String(val));
+            if (record) {
+              return Object.keys(record).some(refKey => {
+                const refVal = record[refKey];
+                if (refVal === undefined || refVal === null) return false;
+                return String(refVal).toLowerCase().includes(word);
+              });
+            }
+          }
+          return false;
         });
       });
 
