@@ -305,17 +305,36 @@ const MyWorkspace = () => {
   const calculatePerformance = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     const userTodos = todos.filter(t => String(t.assignedTo) === String(user?.id));
-    const finishedTodos = userTodos.filter(t => t.status === 'Completed');
-    const overdue = userTodos.filter(t => t.status === 'Pending' && parseDate(t.dueDate) < parseDate(todayStr)).length;
+    const finishedTodosToday = userTodos.filter(t => {
+      const statusMatch = t.status === 'Completed';
+      const dateMatch = t.dueDate && t.dueDate.split(' ')[0] === todayStr;
+      return statusMatch && dateMatch;
+    });
+    const overdue = userTodos.filter(t => {
+      if (t.status !== 'Pending') return false;
+      if (!t.dueDate) return false;
+      const dueStr = t.dueDate.split(' ')[0];
+      return dueStr < todayStr;
+    }).length;
 
     // Follow ups count
     const followUps = moduleData.follow_ups || [];
     const userFollowUps = followUps.filter(f => String(f.employeeId) === String(user?.id));
-    const completedF = userFollowUps.filter(f => f.status === 'Completed' && f.date === todayStr).length;
+    const completedFToday = userFollowUps.filter(f => {
+      const statusMatch = f.status === 'Completed' || f.status === 'Call Done';
+      const dateObj = parseDate(f.date);
+      const dateMatch = dateObj && dateObj.toISOString().split('T')[0] === todayStr;
+      return statusMatch && dateMatch;
+    }).length;
 
     // Site visits done
     const visits = moduleData.site_visits || [];
-    const completedV = visits.filter(v => String(v.employeeId) === String(user?.id) && v.result && v.result !== '' && v.result !== 'Pending').length;
+    const completedV = visits.filter(v => {
+      const isUser = String(v.employeeId) === String(user?.id);
+      const hasResult = v.result && v.result !== '';
+      const isPendingOrScheduled = ['pending', 'scheduled'].includes(String(v.result).toLowerCase());
+      return isUser && hasResult && !isPendingOrScheduled;
+    }).length;
 
     // Leads handled
     const leads = moduleData.leads || [];
@@ -324,7 +343,7 @@ const MyWorkspace = () => {
     const conversionPercent = handledL > 0 ? Math.round((convertedL / handledL) * 100) : 0;
 
     setPerformanceData({
-      completedFollowups: completedF + finishedTodos.length,
+      completedFollowups: completedFToday + finishedTodosToday.length,
       overdueTasks: overdue,
       visitsDone: completedV,
       leadsHandled: handledL,
@@ -429,35 +448,120 @@ const MyWorkspace = () => {
                 </Box>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', boxShadow: 'none' }}>
+                    <Paper 
+                      onClick={() => navigate('/module/follow_ups')}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center', 
+                        backgroundColor: '#F8FAFC', 
+                        border: '1px solid #F1F5F9', 
+                        boxShadow: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          backgroundColor: '#EFF6FF',
+                          borderColor: '#BFDBFE',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 12px rgba(59, 130, 246, 0.08)'
+                        }
+                      }}
+                    >
                       <Icons.PhoneCall size={20} color="#3B82F6" />
                       <Typography variant="h5" sx={{ fontWeight: 800, mt: 1 }}>{performanceData.completedFollowups}</Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>Calls Done Today</Typography>
                     </Paper>
                   </Grid>
                   <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', boxShadow: 'none' }}>
+                    <Paper 
+                      onClick={() => setActiveTab(1)}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center', 
+                        backgroundColor: '#F8FAFC', 
+                        border: '1px solid #F1F5F9', 
+                        boxShadow: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          backgroundColor: '#FEF2F2',
+                          borderColor: '#FECACA',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 12px rgba(239, 68, 68, 0.08)'
+                        }
+                      }}
+                    >
                       <Icons.AlertCircle size={20} color="#EF4444" />
                       <Typography variant="h5" sx={{ fontWeight: 800, mt: 1, color: performanceData.overdueTasks > 0 ? '#EF4444' : 'inherit' }}>{performanceData.overdueTasks}</Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>Overdue Tasks</Typography>
                     </Paper>
                   </Grid>
                   <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', boxShadow: 'none' }}>
+                    <Paper 
+                      onClick={() => navigate('/module/site_visits')}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center', 
+                        backgroundColor: '#F8FAFC', 
+                        border: '1px solid #F1F5F9', 
+                        boxShadow: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          backgroundColor: '#FFFBEB',
+                          borderColor: '#FEF3C7',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.08)'
+                        }
+                      }}
+                    >
                       <Icons.Eye size={20} color="#F59E0B" />
                       <Typography variant="h5" sx={{ fontWeight: 800, mt: 1 }}>{performanceData.visitsDone}</Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>Visits Completed</Typography>
                     </Paper>
                   </Grid>
                   <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', boxShadow: 'none' }}>
+                    <Paper 
+                      onClick={() => navigate('/module/leads')}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center', 
+                        backgroundColor: '#F8FAFC', 
+                        border: '1px solid #F1F5F9', 
+                        boxShadow: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          backgroundColor: '#ECFDF5',
+                          borderColor: '#A7F3D0',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.08)'
+                        }
+                      }}
+                    >
                       <Icons.Users size={20} color="#10B981" />
                       <Typography variant="h5" sx={{ fontWeight: 800, mt: 1 }}>{performanceData.leadsHandled}</Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>Leads Assigned</Typography>
                     </Paper>
                   </Grid>
                   <Grid item xs={12} sm={2.4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#F8FAFC', border: '1px solid #F1F5F9', boxShadow: 'none' }}>
+                    <Paper 
+                      onClick={() => navigate('/module/leads')}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center', 
+                        backgroundColor: '#F8FAFC', 
+                        border: '1px solid #F1F5F9', 
+                        boxShadow: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          backgroundColor: '#F5F3FF',
+                          borderColor: '#DDD6FE',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 12px rgba(139, 92, 246, 0.08)'
+                        }
+                      }}
+                    >
                       <Icons.TrendingUp size={20} color="#8B5CF6" />
                       <Typography variant="h5" sx={{ fontWeight: 800, mt: 1 }}>{performanceData.conversionProgress}%</Typography>
                       <Typography variant="caption" sx={{ color: '#64748B' }}>Lead Conversion</Typography>
