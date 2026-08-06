@@ -1899,7 +1899,7 @@ async function generateDynamicTimeline(moduleName, id, client = pool, preFetched
 
   const allRemarks = preFetchedData && preFetchedData.remarks
     ? preFetchedData.remarks
-    : (await client.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [moduleName, id])).rows.map(r => normalizeRow('remarks', r));
+    : (await client.query('SELECT * FROM remarks WHERE target_module = $1 AND target_id = $2', [moduleName, id])).rows.map(r => normalizeRow('remarks', r));
 
   if (moduleName === 'customers') {
     const cust = preFetchedData && preFetchedData.customer
@@ -3614,8 +3614,8 @@ app.get('/api/search', authenticateToken, async (req, res) => {
           pool.query('SELECT * FROM customers WHERE "assignedEmployeeId" = $1', [id]),
           pool.query('SELECT * FROM properties WHERE "assignedEmployeeId" = $1', [id]),
           pool.query('SELECT * FROM tasks WHERE "assignedTo" = $1', [id]),
-          pool.query('SELECT * FROM remarks WHERE "targetModule" = \'employees\' AND "targetId" = $1', [id]),
-          pool.query('SELECT * FROM documents WHERE "targetModule" = \'employees\' AND "targetId" = $1', [id])
+          pool.query('SELECT * FROM remarks WHERE target_module = \'employees\' AND target_id = $1', [id]),
+          pool.query('SELECT * FROM documents WHERE target_module = \'employees\' AND target_id = $1', [id])
         ]);
         data.attendance = attendance.rows.map(r => normalizeRow('attendance', r));
         data.leaves = leaves.rows.map(r => normalizeRow('leaves', r));
@@ -3640,8 +3640,8 @@ app.get('/api/search', authenticateToken, async (req, res) => {
             pool.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [id]),
             pool.query('SELECT * FROM tasks WHERE title ILIKE $1 OR description ILIKE $1', [`%${id}%`]),
             pool.query('SELECT * FROM sales WHERE "customerId" = $1', [id]),
-            pool.query('SELECT * FROM remarks WHERE "targetModule" = \'customers\' AND "targetId" = $1', [id]),
-            pool.query('SELECT * FROM documents WHERE "targetModule" = \'customers\' AND "targetId" = $1', [id])
+            pool.query('SELECT * FROM remarks WHERE target_module = \'customers\' AND target_id = $1', [id]),
+            pool.query('SELECT * FROM documents WHERE target_module = \'customers\' AND target_id = $1', [id])
           ]);
 
           const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
@@ -3692,8 +3692,8 @@ app.get('/api/search', authenticateToken, async (req, res) => {
           const [siteVisits, sales, remarks, docs] = await Promise.all([
             pool.query('SELECT * FROM site_visits WHERE "propertyId" = $1', [id]),
             pool.query('SELECT * FROM sales WHERE "propertyId" = $1', [id]),
-            pool.query('SELECT * FROM remarks WHERE "targetModule" = \'properties\' AND "targetId" = $1', [id]),
-            pool.query('SELECT * FROM documents WHERE "targetModule" = \'properties\' AND "targetId" = $1', [id])
+            pool.query('SELECT * FROM remarks WHERE target_module = \'properties\' AND target_id = $1', [id]),
+            pool.query('SELECT * FROM documents WHERE target_module = \'properties\' AND target_id = $1', [id])
           ]);
 
           const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
@@ -3748,13 +3748,13 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       const outerQuery = `
         SELECT * FROM (
           SELECT DISTINCT ON (employee_name, date_time, comment) * FROM remarks
-          WHERE ("targetModule" = 'leads' AND "targetId" = ANY($1))
-             OR ("targetModule" = 'customers' AND "targetId" = ANY($2))
-             OR ("targetModule" = 'follow_ups' AND "targetId" = ANY($3))
-             OR ("targetModule" = 'properties' AND "targetId" = ANY($4))
-             OR ("targetModule" = 'queries' AND "targetId" = ANY($5))
-             OR ("targetModule" = 'site_visits' AND "targetId" = ANY($6))
-             OR ("targetModule" = 'deals' AND "targetId" = ANY($7))
+          WHERE (target_module = 'leads' AND target_id = ANY($1))
+             OR (target_module = 'customers' AND target_id = ANY($2))
+             OR (target_module = 'follow_ups' AND target_id = ANY($3))
+             OR (target_module = 'properties' AND target_id = ANY($4))
+             OR (target_module = 'queries' AND target_id = ANY($5))
+             OR (target_module = 'site_visits' AND target_id = ANY($6))
+             OR (target_module = 'deals' AND target_id = ANY($7))
           ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
         ) t
         ORDER BY created_at DESC, id DESC
@@ -3769,7 +3769,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           targets.site_visits,
           targets.deals
         ]),
-        client.query('SELECT * FROM documents WHERE "targetModule" = $1 AND "targetId" = $2', [module, id])
+        client.query('SELECT * FROM documents WHERE target_module = $1 AND target_id = $2', [module, id])
       ]);
       remarksRows = remarksRes.rows;
       docsRows = docsRes.rows;
@@ -4090,8 +4090,8 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         const [dealerRes, calls, remarks, docs] = await Promise.all([
           pool.query('SELECT * FROM dealers WHERE id = $1', [dealerId]),
           pool.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [dealerId]),
-          pool.query('SELECT * FROM remarks WHERE ("targetModule" = \'dealers\' AND "targetId" = $1) OR ("targetModule" = \'dealer_meetings\' AND "targetId" = $2)', [dealerId, id]),
-          pool.query('SELECT * FROM documents WHERE ("targetModule" = \'dealers\' AND "targetId" = $1) OR ("targetModule" = \'dealer_meetings\' AND "targetId" = $2)', [dealerId, id])
+          pool.query('SELECT * FROM remarks WHERE (target_module = \'dealers\' AND target_id = $1) OR (target_module = \'dealer_meetings\' AND target_id = $2)', [dealerId, id]),
+          pool.query('SELECT * FROM documents WHERE (target_module = \'dealers\' AND target_id = $1) OR (target_module = \'dealer_meetings\' AND target_id = $2)', [dealerId, id])
         ]);
 
         data.dealer = dealerRes.rows[0] ? normalizeRow('dealers', dealerRes.rows[0]) : null;
@@ -4332,13 +4332,13 @@ app.get('/api/remarks/:module/:id', authenticateToken, async (req, res) => {
     const outerQuery = `
       SELECT * FROM (
         SELECT DISTINCT ON (employee_name, date_time, comment) * FROM remarks
-        WHERE ("targetModule" = 'leads' AND "targetId" = ANY($1))
-           OR ("targetModule" = 'customers' AND "targetId" = ANY($2))
-           OR ("targetModule" = 'follow_ups' AND "targetId" = ANY($3))
-           OR ("targetModule" = 'properties' AND "targetId" = ANY($4))
-           OR ("targetModule" = 'queries' AND "targetId" = ANY($5))
-           OR ("targetModule" = 'site_visits' AND "targetId" = ANY($6))
-           OR ("targetModule" = 'deals' AND "targetId" = ANY($7))
+        WHERE (target_module = 'leads' AND target_id = ANY($1))
+           OR (target_module = 'customers' AND target_id = ANY($2))
+           OR (target_module = 'follow_ups' AND target_id = ANY($3))
+           OR (target_module = 'properties' AND target_id = ANY($4))
+           OR (target_module = 'queries' AND target_id = ANY($5))
+           OR (target_module = 'site_visits' AND target_id = ANY($6))
+           OR (target_module = 'deals' AND target_id = ANY($7))
         ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
       ) t
       ORDER BY created_at DESC, id DESC
@@ -4718,7 +4718,7 @@ const rotateLeadsTask = async () => {
         let lastActionTime = new Date(lead.dateAdded || new Date()).getTime();
         
         // Find latest remark follow-up
-        const remarksRes = await client.query('SELECT * FROM remarks WHERE "targetModule" = \'leads\' AND "targetId" = $1', [lead.id]);
+        const remarksRes = await client.query('SELECT * FROM remarks WHERE target_module = \'leads\' AND target_id = $1', [lead.id]);
         const leadRemarks = remarksRes.rows.map(r => normalizeRow('remarks', r));
         if (leadRemarks.length > 0) {
           const latestRemark = leadRemarks.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date))[0];

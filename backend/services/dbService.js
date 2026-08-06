@@ -841,10 +841,10 @@ async function ensurePerformanceIndexes() {
     await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS expiry_date TEXT');
 
     // Create indexes for remarks
-    await client.query('CREATE INDEX IF NOT EXISTS idx_remarks_target ON remarks ("targetModule", "targetId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_remarks_target ON remarks (target_module, target_id)');
     
     // Create indexes for documents
-    await client.query('CREATE INDEX IF NOT EXISTS idx_documents_target ON documents ("targetModule", "targetId")');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_documents_target ON documents (target_module, target_id)');
     
     // Create indexes for site_visits
     await client.query('CREATE INDEX IF NOT EXISTS idx_site_visits_customer ON site_visits ("customerId")');
