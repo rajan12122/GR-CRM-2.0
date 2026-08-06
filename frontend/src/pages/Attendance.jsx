@@ -60,6 +60,39 @@ const getShiftHours = (inTime, outTime) => {
   return diff > 0 ? diff : 0;
 };
 
+const parseDateString = (dateStr) => {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const parts = dateStr.split('-');
+    const y = Number(parts[0]);
+    const m = Number(parts[1]) - 1;
+    const d = Number(parts[2]);
+    return {
+      year: y,
+      month: m + 1,
+      day: d,
+      iso: dateStr,
+      formatted: `${parts[2]}/${parts[1]}/${parts[0]}`,
+      dateObj: new Date(y, m, d)
+    };
+  }
+  const parts = String(dateStr).split('/');
+  if (parts.length === 3) {
+    const d = Number(parts[0]);
+    const m = Number(parts[1]) - 1;
+    const y = Number(parts[2]);
+    return {
+      year: y,
+      month: m + 1,
+      day: d,
+      iso: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+      formatted: `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`,
+      dateObj: new Date(y, m, d)
+    };
+  }
+  return null;
+};
+
 const Attendance = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -425,25 +458,21 @@ const Attendance = () => {
     attendanceList
       .filter(a => String(a.employeeId) === String(empId))
       .forEach(a => {
-        const parts = a.date.split('-');
-        if (parts.length >= 2) {
-          const yr = Number(parts[0]);
-          const mo = Number(parts[1]);
-          if (yr === targetYear && mo === targetMonth) {
-            if (!logsMap[a.date] || a.status !== 'Absent') {
-              logsMap[a.date] = a;
-            }
+        const p = parseDateString(a.date);
+        if (p && p.year === targetYear && p.month === targetMonth) {
+          if (!logsMap[p.iso] || a.status !== 'Absent') {
+            logsMap[p.iso] = a;
           }
         }
       });
 
     // Count approved leaves
-    const monthLeaves = leavesList.filter(l => 
-      String(l.employeeId) === String(empId) &&
-      l.status === 'Approved' &&
-      new Date(l.date).getMonth() + 1 === targetMonth &&
-      new Date(l.date).getFullYear() === targetYear
-    );
+    const monthLeaves = leavesList.filter(l => {
+      if (String(l.employeeId) !== String(empId)) return false;
+      if (l.status !== 'Approved') return false;
+      const p = parseDateString(l.date);
+      return p && p.month === targetMonth && p.year === targetYear;
+    });
 
     let present = 0;
     let leaves = 0;
@@ -454,7 +483,10 @@ const Attendance = () => {
       const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const isSunday = new Date(targetYear, targetMonth - 1, d).getDay() === 0;
       const att = logsMap[dateStr];
-      const hasLeave = monthLeaves.find(l => l.date === dateStr);
+      const hasLeave = monthLeaves.find(l => {
+        const p = parseDateString(l.date);
+        return p && p.iso === dateStr;
+      });
 
       if (hasLeave) {
         leaves++;
@@ -569,11 +601,8 @@ const Attendance = () => {
     if (!selectedEmployeeObj) return [];
     return attendanceList.filter(a => {
       if (String(a.employeeId) !== String(selectedEmployeeObj.id)) return false;
-      const parts = a.date.split('-');
-      if (parts.length < 2) return false;
-      const yr = Number(parts[0]);
-      const mo = Number(parts[1]);
-      return yr === payYear && mo === payMonth;
+      const p = parseDateString(a.date);
+      return p && p.year === payYear && p.month === payMonth;
     });
   }, [attendanceList, selectedEmployeeObj, payMonth, payYear]);
 
@@ -607,8 +636,8 @@ const Attendance = () => {
       }
 
       // Sunday tracking
-      const d = new Date(a.date);
-      if (d.getDay() === 0) {
+      const d = parseDateString(a.date)?.dateObj;
+      if (d && d.getDay() === 0) {
         sundaysWorked += (hrs >= dutyHours ? 1.0 : (hrs > 0 ? 0.5 : 0));
       }
     });
@@ -624,7 +653,10 @@ const Attendance = () => {
     
     for (let d = 1; d <= endDay; d++) {
       const dateStr = `${payYear}-${String(payMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const hasRecord = monthlyAttendance.find(a => a.date === dateStr);
+      const hasRecord = monthlyAttendance.find(a => {
+        const p = parseDateString(a.date);
+        return p && p.iso === dateStr;
+      });
       const isSunday = new Date(payYear, payMonth - 1, d).getDay() === 0;
       
       if (!hasRecord && !isSunday) {
@@ -1035,10 +1067,19 @@ const Attendance = () => {
               <TableBody>
                 {(() => {
                   const now = new Date();
-                  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                  const currentYear = now.getFullYear();
+                  const currentMonth = now.getMonth() + 1;
                   const myMonthLogs = attendanceList
-                    .filter(a => String(a.employeeId) === String(user?.id) && a.date.startsWith(currentYearMonth))
-                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+                    .filter(a => {
+                      if (String(a.employeeId) !== String(user?.id)) return false;
+                      const p = parseDateString(a.date);
+                      return p && p.year === currentYear && p.month === currentMonth;
+                    })
+                    .sort((a, b) => {
+                      const da = parseDateString(a.date)?.dateObj || new Date(0);
+                      const db = parseDateString(b.date)?.dateObj || new Date(0);
+                      return db - da;
+                    });
 
                   if (myMonthLogs.length === 0) {
                     return (
@@ -1073,7 +1114,7 @@ const Attendance = () => {
 
                     return (
                       <TableRow key={log.id} hover>
-                        <TableCell sx={{ fontWeight: 600 }}>{log.date}</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>{parseDateString(log.date)?.formatted || log.date}</TableCell>
                         <TableCell>{log.inTime}</TableCell>
                         <TableCell>{log.outTime || '---'}</TableCell>
                         <TableCell>

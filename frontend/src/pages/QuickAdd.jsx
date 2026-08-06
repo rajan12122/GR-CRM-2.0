@@ -199,7 +199,18 @@ const QuickAdd = () => {
             payload: {
               ...nestedPropertyData,
               dealerId: finalDealerId,
-              date: nestedPropertyData.date || new Date().toLocaleDateString('en-IN')
+              date: (() => {
+                const rawDate = nestedPropertyData.date || '';
+                if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+                  const parts = rawDate.split('-');
+                  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                }
+                const today = new Date();
+                const d = String(today.getDate()).padStart(2, '0');
+                const m = String(today.getMonth() + 1).padStart(2, '0');
+                const y = today.getFullYear();
+                return `${d}/${m}/${y}`;
+              })()
             },
             key: import.meta.env.VITE_QUICK_ADD_KEY
           });

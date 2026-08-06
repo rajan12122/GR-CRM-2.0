@@ -1033,7 +1033,7 @@ async function handleQueryStageChange(q, client, req) {
       const newProperty = {
         id: propId,
         status: 'Available',
-        date: new Date().toISOString().split('T')[0],
+        date: new Date().toLocaleDateString('en-IN'),
         contact_person_name: ownerName,
         contact_number: ownerPhone,
         dealer_owner_booked: 'Direct',
@@ -1150,7 +1150,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
         budget: lead.budget || '',
         city: lead.locality || '',
         requirements: lead.remarks || remarks || `Converted from Lead ${leadId}`,
-        dateAdded: new Date().toISOString().split('T')[0]
+        dateAdded: new Date().toLocaleDateString('en-IN')
       };
       
       const insertedCust = await insertRecord('customers', newCust, client);
@@ -1240,7 +1240,7 @@ async function handleDealStatusChange(d, dbOrClient, req) {
           ownerName: prevOwnerName || 'Previous Owner',
           purchaseDate: prop.date || '',
           purchasePrice: prop.demand || '',
-          saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
+          saleDate: d.registrationDate || new Date().toLocaleDateString('en-IN'),
           salePrice: d.purchasePrice || '',
           soldByEmployeeId: d.employeeId || '',
           soldByEmployeeName: empName
@@ -1501,7 +1501,7 @@ async function handlePitchStatusChange(p, dbOrClient, req) {
       sellerCustomerId: sellerId || finalCustomerId,
       propertyId: p.propertyId,
       employeeId: p.employeeId || 'EMP-001',
-      registrationDate: new Date().toISOString().split('T')[0],
+      registrationDate: new Date().toLocaleDateString('en-IN'),
       purchasePrice: finalPrice || (prop ? (prop.demand || '') : ''),
       brokerage: '',
       commission: '',
@@ -1571,7 +1571,7 @@ async function handleLeadStatusChange(lead, dbOrClient, req) {
         budget: leadDemand,
         city: lead.locality || '',
         requirements: lead.remarks || 'Converted direct property seller.',
-        dateAdded: new Date().toISOString().split('T')[0]
+        dateAdded: new Date().toLocaleDateString('en-IN')
       };
       const insertedCust = await insertRecord('customers', existingCust, client);
       existingCust = insertedCust;
@@ -1842,7 +1842,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req) {
         employeeId: f.employeeId || 'EMP-001',
         status: 'Closed',
         purchasePrice: f.pitchPrice || (prop ? (prop.demand || '') : ''),
-        registrationDate: new Date().toISOString().split('T')[0]
+        registrationDate: new Date().toLocaleDateString('en-IN')
       };
       
       const insertedDeal = await insertRecord('deals', newDeal, client);
@@ -2422,7 +2422,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
                 city: payload.locality || '',
                 requirements: `Direct Property Owner for Property ${payload.id || ''}`,
                 source: payload.source || 'Direct Property Seller',
-                dateAdded: new Date().toISOString().split('T')[0]
+                dateAdded: new Date().toLocaleDateString('en-IN')
               };
               await insertRecord('customers', cust, client);
               
@@ -2473,7 +2473,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
             firm_name: payload.dealerFirmName || "Unverified — Auto-created from Wanted Property",
             address: payload.dealerAddress || "",
             sector_block: "Auto-created",
-            dateAdded: new Date().toISOString().split('T')[0]
+            dateAdded: new Date().toLocaleDateString('en-IN')
           };
           await insertRecord('dealers', newDealer, client);
           payload.dealerId = nextDealerId;
@@ -2543,7 +2543,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
       const fields = (metadata.modules[module] && metadata.modules[module].fields) || [];
       fields.forEach(f => {
         if (f.name === 'dateAdded' && !payload[f.name]) {
-          payload[f.name] = new Date().toISOString().split('T')[0];
+          payload[f.name] = new Date().toLocaleDateString('en-IN');
         }
         if (f.name === 'last_updated') {
           payload[f.name] = new Date().toLocaleString('en-IN');
@@ -2773,7 +2773,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
               firm_name: payload.dealerFirmName || "Unverified — Auto-created from Wanted Property",
               address: payload.dealerAddress || "",
               sector_block: "Auto-created",
-              dateAdded: new Date().toISOString().split('T')[0]
+              dateAdded: new Date().toLocaleDateString('en-IN')
             };
             await insertRecord('dealers', newDealer, client);
             payload.dealerId = nextDealerId;
@@ -3929,7 +3929,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
               ownerName: sellerName,
               purchaseDate: '',
               purchasePrice: '',
-              saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
+              saleDate: d.registrationDate || new Date().toLocaleDateString('en-IN'),
               salePrice: d.purchasePrice || ''
             });
           }
@@ -4240,7 +4240,7 @@ app.post('/api/documents', authenticateToken, async (req, res) => {
       name,
       fileUrl: fileUrl || '/uploads/sample_doc.pdf',
       uploadedBy: req.user.name,
-      dateAdded: new Date().toISOString().split('T')[0]
+      dateAdded: new Date().toLocaleDateString('en-IN')
     };
 
     await insertRecord('documents', newDoc);
@@ -4719,7 +4719,7 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), async (re
         status: 'Open',
         leadType: queryType === 'Sell Property' ? 'Seller' : 'Buyer',
         assignedEmployeeId: 'EMP-001',
-        dateAdded: new Date().toISOString().split('T')[0]
+        dateAdded: new Date().toLocaleDateString('en-IN')
       };
       await insertRecord('leads', newLead, client);
 
@@ -4940,7 +4940,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
       // Normalize default date added keys if not present
       if (module === 'leads') {
         if (!payload.dateAdded) {
-          payload.dateAdded = new Date().toISOString().split('T')[0];
+          payload.dateAdded = new Date().toLocaleDateString('en-IN');
         }
         if (payload.leadType === 'Seller') {
           payload.status = 'Converted';
@@ -5387,7 +5387,7 @@ app.post('/api/ai/daily-evening-summary', authenticateToken, async (req, res) =>
       pool.query('SELECT * FROM site_visits WHERE date = $1 OR date = $2', [todayLocale, todayStr]),
       pool.query('SELECT * FROM tasks'),
       pool.query('SELECT * FROM employees'),
-      pool.query('SELECT * FROM deals WHERE "registrationDate" = $1', [todayStr])
+      pool.query('SELECT * FROM deals WHERE "registrationDate" = $1 OR "registrationDate" = $2', [todayLocale, todayStr])
     ]);
 
     const contextData = {
@@ -6195,7 +6195,7 @@ app.listen(PORT, async () => {
             ownerName: sellerName,
             purchaseDate: prop.date || '',
             purchasePrice: prop.demand || '',
-            saleDate: d.registrationDate || new Date().toISOString().split('T')[0],
+            saleDate: d.registrationDate || new Date().toLocaleDateString('en-IN'),
             salePrice: d.purchasePrice || ''
           });
           updatePayload.owner_history = JSON.stringify(ownerHistory);

@@ -9,6 +9,25 @@ import * as Icons from 'lucide-react';
 import axios from 'axios';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const parts = dateStr.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
+const parseDate = (dateStr) => {
+  if (!dateStr) return new Date(0);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return new Date(dateStr);
+  const parts = String(dateStr).split('/');
+  if (parts.length === 3) {
+    return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+  }
+  return new Date(dateStr);
+};
+
 const MyWorkspace = () => {
   const { user, token, fetchModuleData, moduleData } = useApp();
   const [activeTab, setActiveTab] = useState(0);
@@ -98,7 +117,7 @@ const MyWorkspace = () => {
     try {
       const res = await axios.post(`${API_BASE_URL}/workspace/todos`, {
         title: todoInput,
-        dueDate: todoDate,
+        dueDate: formatDate(todoDate),
         dueTime: todoTime,
         priority: todoPriority,
         personal: todoPersonal,
@@ -285,7 +304,7 @@ const MyWorkspace = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     const userTodos = todos.filter(t => String(t.assignedTo) === String(user?.id));
     const finishedTodos = userTodos.filter(t => t.status === 'Completed');
-    const overdue = userTodos.filter(t => t.status === 'Pending' && t.dueDate < todayStr).length;
+    const overdue = userTodos.filter(t => t.status === 'Pending' && parseDate(t.dueDate) < parseDate(todayStr)).length;
 
     // Follow ups count
     const followUps = moduleData.follow_ups || [];
@@ -332,7 +351,8 @@ const MyWorkspace = () => {
     if (filterType === 'all' || filterType === 'followup') {
       const followUps = moduleData.follow_ups || [];
       followUps.forEach(f => {
-        if (f.date === dateStr && String(f.employeeId) === String(user?.id)) {
+        const p = parseDate(f.date);
+        if (p && p.toISOString().split('T')[0] === dateStr && String(f.employeeId) === String(user?.id)) {
           list.push({ type: 'followup', label: `Call: ${f.customerId}`, id: f.id });
         }
       });
@@ -342,7 +362,8 @@ const MyWorkspace = () => {
     if (filterType === 'all' || filterType === 'visit') {
       const visits = moduleData.site_visits || [];
       visits.forEach(v => {
-        if (v.date === dateStr && String(v.employeeId) === String(user?.id)) {
+        const p = parseDate(v.date);
+        if (p && p.toISOString().split('T')[0] === dateStr && String(v.employeeId) === String(user?.id)) {
           list.push({ type: 'visit', label: `Site Visit: ${v.propertyId}`, id: v.id });
         }
       });
@@ -351,7 +372,8 @@ const MyWorkspace = () => {
     // Todos
     if (filterType === 'all' || filterType === 'todo') {
       todos.forEach(t => {
-        if (t.dueDate === dateStr && String(t.assignedTo) === String(user?.id)) {
+        const p = parseDate(t.dueDate);
+        if (p && p.toISOString().split('T')[0] === dateStr && String(t.assignedTo) === String(user?.id)) {
           list.push({ type: 'todo', label: t.title, id: t.id, status: t.status });
         }
       });
@@ -456,7 +478,7 @@ const MyWorkspace = () => {
                     <ListItem key={idx} sx={{ borderLeft: `4px solid ${getPriorityColor(todo.priority)}`, pl: 2, mb: 1.5, backgroundColor: '#F8FAFC' }}>
                       <ListItemText 
                         primary={todo.title} 
-                        secondary={`${todo.dueDate} ${todo.dueTime || ''} | Priority: ${todo.priority}`} 
+                        secondary={`${formatDate(todo.dueDate)} ${todo.dueTime || ''} | Priority: ${todo.priority}`} 
                         primaryTypographyProps={{ fontSize: '13px', fontWeight: 700 }}
                         secondaryTypographyProps={{ fontSize: '11px' }}
                       />
@@ -593,7 +615,7 @@ const MyWorkspace = () => {
                       <Checkbox checked={todo.status === 'Completed'} onChange={() => handleToggleTodo(todo)} />
                       <ListItemText 
                         primary={todo.title} 
-                        secondary={todo.dueDate} 
+                        secondary={formatDate(todo.dueDate)} 
                         primaryTypographyProps={{ style: { textDecoration: todo.status === 'Completed' ? 'line-through' : 'none', fontWeight: 600, fontSize: '13px' } }}
                       />
                       <IconButton size="small" onClick={() => handleDeleteTodo(todo.id)}>

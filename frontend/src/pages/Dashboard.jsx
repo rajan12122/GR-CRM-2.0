@@ -43,6 +43,25 @@ import {
 } from 'recharts';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const parts = dateStr.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
+const parseDate = (dateStr) => {
+  if (!dateStr) return new Date(0);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return new Date(dateStr);
+  const parts = String(dateStr).split('/');
+  if (parts.length === 3) {
+    return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+  }
+  return new Date(dateStr);
+};
+
 const COLORS = ['#22C55E', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#EC4899', '#6B7280'];
 
 const Dashboard = () => {
@@ -547,7 +566,7 @@ const Dashboard = () => {
     }).sort((a, b) => {
       if (a.status === 'Completed' && b.status !== 'Completed') return 1;
       if (a.status !== 'Completed' && b.status === 'Completed') return -1;
-      return new Date(a.dueDate) - new Date(b.dueDate);
+      return parseDate(a.dueDate) - parseDate(b.dueDate);
     });
   }, [tasks, user, moduleData.employees]);
 
@@ -905,12 +924,13 @@ const Dashboard = () => {
                 {['Today', 'Overdue', 'Upcoming'].map(filter => {
                   const todayStr = new Date().toISOString().split('T')[0];
                   let filteredList = [];
+                  const today = parseDate(todayStr);
                   if (filter === 'Today') {
-                    filteredList = todos.filter(t => t.status === 'Pending' && t.dueDate === todayStr);
+                    filteredList = todos.filter(t => t.status === 'Pending' && parseDate(t.dueDate).toDateString() === today.toDateString());
                   } else if (filter === 'Overdue') {
-                    filteredList = todos.filter(t => t.status === 'Pending' && t.dueDate < todayStr);
+                    filteredList = todos.filter(t => t.status === 'Pending' && parseDate(t.dueDate) < today && parseDate(t.dueDate).toDateString() !== today.toDateString());
                   } else {
-                    filteredList = todos.filter(t => t.status === 'Pending' && t.dueDate > todayStr);
+                    filteredList = todos.filter(t => t.status === 'Pending' && parseDate(t.dueDate) > today);
                   }
 
                   return (

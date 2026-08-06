@@ -763,16 +763,13 @@ const DynamicForm = ({
             payload[f.name] = customValues[f.name] || '';
           }
           if (f.type === 'date' && payload[f.name]) {
-            const isSlashFormat = f.name === 'date' || (initialData && String(initialData[f.name]).includes('/'));
-            if (isSlashFormat) {
-              const dateVal = payload[f.name];
-              if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
-                const parts = dateVal.split('-');
-                const y = parts[0];
-                const m = parseInt(parts[1], 10);
-                const d = parseInt(parts[2], 10);
-                payload[f.name] = `${d}/${m}/${y}`;
-              }
+            const dateVal = payload[f.name];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+              const parts = dateVal.split('-');
+              const y = parts[0];
+              const m = String(parts[1]).padStart(2, '0');
+              const d = String(parts[2]).padStart(2, '0');
+              payload[f.name] = `${d}/${m}/${y}`;
             }
           }
         });
@@ -798,16 +795,13 @@ const DynamicForm = ({
             payload[f.name] = customValues[f.name] || '';
           }
           if (f.type === 'date' && payload[f.name]) {
-            const isSlashFormat = f.name === 'date' || (initialData && String(initialData[f.name]).includes('/'));
-            if (isSlashFormat) {
-              const dateVal = payload[f.name];
-              if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
-                const parts = dateVal.split('-');
-                const y = parts[0];
-                const m = parseInt(parts[1], 10);
-                const d = parseInt(parts[2], 10);
-                payload[f.name] = `${d}/${m}/${y}`;
-              }
+            const dateVal = payload[f.name];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+              const parts = dateVal.split('-');
+              const y = parts[0];
+              const m = String(parts[1]).padStart(2, '0');
+              const d = String(parts[2]).padStart(2, '0');
+              payload[f.name] = `${d}/${m}/${y}`;
             }
           }
         });

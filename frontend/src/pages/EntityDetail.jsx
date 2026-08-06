@@ -1253,6 +1253,34 @@ const EntityDetail = () => {
                           if (isNaN(num)) return str;
                           return `₹${num.toLocaleString('en-IN')}`;
                         })()
+                      ) : (f.type === 'date' || f.name.toLowerCase().includes('date')) ? (
+                        (() => {
+                          const dateStr = String(val);
+                          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                            const parts = dateStr.split('-');
+                            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                          }
+                          const parts = dateStr.split('/');
+                          if (parts.length === 3) {
+                            const d = parts[0].padStart(2, '0');
+                            const m = parts[1].padStart(2, '0');
+                            const y = parts[2];
+                            return `${d}/${m}/${y}`;
+                          }
+                          const spaceParts = dateStr.split(' ');
+                          if (spaceParts.length >= 1) {
+                            const datePart = spaceParts[0];
+                            const slashParts = datePart.split('/');
+                            if (slashParts.length === 3) {
+                              const d = slashParts[0].padStart(2, '0');
+                              const m = slashParts[1].padStart(2, '0');
+                              const y = slashParts[2];
+                              const timePart = spaceParts.slice(1).join(' ');
+                              return timePart ? `${d}/${m}/${y} ${timePart}` : `${d}/${m}/${y}`;
+                            }
+                          }
+                          return dateStr;
+                        })()
                       ) : (
                         String(val)
                       )}
