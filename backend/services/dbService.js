@@ -314,6 +314,19 @@ function normalizeRow(moduleName, row) {
     expectedKeys.add('employeeName');
     expectedKeys.add('action');
     expectedKeys.add('dateTime');
+  } else if (moduleName === 'remarks') {
+    expectedKeys.add('targetModule');
+    expectedKeys.add('targetId');
+    expectedKeys.add('employeeName');
+    expectedKeys.add('dateTime');
+    expectedKeys.add('comment');
+  } else if (moduleName === 'documents') {
+    expectedKeys.add('targetModule');
+    expectedKeys.add('targetId');
+    expectedKeys.add('name');
+    expectedKeys.add('fileUrl');
+    expectedKeys.add('uploadedBy');
+    expectedKeys.add('expiryDate');
   }
   
   // Map database keys to expected keys case-insensitively and ignoring underscores

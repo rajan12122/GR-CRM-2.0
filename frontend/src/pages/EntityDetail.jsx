@@ -3284,7 +3284,10 @@ const EntityDetail = () => {
                       ) : (
                         connections.remarks.map((rem, idx) => (
                           <Paper key={idx} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', boxShadow: 'none', backgroundColor: '#F8FAFC' }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{rem.employeeName}</Typography>
+                            <Box display="flex" justifyContent="space-between" mb={0.5}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{rem.employeeName}</Typography>
+                              <Typography variant="caption" sx={{ color: '#94A3B8' }}>{rem.dateTime}</Typography>
+                            </Box>
                             <Typography variant="body2" sx={{ color: '#4B5563', fontStyle: 'italic' }}>"{rem.comment}"</Typography>
                           </Paper>
                         ))
