@@ -3740,14 +3740,45 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
   
   try {
     const data = {};
+    const client = await pool.connect();
+    let remarksRows = [];
+    let docsRows = [];
+    try {
+      const targets = await getRelatedRemarksTargets(module, id, client);
+      const outerQuery = `
+        SELECT * FROM (
+          SELECT DISTINCT ON (employee_name, date_time, comment) * FROM remarks
+          WHERE ("targetModule" = 'leads' AND "targetId" = ANY($1))
+             OR ("targetModule" = 'customers' AND "targetId" = ANY($2))
+             OR ("targetModule" = 'follow_ups' AND "targetId" = ANY($3))
+             OR ("targetModule" = 'properties' AND "targetId" = ANY($4))
+             OR ("targetModule" = 'queries' AND "targetId" = ANY($5))
+             OR ("targetModule" = 'site_visits' AND "targetId" = ANY($6))
+             OR ("targetModule" = 'deals' AND "targetId" = ANY($7))
+          ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
+        ) t
+        ORDER BY created_at DESC, id DESC
+      `;
+      const [remarksRes, docsRes] = await Promise.all([
+        client.query(outerQuery, [
+          targets.leads,
+          targets.customers,
+          targets.follow_ups,
+          targets.properties,
+          targets.queries,
+          targets.site_visits,
+          targets.deals
+        ]),
+        client.query('SELECT * FROM documents WHERE "targetModule" = $1 AND "targetId" = $2', [module, id])
+      ]);
+      remarksRows = remarksRes.rows;
+      docsRows = docsRes.rows;
+    } finally {
+      client.release();
+    }
     
-    // Fetch remarks and documents in parallel
-    const [remarksRes, docsRes] = await Promise.all([
-      pool.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [module, id]),
-      pool.query('SELECT * FROM documents WHERE "targetModule" = $1 AND "targetId" = $2', [module, id])
-    ]);
-    data.remarks = remarksRes.rows.map(r => normalizeRow('remarks', r));
-    data.documents = docsRes.rows.map(r => normalizeRow('documents', r));
+    data.remarks = remarksRows.map(r => normalizeRow('remarks', r));
+    data.documents = docsRows.map(r => normalizeRow('documents', r));
 
     if (module === 'employees') {
       const [attendance, leaves, customers, properties, tasks, salaries, referrals] = await Promise.all([
@@ -4163,13 +4194,171 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
 
 // --- REMARKS TIMELINE SYSTEM ---
 
+// Helper to resolve related entities for universal remarks history mapping
+async function getRelatedRemarksTargets(moduleName, id, client) {
+  const leadIds = new Set();
+  const customerIds = new Set();
+  const propertyIds = new Set();
+  const followupIds = new Set();
+  const queryIds = new Set();
+  const siteVisitIds = new Set();
+  const dealIds = new Set();
+
+  if (moduleName === 'leads') leadIds.add(id);
+  else if (moduleName === 'customers') customerIds.add(id);
+  else if (moduleName === 'follow_ups') followupIds.add(id);
+  else if (moduleName === 'properties') propertyIds.add(id);
+  else if (moduleName === 'queries') queryIds.add(id);
+  else if (moduleName === 'site_visits') siteVisitIds.add(id);
+  else if (moduleName === 'deals') dealIds.add(id);
+
+  try {
+    // 1. Resolve initial links based on target type
+    if (followupIds.size > 0) {
+      const res = await client.query('SELECT "customerId" FROM follow_ups WHERE id = ANY($1)', [Array.from(followupIds)]);
+      res.rows.forEach(r => {
+        if (r.customerId) {
+          if (String(r.customerId).startsWith('LEAD')) leadIds.add(r.customerId);
+          else customerIds.add(r.customerId);
+        }
+      });
+    }
+    if (queryIds.size > 0) {
+      const res = await client.query('SELECT "customerId" FROM queries WHERE id = ANY($1)', [Array.from(queryIds)]);
+      res.rows.forEach(r => {
+        if (r.customerId) {
+          if (String(r.customerId).startsWith('LEAD')) leadIds.add(r.customerId);
+          else customerIds.add(r.customerId);
+        }
+      });
+    }
+    if (siteVisitIds.size > 0) {
+      const res = await client.query('SELECT "customerId" FROM site_visits WHERE id = ANY($1)', [Array.from(siteVisitIds)]);
+      res.rows.forEach(r => {
+        if (r.customerId) {
+          if (String(r.customerId).startsWith('LEAD')) leadIds.add(r.customerId);
+          else customerIds.add(r.customerId);
+        }
+      });
+    }
+    if (dealIds.size > 0) {
+      const res = await client.query('SELECT "customerId", "sellerCustomerId" FROM deals WHERE id = ANY($1)', [Array.from(dealIds)]);
+      res.rows.forEach(r => {
+        if (r.customerId) {
+          if (String(r.customerId).startsWith('LEAD')) leadIds.add(r.customerId);
+          else customerIds.add(r.customerId);
+        }
+        if (r.sellerCustomerId) {
+          if (String(r.sellerCustomerId).startsWith('LEAD')) leadIds.add(r.sellerCustomerId);
+          else customerIds.add(r.sellerCustomerId);
+        }
+      });
+    }
+    if (propertyIds.size > 0) {
+      const resProp = await client.query('SELECT current_owner_id FROM properties WHERE id = ANY($1)', [Array.from(propertyIds)]);
+      resProp.rows.forEach(r => {
+        if (r.current_owner_id) {
+          if (String(r.current_owner_id).startsWith('LEAD')) leadIds.add(r.current_owner_id);
+          else customerIds.add(r.current_owner_id);
+        }
+      });
+      const resPitch = await client.query('SELECT "customerId" FROM property_pitch_history WHERE "propertyId" = ANY($1)', [Array.from(propertyIds)]);
+      resPitch.rows.forEach(r => {
+        if (r.customerId) {
+          if (String(r.customerId).startsWith('LEAD')) leadIds.add(r.customerId);
+          else customerIds.add(r.customerId);
+        }
+      });
+    }
+
+    // 2. Cross-link leads and customers
+    if (leadIds.size > 0) {
+      const res = await client.query('SELECT id FROM customers WHERE "leadId" = ANY($1)', [Array.from(leadIds)]);
+      res.rows.forEach(r => customerIds.add(r.id));
+    }
+    if (customerIds.size > 0) {
+      const res = await client.query('SELECT "leadId" FROM customers WHERE id = ANY($1)', [Array.from(customerIds)]);
+      res.rows.forEach(r => {
+        if (r.leadId) leadIds.add(r.leadId);
+      });
+    }
+    // Perform one more cross-link pass for mapping completeness
+    if (leadIds.size > 0) {
+      const res = await client.query('SELECT id FROM customers WHERE "leadId" = ANY($1)', [Array.from(leadIds)]);
+      res.rows.forEach(r => customerIds.add(r.id));
+    }
+
+    // 3. Collect all related sub-entities for the resolved leadIds and customerIds
+    const clientIds = Array.from(new Set([...leadIds, ...customerIds]));
+    if (clientIds.length > 0) {
+      const [resF, resQ, resV, resD, resPropOwn, resPropPitch] = await Promise.all([
+        client.query('SELECT id FROM follow_ups WHERE "customerId" = ANY($1)', [clientIds]),
+        client.query('SELECT id FROM queries WHERE "customerId" = ANY($1)', [clientIds]),
+        client.query('SELECT id FROM site_visits WHERE "customerId" = ANY($1)', [clientIds]),
+        client.query('SELECT id FROM deals WHERE "customerId" = ANY($1) OR "sellerCustomerId" = ANY($1)', [clientIds]),
+        client.query('SELECT id FROM properties WHERE current_owner_id = ANY($1)', [clientIds]),
+        client.query('SELECT "propertyId" FROM property_pitch_history WHERE "customerId" = ANY($1)', [clientIds])
+      ]);
+
+      resF.rows.forEach(r => followupIds.add(r.id));
+      resQ.rows.forEach(r => queryIds.add(r.id));
+      resV.rows.forEach(r => siteVisitIds.add(r.id));
+      resD.rows.forEach(r => dealIds.add(r.id));
+      resPropOwn.rows.forEach(r => propertyIds.add(r.id));
+      resPropPitch.rows.forEach(r => propertyIds.add(r.propertyId));
+    }
+  } catch (err) {
+    console.error('Error resolving related targets:', err);
+  }
+
+  return {
+    leads: Array.from(leadIds),
+    customers: Array.from(customerIds),
+    follow_ups: Array.from(followupIds),
+    properties: Array.from(propertyIds),
+    queries: Array.from(queryIds),
+    site_visits: Array.from(siteVisitIds),
+    deals: Array.from(dealIds)
+  };
+}
+
 app.get('/api/remarks/:module/:id', authenticateToken, async (req, res) => {
   const { module, id } = req.params;
+  const client = await pool.connect();
   try {
-    const remarksRes = await pool.query('SELECT * FROM remarks WHERE "targetModule" = $1 AND "targetId" = $2', [module, id]);
+    const targets = await getRelatedRemarksTargets(module, id, client);
+    
+    // Fetch remarks for all these related target IDs, deduplicating identical ones
+    const outerQuery = `
+      SELECT * FROM (
+        SELECT DISTINCT ON (employee_name, date_time, comment) * FROM remarks
+        WHERE ("targetModule" = 'leads' AND "targetId" = ANY($1))
+           OR ("targetModule" = 'customers' AND "targetId" = ANY($2))
+           OR ("targetModule" = 'follow_ups' AND "targetId" = ANY($3))
+           OR ("targetModule" = 'properties' AND "targetId" = ANY($4))
+           OR ("targetModule" = 'queries' AND "targetId" = ANY($5))
+           OR ("targetModule" = 'site_visits' AND "targetId" = ANY($6))
+           OR ("targetModule" = 'deals' AND "targetId" = ANY($7))
+        ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
+      ) t
+      ORDER BY created_at DESC, id DESC
+    `;
+
+    const remarksRes = await client.query(outerQuery, [
+      targets.leads,
+      targets.customers,
+      targets.follow_ups,
+      targets.properties,
+      targets.queries,
+      targets.site_visits,
+      targets.deals
+    ]);
+    
     res.json(remarksRes.rows.map(r => normalizeRow('remarks', r)));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -4179,23 +4368,62 @@ app.post('/api/remarks', authenticateToken, async (req, res) => {
     return res.status(400).json({ message: 'Target module, record ID and comment text are required.' });
   }
 
+  const client = await pool.connect();
   try {
-    const newRemark = {
-      id: generateUniqueId('REM'),
-      targetModule,
-      targetId,
-      employeeName: req.user.name,
-      dateTime: new Date().toLocaleString(),
-      comment
+    await client.query('BEGIN');
+    
+    // Resolve all related targets for this remark
+    const targets = await getRelatedRemarksTargets(targetModule, targetId, client);
+    
+    const uniqueTargets = [];
+    const addedKeys = new Set();
+    
+    const addUniqueTarget = (mod, id) => {
+      const key = `${mod}:${id}`;
+      if (!addedKeys.has(key)) {
+        addedKeys.add(key);
+        uniqueTargets.push({ module: mod, id });
+      }
     };
 
-    await insertRecord('remarks', newRemark);
+    // Add all resolved targets
+    targets.leads.forEach(id => addUniqueTarget('leads', id));
+    targets.customers.forEach(id => addUniqueTarget('customers', id));
+    targets.follow_ups.forEach(id => addUniqueTarget('follow_ups', id));
+    targets.properties.forEach(id => addUniqueTarget('properties', id));
+    targets.queries.forEach(id => addUniqueTarget('queries', id));
+    targets.site_visits.forEach(id => addUniqueTarget('site_visits', id));
+    targets.deals.forEach(id => addUniqueTarget('deals', id));
 
-    // Sync to sheets
-    syncToSheets('remarks');
-    res.status(201).json(newRemark);
+    // Ensure original target is included
+    addUniqueTarget(targetModule, targetId);
+
+    const insertedRemarks = [];
+    const dt = new Date().toLocaleString();
+    for (const tgt of uniqueTargets) {
+      const newRemark = {
+        id: generateUniqueId('REM'),
+        targetModule: tgt.module,
+        targetId: tgt.id,
+        employeeName: req.user.name,
+        dateTime: dt,
+        comment
+      };
+      await insertRecord('remarks', newRemark, client);
+      insertedRemarks.push(newRemark);
+    }
+
+    await client.query('COMMIT');
+
+    try { syncToSheets('remarks'); } catch(e) {}
+    
+    const originalRemark = insertedRemarks.find(r => r.targetModule === targetModule && r.targetId === targetId) || insertedRemarks[0];
+    res.status(201).json(originalRemark);
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(400).json({ message: err.message });
+  } finally {
+    client.release();
   }
 });
 
