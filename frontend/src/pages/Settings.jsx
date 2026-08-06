@@ -25,6 +25,7 @@ import {
   Paper,
   IconButton,
   List,
+  ListSubheader,
   ListItem,
   Chip,
   CircularProgress,
@@ -1524,18 +1525,107 @@ const Settings = () => {
                   </Typography>
                   <FormControl size="small" sx={{ width: 220 }}>
                     <InputLabel>Select Chip Category</InputLabel>
-                    <Select
-                      label="Select Chip Category"
-                      value={selectedChipGroup}
-                      onChange={(e) => {
-                        setSelectedChipGroup(e.target.value);
-                        handleCancelEditChip();
-                      }}
-                    >
-                      {Object.keys(metadata.chips).map(group => (
-                        <MenuItem key={group} value={group}>{group}</MenuItem>
-                      ))}
-                    </Select>
+                    {(() => {
+                      const grouped = {};
+                      // 1. Scan metadata modules
+                      Object.entries(metadata.modules || {}).forEach(([modKey, modConfig]) => {
+                        const modLabel = modConfig.name || modKey;
+                        const fields = modConfig.fields || [];
+                        fields.forEach(f => {
+                          if (f.chipGroup && metadata.chips[f.chipGroup]) {
+                            if (!grouped[modLabel]) {
+                              grouped[modLabel] = new Set();
+                            }
+                            grouped[modLabel].add(f.chipGroup);
+                          }
+                        });
+                      });
+
+                      // 2. Scan other sections in metadata or custom known lists
+                      const specialModules = {
+                        'Attendance & HR': ['attendanceStatus', 'leaveTypes', 'salaryStatus'],
+                        'Dealer Management': ['dealerStatus', 'callOutcomes'],
+                        'Properties & Inventory': ['propertyStatus', 'rci', 'zone', 'propertyFacing', 'propertyTransactionType', 'propertyAvailability', 'propertyApprovalStatus']
+                      };
+
+                      Object.entries(specialModules).forEach(([modLabel, groups]) => {
+                        groups.forEach(g => {
+                          if (metadata.chips[g]) {
+                            if (!grouped[modLabel]) {
+                              grouped[modLabel] = new Set();
+                            }
+                            grouped[modLabel].add(g);
+                          }
+                        });
+                      });
+
+                      const groupedGroups = new Set();
+                      Object.values(grouped).forEach(set => {
+                        set.forEach(g => groupedGroups.add(g));
+                      });
+
+                      const commonGroup = [];
+                      Object.keys(metadata.chips || {}).forEach(group => {
+                        if (!groupedGroups.has(group)) {
+                          commonGroup.push(group);
+                        }
+                      });
+
+                      const selectItems = [];
+                      Object.entries(grouped).forEach(([modLabel, set]) => {
+                        if (set.size > 0) {
+                          selectItems.push(
+                            <ListSubheader key={`header-${modLabel}`} sx={{ fontWeight: 800, color: '#1E293B', backgroundColor: '#F1F5F9', lineHeight: '32px' }}>
+                              {String(modLabel).toUpperCase()}
+                            </ListSubheader>
+                          );
+                          Array.from(set).sort().forEach(group => {
+                            selectItems.push(
+                              <MenuItem key={group} value={group} sx={{ pl: 3.5, fontWeight: 500 }}>
+                                {group}
+                              </MenuItem>
+                            );
+                          });
+                        }
+                      });
+
+                      if (commonGroup.length > 0) {
+                        selectItems.push(
+                          <ListSubheader key="header-other" sx={{ fontWeight: 800, color: '#1E293B', backgroundColor: '#F1F5F9', lineHeight: '32px' }}>
+                            OTHER DROPDOWNS
+                          </ListSubheader>
+                        );
+                        commonGroup.sort().forEach(group => {
+                          selectItems.push(
+                            <MenuItem key={group} value={group} sx={{ pl: 3.5, fontWeight: 500 }}>
+                              {group}
+                            </MenuItem>
+                          );
+                        });
+                      }
+
+                      return (
+                        <Select
+                          label="Select Chip Category"
+                          value={selectedChipGroup}
+                          onChange={(e) => {
+                            setSelectedChipGroup(e.target.value);
+                            handleCancelEditChip();
+                          }}
+                          MenuProps={{
+                            PaperProps: {
+                              sx: {
+                                maxHeight: 400,
+                                borderRadius: '12px',
+                                boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                              }
+                            }
+                          }}
+                        >
+                          {selectItems}
+                        </Select>
+                      );
+                    })()}
                   </FormControl>
                 </Box>
 
