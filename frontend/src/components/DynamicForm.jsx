@@ -1001,9 +1001,29 @@ const DynamicForm = ({
                         value={formData[f.name] || ''}
                         onChange={(e) => handleChange(f.name, e.target.value)}
                         disabled={isReadOnly}
+                        renderValue={(selected) => {
+                          if (!selected) return null;
+                          const opt = options.find(o => String(o.value) === String(selected)) || { value: selected, label: selected };
+                          const color = opt.color || '#475569';
+                          const isFollowupHighlighted = moduleKey === 'follow_ups' && (f.name === 'status' || f.name === 'pipelineAction');
+                          return (
+                            <Chip 
+                              label={opt.label || selected} 
+                              size={isFollowupHighlighted ? "medium" : "small"} 
+                              sx={{ 
+                                height: isFollowupHighlighted ? 26 : 20, 
+                                fontSize: isFollowupHighlighted ? '11px' : '10px', 
+                                fontWeight: 700,
+                                backgroundColor: isFollowupHighlighted ? color : `${color}15`,
+                                color: isFollowupHighlighted ? '#FFFFFF' : color,
+                                border: isFollowupHighlighted ? 'none' : `1px solid ${color}30`
+                              }} 
+                            />
+                          );
+                        }}
                       >
                         {options.map(opt => (
-                          <MenuItem key={opt.value} value={opt.value}>
+                          <MenuItem key={opt.value} value={opt.value} sx={{ color: opt.color || 'inherit', fontWeight: opt.color ? 700 : 'normal' }}>
                             {opt.label}
                           </MenuItem>
                         ))}

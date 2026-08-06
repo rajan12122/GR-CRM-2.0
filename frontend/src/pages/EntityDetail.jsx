@@ -1106,9 +1106,21 @@ const EntityDetail = () => {
                 if (!allowed) return null;
 
                 const val = record[f.name];
+                const isHighlightedField = moduleName === 'follow_ups' && (f.name === 'status' || f.name === 'pipelineAction');
                 return (
                   <Grid item xs={6} sm={4} md={3} lg={2.4} key={f.name}>
-                    <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 700, fontSize: '9px', letterSpacing: '0.05em' }}>
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        color: isHighlightedField ? '#1E293B' : '#64748B', 
+                        display: 'block', 
+                        textTransform: 'uppercase', 
+                        fontWeight: isHighlightedField ? 800 : 700, 
+                        fontSize: isHighlightedField ? '11px' : '9px', 
+                        letterSpacing: '0.05em',
+                        mb: isHighlightedField ? 0.5 : 0
+                      }}
+                    >
                       {f.label}
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F172A', mt: 0.5 }}>
@@ -1120,14 +1132,20 @@ const EntityDetail = () => {
                         return (
                           <Chip 
                             label={chipConfig?.label || val} 
-                            size="small" 
+                            size={isHighlightedField ? "medium" : "small"} 
                             sx={{ 
-                              height: 20, 
-                              fontSize: '10px', 
-                              fontWeight: 700,
-                              backgroundColor: chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9',
-                              color: chipConfig?.color || '#475569',
-                              border: `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
+                              height: isHighlightedField ? 28 : 20, 
+                              fontSize: isHighlightedField ? '12px' : '10px', 
+                              fontWeight: isHighlightedField ? 800 : 700,
+                              backgroundColor: isHighlightedField 
+                                ? (chipConfig?.color || '#64748B')
+                                : (chipConfig?.color ? `${chipConfig.color}15` : '#F1F5F9'),
+                              color: isHighlightedField ? '#FFFFFF' : (chipConfig?.color || '#475569'),
+                              border: isHighlightedField 
+                                ? 'none'
+                                : `1px solid ${chipConfig?.color ? `${chipConfig.color}30` : '#E2E8F0'}`,
+                              boxShadow: isHighlightedField ? '0 2px 4px rgba(0,0,0,0.15)' : 'none',
+                              px: isHighlightedField ? 1 : 0
                             }} 
                           />
                         );

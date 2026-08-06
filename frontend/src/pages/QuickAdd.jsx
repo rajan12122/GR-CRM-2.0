@@ -428,6 +428,30 @@ const QuickAdd = () => {
                                 '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#475569' },
                                 '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3B82F6' }
                               }}
+                              renderValue={(selected) => {
+                                if (!selected) return null;
+                                const choiceList = (f.name === 'pipelineAction' && selectedModule === 'follow_ups')
+                                  ? (metadata?.chips?.customerStages || [])
+                                  : (metadata.chips[f.chipGroup] || []);
+                                const opt = choiceList.find(o => String(typeof o === 'object' ? o.value : o).toLowerCase() === String(selected).toLowerCase());
+                                const optLabel = typeof opt === 'object' ? opt.label : selected;
+                                const color = typeof opt === 'object' ? (opt.color || '#475569') : '#475569';
+                                const isFollowupHighlighted = selectedModule === 'follow_ups' && (f.name === 'status' || f.name === 'pipelineAction');
+                                return (
+                                  <Chip 
+                                    label={optLabel} 
+                                    size={isFollowupHighlighted ? "medium" : "small"} 
+                                    sx={{ 
+                                      height: isFollowupHighlighted ? 26 : 20, 
+                                      fontSize: isFollowupHighlighted ? '11px' : '10px', 
+                                      fontWeight: 700,
+                                      backgroundColor: isFollowupHighlighted ? color : `${color}15`,
+                                      color: isFollowupHighlighted ? '#FFFFFF' : color,
+                                      border: isFollowupHighlighted ? 'none' : `1px solid ${color}30`
+                                    }} 
+                                  />
+                                );
+                              }}
                             >
                                {((f.name === 'pipelineAction' && selectedModule === 'follow_ups')
                                  ? (metadata?.chips?.customerStages || [])
@@ -435,8 +459,9 @@ const QuickAdd = () => {
                                ).map(choice => {
                                  const choiceVal = typeof choice === 'object' ? choice.value : choice;
                                  const choiceLabel = typeof choice === 'object' ? choice.label : choice;
+                                 const choiceColor = typeof choice === 'object' ? choice.color : null;
                                  return (
-                                   <MenuItem key={choiceVal} value={choiceVal}>{choiceLabel}</MenuItem>
+                                   <MenuItem key={choiceVal} value={choiceVal} sx={{ color: choiceColor || 'inherit', fontWeight: choiceColor ? 700 : 'normal' }}>{choiceLabel}</MenuItem>
                                  );
                                })}
                               <MenuItem value="Other" sx={{ fontStyle: 'italic', fontWeight: 600, color: '#3B82F6' }}>
