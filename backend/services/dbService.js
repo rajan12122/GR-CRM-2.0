@@ -368,20 +368,23 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
       const searchClauses = tableCols.map(col => `"${col}"::text ILIKE ${searchPlaceholder}`);
       
       if (tableCols.includes('customerId')) {
-        searchClauses.push(`"customerId" IN (SELECT id FROM customers WHERE name ILIKE ${searchPlaceholder})`);
-        searchClauses.push(`"customerId" IN (SELECT id FROM leads WHERE name ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"customerId" IN (SELECT id FROM customers WHERE name ILIKE ${searchPlaceholder} OR phone ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"customerId" IN (SELECT id FROM leads WHERE name ILIKE ${searchPlaceholder} OR phone ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('employeeId')) {
-        searchClauses.push(`"employeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"employeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('assignedEmployeeId')) {
-        searchClauses.push(`"assignedEmployeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"assignedEmployeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('propertyId')) {
-        searchClauses.push(`"propertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"propertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder} OR demand ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('pitchedPropertyId')) {
-        searchClauses.push(`"pitchedPropertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"pitchedPropertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder} OR demand ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder})`);
+      }
+      if (tableCols.includes('queryId')) {
+        searchClauses.push(`"queryId" IN (SELECT id FROM queries WHERE requirement ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR "propertyType" ILIKE ${searchPlaceholder})`);
       }
 
       whereClauses.push(`(${searchClauses.join(' OR ')})`);
@@ -476,20 +479,23 @@ async function getRecordsCount(moduleName, dbOrClient, options = {}) {
       const searchClauses = tableCols.map(col => `"${col}"::text ILIKE ${searchPlaceholder}`);
       
       if (tableCols.includes('customerId')) {
-        searchClauses.push(`"customerId" IN (SELECT id FROM customers WHERE name ILIKE ${searchPlaceholder})`);
-        searchClauses.push(`"customerId" IN (SELECT id FROM leads WHERE name ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"customerId" IN (SELECT id FROM customers WHERE name ILIKE ${searchPlaceholder} OR phone ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"customerId" IN (SELECT id FROM leads WHERE name ILIKE ${searchPlaceholder} OR phone ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('employeeId')) {
-        searchClauses.push(`"employeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"employeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('assignedEmployeeId')) {
-        searchClauses.push(`"assignedEmployeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"assignedEmployeeId" IN (SELECT id FROM employees WHERE name ILIKE ${searchPlaceholder} OR email ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('propertyId')) {
-        searchClauses.push(`"propertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"propertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder} OR demand ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder})`);
       }
       if (tableCols.includes('pitchedPropertyId')) {
-        searchClauses.push(`"pitchedPropertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder})`);
+        searchClauses.push(`"pitchedPropertyId" IN (SELECT id FROM properties WHERE title ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR sector_block ILIKE ${searchPlaceholder} OR location ILIKE ${searchPlaceholder} OR demand ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder})`);
+      }
+      if (tableCols.includes('queryId')) {
+        searchClauses.push(`"queryId" IN (SELECT id FROM queries WHERE requirement ILIKE ${searchPlaceholder} OR budget ILIKE ${searchPlaceholder} OR locality ILIKE ${searchPlaceholder} OR "propertyType" ILIKE ${searchPlaceholder})`);
       }
 
       whereClauses.push(`(${searchClauses.join(' OR ')})`);
