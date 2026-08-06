@@ -162,23 +162,6 @@
           "refModule": "employees"
         },
         {
-          "name": "budget",
-          "label": "Budget (INR)",
-          "type": "number",
-          "required": false,
-          "showInTable": true,
-          "editable": true
-        },
-        {
-          "name": "city",
-          "label": "Preferred City",
-          "type": "select",
-          "required": false,
-          "showInTable": true,
-          "editable": true,
-          "chipGroup": "cities"
-        },
-        {
           "name": "requirements",
           "label": "Specific Requirements",
           "type": "textarea",
@@ -1885,6 +1868,15 @@
           "required": false,
           "showInTable": true,
           "editable": true
+        },
+        {
+          "name": "city",
+          "label": "Preferred City",
+          "type": "select",
+          "required": false,
+          "showInTable": true,
+          "editable": true,
+          "chipGroup": "cities"
         },
         {
           "name": "demand",

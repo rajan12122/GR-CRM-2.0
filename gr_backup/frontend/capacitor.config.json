@@ -1,0 +1,9 @@
+{
+  "appId": "com.gaganrealtech.crm",
+  "appName": "Gagan Realtech CRM",
+  "webDir": "dist",
+  "server": {
+    "url": "https://gr-crm-frontend.onrender.com",
+    "cleartext": false
+  }
+}

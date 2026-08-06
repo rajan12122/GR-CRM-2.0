@@ -42,6 +42,7 @@ import * as Icons from 'lucide-react';
 import { useApp, API_BASE_URL } from '../context/AppContext';
 import EntityTooltip from '../components/EntityTooltip';
 import PropertyMatcher from '../components/PropertyMatcher';
+import DynamicForm from '../components/DynamicForm';
 import VoiceInputButton from '../components/VoiceInputButton';
 
 const getSingularLabel = (label) => {
@@ -94,7 +95,8 @@ const EntityDetail = () => {
     uploadDocument,
     deleteRecord,
     loadingData,
-    logout
+    logout,
+    hasPermission
   } = useApp();
 
   const [record, setRecord] = useState(null);
@@ -146,6 +148,16 @@ const EntityDetail = () => {
   const [pitchWarning, setPitchWarning] = useState('');
   const [pitchItemType, setPitchItemType] = useState('Property');
   const [editingPitch, setEditingPitch] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const handleFormSubmit = async (formData) => {
+    const res = await updateRecord(moduleName, id, formData);
+    if (res.success) {
+      setFormOpen(false);
+      await loadData();
+    } else {
+      alert(res.message || 'Failed to save record.');
+    }
+  };
   const [propSearch, setPropSearch] = useState('');
   const [dealerSearch, setDealerSearch] = useState('');
   const [nestedDealerData, setNestedDealerData] = useState({
@@ -884,13 +896,26 @@ const EntityDetail = () => {
                   {record.firm_name || 'N/A'}
                 </Typography>
               </Box>
-              <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 800, fontSize: '10px', letterSpacing: '0.1em' }}>
-                  System ID Reference
-                </Typography>
-                <Typography variant="body1" sx={{ fontWeight: 800, color: '#2563EB', mt: 0.5, fontSize: '16px' }}>
-                  {record.id}
-                </Typography>
+              <Box sx={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box>
+                  <Typography variant="caption" sx={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontWeight: 800, fontSize: '10px', letterSpacing: '0.1em' }}>
+                    System ID Reference
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 800, color: '#2563EB', mt: 0.5, fontSize: '16px' }}>
+                    {record.id}
+                  </Typography>
+                </Box>
+                {hasPermission(moduleName, 'edit') && (
+                  <Button 
+                    variant="outlined" 
+                    size="small" 
+                    startIcon={<Icons.Edit size={16} />}
+                    onClick={() => setFormOpen(true)}
+                    sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 600, height: 36 }}
+                  >
+                    Edit Details
+                  </Button>
+                )}
               </Box>
             </Box>
 
@@ -1044,9 +1069,22 @@ const EntityDetail = () => {
       ) : (
         <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px', mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
-            <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', mb: 2.5, fontFamily: 'Poppins' }}>
-              Profile Details
-            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '18px', fontFamily: 'Poppins', mb: 0 }}>
+                Profile Details
+              </Typography>
+              {hasPermission(moduleName, 'edit') && (
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  startIcon={<Icons.Edit size={16} />}
+                  onClick={() => setFormOpen(true)}
+                  sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 600 }}
+                >
+                  Edit Details
+                </Button>
+              )}
+            </Box>
             <Grid container spacing={2.5}>
               {moduleConfig.fields.filter(f => {
                 if (moduleName === 'leads' && (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy')) {
@@ -5346,6 +5384,17 @@ const EntityDetail = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {formOpen && (
+        <DynamicForm 
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          moduleKey={moduleName}
+          fields={moduleConfig.fields}
+          initialData={record}
+          onSubmit={handleFormSubmit}
+        />
+      )}
 
     </Box>
   );

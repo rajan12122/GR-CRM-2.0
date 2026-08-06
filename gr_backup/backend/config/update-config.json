@@ -1,0 +1,8 @@
+{
+  "versionCode": 2,
+  "versionName": "1.0.1",
+  "title": "New Version Available",
+  "message": "We have released an update with layout improvements, automatic pipeline stage initialization, and travel history mapping. Please update for the best experience.",
+  "apkUrl": "https://gr-crm-backend.onrender.com/public/app-debug.apk",
+  "forceUpdate": false
+}

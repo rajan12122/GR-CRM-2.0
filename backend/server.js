@@ -942,7 +942,7 @@ async function handleAutomatedPitchLogging(rec, client, req) {
   const cust = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : (leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null);
   const custName = cust ? (cust.name || cust.person_name || 'Client') : 'Client';
   
-  const pitchRes = await client.query('SELECT id FROM property_pitch_history WHERE "customerId" = $1 AND "propertyId" = $2', [custId, rec.pitchedPropertyId]);
+  const pitchRes = await client.query('SELECT * FROM property_pitch_history WHERE "customerId" = $1 AND "propertyId" = $2', [custId, rec.pitchedPropertyId]);
   const exists = pitchRes.rows.length > 0;
   
   if (!exists) {
@@ -994,7 +994,20 @@ async function handleAutomatedPitchLogging(rec, client, req) {
       dateTime: new Date().toLocaleString()
     };
     await insertRecord('activity_logs', log, client);
-    
+  } else {
+    const existingPitch = normalizeRow('property_pitch_history', pitchRes.rows[0]);
+    const updatePayload = {
+      quotedPrice: Number(rec.pitchPrice || existingPitch.quotedPrice || 0),
+      remarks: rec.pitchRemarks || existingPitch.remarks,
+      pitchDate: new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN')
+    };
+    if (rec.pipelineAction) {
+      updatePayload.status = rec.pipelineAction;
+      updatePayload.interestLevel = rec.pipelineAction;
+    }
+    const updated = await updateRecord('property_pitch_history', existingPitch.id, updatePayload, client);
+    await handlePitchStatusChange(updated, client, req);
+    try { syncToSheets('property_pitch_history'); } catch(e) {}
   }
 }
 
@@ -2235,6 +2248,26 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
     };
 
     const inserted = await runTransaction(async (client) => {
+      if (module === 'property_pitch_history' && payload.customerId && payload.propertyId) {
+        const existingPitchRes = await client.query('SELECT * FROM property_pitch_history WHERE "customerId" = $1 AND "propertyId" = $2', [payload.customerId, payload.propertyId]);
+        if (existingPitchRes.rows[0]) {
+          const existingPitch = normalizeRow('property_pitch_history', existingPitchRes.rows[0]);
+          const updatePayload = {
+            status: payload.status || existingPitch.status || 'Pitched',
+            interestLevel: payload.interestLevel || payload.status || existingPitch.interestLevel || 'Interested',
+            quotedPrice: payload.quotedPrice !== undefined ? Number(payload.quotedPrice) : existingPitch.quotedPrice,
+            remarks: payload.remarks || existingPitch.remarks,
+            pitchDate: payload.pitchDate || new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN'),
+            employeeId: payload.employeeId || req.user.id,
+            employeeName: payload.employeeName || req.user.name
+          };
+          const updated = await updateRecord('property_pitch_history', existingPitch.id, updatePayload, client);
+          await handlePitchStatusChange(updated, client, req);
+          try { syncToSheets('property_pitch_history'); } catch(e) {}
+          return updated;
+        }
+      }
+
       // 1. Generate ID if not provided
       if (!payload.id) {
         payload.id = await generateNextIdAsync(client, module);
