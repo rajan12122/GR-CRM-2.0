@@ -938,7 +938,7 @@ const Dashboard = () => {
                   Manage Planner
                 </Button>
               </Box>
-              <Grid container spacing={2}>
+              <Grid container spacing={3}>
                 {['Today', 'Overdue', 'Upcoming'].map(filter => {
                   const todayStr = new Date().toISOString().split('T')[0];
                   let filteredList = [];
@@ -956,62 +956,34 @@ const Dashboard = () => {
                     navigate(`/module/tasks?_special=${spec}`);
                   };
 
+                  const numberColor = filter === 'Today' ? '#2563EB' : filter === 'Overdue' ? '#EF4444' : '#F59E0B';
+
                   return (
-                    <Grid item xs={12} md={4} key={filter}>
+                    <Grid item xs={12} sm={4} key={filter}>
                       <Paper 
                         onClick={handleTabClick}
                         sx={{ 
-                          p: 2, 
-                          border: '1px solid #F1F5F9', 
+                          p: 3.5, 
+                          textAlign: 'center', 
                           backgroundColor: '#F8FAFC', 
                           borderRadius: '12px', 
-                          boxShadow: 'none', 
-                          height: '100%', 
-                          minHeight: 180, 
+                          border: '1px solid #E2E8F0', 
+                          boxShadow: 'none',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
                           '&:hover': {
                             backgroundColor: '#F1F5F9',
-                            borderColor: '#CBD5E1',
+                            borderColor: numberColor,
                             transform: 'translateY(-2px)'
                           }
                         }}
                       >
-                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: filter === 'Overdue' ? '#EF4444' : '#1E293B' }}>
-                            {filter} ({filteredList.length})
-                          </Typography>
-                          <Chip 
-                            label={filter} 
-                            size="small" 
-                            color={filter === 'Overdue' ? 'error' : filter === 'Today' ? 'primary' : 'default'} 
-                            sx={{ height: 16, fontSize: '9px', fontWeight: 700 }}
-                          />
-                        </Box>
-                        <List sx={{ p: 0, maxHeight: 150, overflowY: 'auto' }}>
-                          {filteredList.map((t, idx) => (
-                            <ListItem key={idx} sx={{ p: 0, mb: 1, '&:last-child': { mb: 0 } }}>
-                              <ListItemText 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/module/tasks/${t.id}`);
-                                }}
-                                primary={t.title} 
-                                secondary={`${t.dueTime || ''} | Priority: ${t.priority}`}
-                                primaryTypographyProps={{ 
-                                  fontWeight: 700, 
-                                  fontSize: '12px', 
-                                  color: '#1E293B',
-                                  sx: { '&:hover': { color: '#2563EB' } }
-                                }}
-                                secondaryTypographyProps={{ fontSize: '10px' }}
-                              />
-                            </ListItem>
-                          ))}
-                          {filteredList.length === 0 && (
-                            <Typography variant="body2" sx={{ color: '#94A3B8', fontSize: '12px', py: 2, textAlign: 'center' }}>No tasks.</Typography>
-                          )}
-                        </List>
+                        <Typography variant="h3" sx={{ fontWeight: 800, color: numberColor, fontFamily: 'Poppins' }}>
+                          {filteredList.length}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#64748B', fontWeight: 700, mt: 0.5 }}>
+                          {filter}
+                        </Typography>
                       </Paper>
                     </Grid>
                   );
