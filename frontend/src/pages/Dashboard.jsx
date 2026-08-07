@@ -491,7 +491,7 @@ const Dashboard = () => {
         modulesToFetch.map(async (m) => {
           if (hasPermission(m, 'view')) {
             try {
-              await fetchModuleData(m);
+              await fetchModuleData(m, true);
             } catch (e) {
               console.error(e);
             }

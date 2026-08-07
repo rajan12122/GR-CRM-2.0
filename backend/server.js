@@ -3622,19 +3622,18 @@ app.get('/api/search', authenticateToken, async (req, res) => {
     const getConnectedData = async (type, id) => {
       const data = {};
       if (type === 'employees') {
-        const [attendance, leaves, customers, properties, tasks, remarks, docs] = await Promise.all([
+        const [attendance, leaves, customers, tasks, remarks, docs] = await Promise.all([
           pool.query('SELECT * FROM attendance WHERE "employeeId" = $1', [id]),
           pool.query('SELECT * FROM leaves WHERE "employeeId" = $1', [id]),
           pool.query('SELECT * FROM customers WHERE "assignedEmployeeId" = $1', [id]),
-          pool.query('SELECT * FROM properties WHERE "assignedEmployeeId" = $1', [id]),
-          pool.query('SELECT * FROM tasks WHERE "assignedTo" = $1', [id]),
+          pool.query('SELECT * FROM todos WHERE "assignedTo" = $1', [id]),
           pool.query('SELECT * FROM remarks WHERE target_module = \'employees\' AND target_id = $1', [id]),
           pool.query('SELECT * FROM documents WHERE target_module = \'employees\' AND target_id = $1', [id])
         ]);
         data.attendance = attendance.rows.map(r => normalizeRow('attendance', r));
         data.leaves = leaves.rows.map(r => normalizeRow('leaves', r));
         data.customers = customers.rows.map(r => normalizeRow('customers', r));
-        data.properties = properties.rows.map(r => normalizeRow('properties', r));
+        data.properties = [];
         data.tasks = tasks.rows.map(r => normalizeRow('tasks', r));
         data.remarks = remarks.rows.map(r => normalizeRow('remarks', r));
         data.documents = docs.rows.map(r => normalizeRow('documents', r));
@@ -3652,7 +3651,7 @@ app.get('/api/search', authenticateToken, async (req, res) => {
           const [siteVisits, followUps, tasks, sales, remarks, docs] = await Promise.all([
             pool.query('SELECT * FROM site_visits WHERE "customerId" = $1', [id]),
             pool.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [id]),
-            pool.query('SELECT * FROM tasks WHERE title ILIKE $1 OR description ILIKE $1', [`%${id}%`]),
+            pool.query('SELECT * FROM todos WHERE "linkedModule" = \'customers\' AND "linkedId" = $1', [id]),
             pool.query('SELECT * FROM sales WHERE "customerId" = $1', [id]),
             pool.query('SELECT * FROM remarks WHERE target_module = \'customers\' AND target_id = $1', [id]),
             pool.query('SELECT * FROM documents WHERE target_module = \'customers\' AND target_id = $1', [id])
@@ -5611,7 +5610,7 @@ app.post('/api/ai/daily-evening-summary', authenticateToken, async (req, res) =>
     const [followupsRes, siteVisitsRes, tasksRes, employeesRes, dealsRes] = await Promise.all([
       pool.query('SELECT * FROM follow_ups WHERE date = $1 OR date = $2', [todayLocale, todayStr]),
       pool.query('SELECT * FROM site_visits WHERE date = $1 OR date = $2', [todayLocale, todayStr]),
-      pool.query('SELECT * FROM tasks'),
+      pool.query('SELECT * FROM todos'),
       pool.query('SELECT * FROM employees'),
       pool.query('SELECT * FROM deals WHERE "registrationDate" = $1 OR "registrationDate" = $2', [todayLocale, todayStr])
     ]);
@@ -6012,7 +6011,7 @@ You must output ONLY a valid JSON object matching the format below, with no mark
 
     const [followCountRes, taskCountRes, visitCountRes, activeLeadsRes, propCountRes] = await Promise.all([
       pool.query("SELECT COUNT(*) FROM follow_ups WHERE status <> 'Completed' AND (date = $1 OR date = $2)", [todayLocale, todayISO]),
-      pool.query("SELECT COUNT(*) FROM tasks WHERE status <> 'Completed'"),
+      pool.query("SELECT COUNT(*) FROM todos WHERE status <> 'Completed'"),
       pool.query("SELECT COUNT(*) FROM site_visits WHERE date = $1 OR date = $2", [todayLocale, todayISO]),
       pool.query("SELECT COUNT(*) FROM leads WHERE status NOT IN ('Dropped', 'Converted')"),
       pool.query("SELECT COUNT(*) FROM properties WHERE status = 'Available'")
