@@ -319,6 +319,26 @@ app.post('/api/auth/admin/reset-password', authenticateToken, async (req, res) =
   }
 });
 
+// System Counts Endpoint (for Dashboard KPI cards showing database-wide totals)
+app.get('/api/system-counts', authenticateToken, async (req, res) => {
+  try {
+    const modules = ['customers', 'leads', 'properties', 'site_visits', 'follow_ups', 'tasks'];
+    const counts = {};
+    await Promise.all(
+      modules.map(async (m) => {
+        let table = m;
+        if (m === 'tasks') table = 'todos';
+        const result = await pool.query(`SELECT COUNT(*) FROM "${table}"`);
+        counts[m] = parseInt(result.rows[0].count, 10);
+      })
+    );
+    res.json(counts);
+  } catch (err) {
+    console.error('Error fetching system counts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- WORKSPACE CUSTOM API ENDPOINTS ---
 
 // 1. To-Dos Endpoints

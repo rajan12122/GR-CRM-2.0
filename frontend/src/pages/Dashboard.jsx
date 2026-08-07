@@ -94,6 +94,13 @@ const Dashboard = () => {
 
   // Workspace Todos
   const [todos, setTodos] = useState([]);
+  const [systemCounts, setSystemCounts] = useState({
+    customers: 0,
+    leads: 0,
+    properties: 0,
+    site_visits: 0,
+    follow_ups: 0
+  });
 
   useEffect(() => {
     if (token) {
@@ -102,6 +109,12 @@ const Dashboard = () => {
       })
       .then(res => setTodos(res.data))
       .catch(err => console.error('Error fetching dashboard todos:', err));
+
+      axios.get(`${API_BASE_URL}/system-counts`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => setSystemCounts(res.data))
+      .catch(err => console.error('Error fetching system counts:', err));
     }
   }, [token]);
 
@@ -831,11 +844,11 @@ const Dashboard = () => {
       {/* Premium Dashboard KPI Cards Row */}
       <Grid container spacing={3} sx={{ mb: 4.5 }}>
         {[
-          { label: 'Total Clients', count: customers.length, icon: <Icons.Users size={20} />, color: '#3B82F6', change: '↑ 18.2% vs last month', path: '/module/customers' },
-          { label: 'Total Leads', count: leads.length, icon: <Icons.Target size={20} />, color: '#EC4899', change: '↑ 12.5% vs last month', path: '/module/leads' },
-          { label: 'Properties', count: properties.length, icon: <Icons.Home size={20} />, color: '#10B981', change: '↑ 8.4% vs last month', path: '/module/properties' },
-          { label: 'Site Visits', count: siteVisits.length, icon: <Icons.MapPin size={20} />, color: '#F59E0B', change: '↓ 5.3% vs last month', path: '/module/site_visits' },
-          { label: 'Follow Ups', count: followUps.length, icon: <Icons.PhoneCall size={20} />, color: '#8B5CF6', change: '↑ 15.6% vs last month', path: '/module/follow_ups' }
+          { label: 'Total Clients', count: systemCounts.customers, icon: <Icons.Users size={20} />, color: '#3B82F6', change: '↑ 18.2% vs last month', path: '/module/customers' },
+          { label: 'Total Leads', count: systemCounts.leads, icon: <Icons.Target size={20} />, color: '#EC4899', change: '↑ 12.5% vs last month', path: '/module/leads' },
+          { label: 'Properties', count: systemCounts.properties, icon: <Icons.Home size={20} />, color: '#10B981', change: '↑ 8.4% vs last month', path: '/module/properties' },
+          { label: 'Site Visits', count: systemCounts.site_visits, icon: <Icons.MapPin size={20} />, color: '#F59E0B', change: '↓ 5.3% vs last month', path: '/module/site_visits' },
+          { label: 'Follow Ups', count: systemCounts.follow_ups, icon: <Icons.PhoneCall size={20} />, color: '#8B5CF6', change: '↑ 15.6% vs last month', path: '/module/follow_ups' }
         ].map((card, idx) => (
           <Grid item xs={12} sm={6} md={2.4} key={idx}>
             <Card 
