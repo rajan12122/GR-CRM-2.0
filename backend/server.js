@@ -3873,15 +3873,20 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         }
         data.employee = employee;
 
+        const clientIds = [id];
+        if (cust.leadId) {
+          clientIds.push(cust.leadId);
+        }
+
         const [siteVisits, followUps, sales, queries, properties, deals, pitches, referrals] = await Promise.all([
-          pool.query('SELECT * FROM site_visits WHERE "customerId" = $1', [id]),
-          pool.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [id]),
-          pool.query('SELECT * FROM sales WHERE "customerId" = $1', [id]),
-          pool.query('SELECT * FROM queries WHERE "customerId" = $1', [id]),
-          pool.query('SELECT * FROM properties WHERE "current_owner_id" = $1', [id]),
-          pool.query('SELECT * FROM deals WHERE "customerId" = $1 OR "sellerCustomerId" = $1', [id]),
-          pool.query('SELECT * FROM property_pitch_history WHERE "customerId" = $1', [id]),
-          pool.query('SELECT * FROM leads WHERE "referrer_type" = \'customers\' AND "referrer_id" = $1', [id])
+          pool.query('SELECT * FROM site_visits WHERE "customerId" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM follow_ups WHERE "customerId" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM sales WHERE "customerId" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM queries WHERE "customerId" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM properties WHERE "current_owner_id" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM deals WHERE "customerId" = ANY($1::text[]) OR "sellerCustomerId" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM property_pitch_history WHERE "customerId" = ANY($1::text[])', [clientIds]),
+          pool.query('SELECT * FROM leads WHERE "referrer_type" = \'customers\' AND "referrer_id" = $2', [clientIds, id])
         ]);
 
         const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));
@@ -4203,9 +4208,23 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         const rec = recRes.rows[0] ? normalizeRow(module, recRes.rows[0]) : null;
         if (rec) {
           const custId = rec.customerId || rec.id;
+          const clientIds = [custId];
+          
+          if (String(custId).startsWith('LEAD-')) {
+            const custRes = await pool.query('SELECT id FROM customers WHERE "leadId" = $1', [custId]);
+            if (custRes.rows[0]) {
+              clientIds.push(custRes.rows[0].id);
+            }
+          } else if (String(custId).startsWith('CUST-')) {
+            const custRes = await pool.query('SELECT "leadId" FROM customers WHERE id = $1', [custId]);
+            if (custRes.rows[0] && custRes.rows[0].leadId) {
+              clientIds.push(custRes.rows[0].leadId);
+            }
+          }
+
           const [pitches, siteVisits] = await Promise.all([
-            pool.query('SELECT * FROM property_pitch_history WHERE "customerId" = $1', [custId]),
-            pool.query('SELECT * FROM site_visits WHERE "customerId" = $1', [custId])
+            pool.query('SELECT * FROM property_pitch_history WHERE "customerId" = ANY($1::text[])', [clientIds]),
+            pool.query('SELECT * FROM site_visits WHERE "customerId" = ANY($1::text[])', [clientIds])
           ]);
 
           const pts = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
