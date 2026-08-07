@@ -354,14 +354,13 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
   const executor = getExecutor(dbOrClient);
   const { limit, offset, search, userFilter } = options;
 
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  let sql = `SELECT * FROM "${actualTable}"`;
+  let sql = `SELECT * FROM "${moduleName}"`;
   const queryParams = [];
   let paramIndex = 1;
   const whereClauses = [];
 
   if (search) {
-    const tableCols = await getTableColumns(actualTable, executor);
+    const tableCols = await getTableColumns(moduleName, executor);
     if (tableCols.length > 0) {
       const searchVal = `%${search}%`;
       queryParams.push(searchVal);
@@ -471,14 +470,13 @@ async function getRecordsCount(moduleName, dbOrClient, options = {}) {
   const executor = getExecutor(dbOrClient);
   const { search, userFilter } = options;
 
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  let sql = `SELECT COUNT(*) FROM "${actualTable}"`;
+  let sql = `SELECT COUNT(*) FROM "${moduleName}"`;
   const queryParams = [];
   let paramIndex = 1;
   const whereClauses = [];
 
   if (search) {
-    const tableCols = await getTableColumns(actualTable, executor);
+    const tableCols = await getTableColumns(moduleName, executor);
     if (tableCols.length > 0) {
       const searchVal = `%${search}%`;
       queryParams.push(searchVal);
@@ -567,8 +565,7 @@ async function getRecordsCount(moduleName, dbOrClient, options = {}) {
 
 async function getRecord(moduleName, id, dbOrClient) {
   const executor = getExecutor(dbOrClient);
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  const res = await executor.query(`SELECT * FROM "${actualTable}" WHERE id = $1`, [id]);
+  const res = await executor.query(`SELECT * FROM "${moduleName}" WHERE id = $1`, [id]);
   return res.rows[0] ? normalizeRow(moduleName, res.rows[0]) : null;
 }
 
@@ -604,18 +601,17 @@ function coerceRecordValues(moduleName, data, columns) {
 const tableColumnsCache = {};
 
 async function getTableColumns(moduleName, executor) {
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  if (tableColumnsCache[actualTable]) {
-    return tableColumnsCache[actualTable];
+  if (tableColumnsCache[moduleName]) {
+    return tableColumnsCache[moduleName];
   }
   try {
     const res = await executor.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = $1
-    `, [actualTable]);
+    `, [moduleName]);
     const cols = res.rows.map(r => r.column_name);
-    tableColumnsCache[actualTable] = cols;
+    tableColumnsCache[moduleName] = cols;
     return cols;
   } catch (err) {
     console.error(`Failed to load columns for table ${moduleName}:`, err);
@@ -625,8 +621,7 @@ async function getTableColumns(moduleName, executor) {
 
 async function insertRecord(moduleName, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  const tableCols = await getTableColumns(actualTable, executor);
+  const tableCols = await getTableColumns(moduleName, executor);
   const columns = [];
   const coercedData = {};
   
@@ -644,7 +639,7 @@ async function insertRecord(moduleName, data, dbOrClient) {
   const colNames = columns.map(c => `"${c}"`).join(', ');
 
   const sql = `
-    INSERT INTO "${actualTable}" (${colNames}, created_at)
+    INSERT INTO "${moduleName}" (${colNames}, created_at)
     VALUES (${placeholders}, now())
     RETURNING *;
   `;
@@ -664,8 +659,7 @@ async function insertRecord(moduleName, data, dbOrClient) {
 
 async function updateRecord(moduleName, id, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  const tableCols = await getTableColumns(actualTable, executor);
+  const tableCols = await getTableColumns(moduleName, executor);
   const columns = [];
   const coercedData = {};
   
@@ -683,7 +677,7 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
 
   const setClauses = columns.map((col, i) => `"${col}" = $${i + 2}`).join(', ');
   const sql = `
-    UPDATE "${actualTable}"
+    UPDATE "${moduleName}"
     SET ${setClauses}, updated_at = now()
     WHERE id = $1
     RETURNING *;
@@ -704,8 +698,7 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
 
 async function deleteRecord(moduleName, id, dbOrClient) {
   const executor = getExecutor(dbOrClient);
-  const actualTable = moduleName === 'tasks' ? 'todos' : moduleName;
-  const res = await executor.query(`DELETE FROM "${actualTable}" WHERE id = $1 RETURNING *`, [id]);
+  const res = await executor.query(`DELETE FROM "${moduleName}" WHERE id = $1 RETURNING *`, [id]);
   return res.rows[0] || null;
 }
 
