@@ -3798,11 +3798,10 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
     data.documents = docsRows.map(r => normalizeRow('documents', r));
 
     if (module === 'employees') {
-      const [attendance, leaves, customers, properties, tasks, salaries, referrals] = await Promise.all([
+      const [attendance, leaves, customers, tasks, salaries, referrals] = await Promise.all([
         pool.query('SELECT * FROM attendance WHERE "employeeId" = $1', [id]),
         pool.query('SELECT * FROM leaves WHERE "employeeId" = $1', [id]),
         pool.query('SELECT * FROM customers WHERE "assignedEmployeeId" = $1', [id]),
-        pool.query('SELECT * FROM properties WHERE "assignedEmployeeId" = $1', [id]),
         pool.query('SELECT * FROM tasks WHERE "assignedTo" = $1', [id]),
         pool.query('SELECT * FROM salaries WHERE "employeeId" = $1', [id]),
         pool.query('SELECT * FROM leads WHERE "referrer_type" = \'employees\' AND "referrer_id" = $1', [id])
@@ -3811,7 +3810,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       data.attendance = attendance.rows.map(r => normalizeRow('attendance', r));
       data.leaves = leaves.rows.map(r => normalizeRow('leaves', r));
       data.customers = customers.rows.map(r => normalizeRow('customers', r));
-      data.properties = properties.rows.map(r => normalizeRow('properties', r));
+      data.properties = [];
       data.tasks = tasks.rows.map(r => normalizeRow('tasks', r));
       data.salaries = salaries.rows.map(r => normalizeRow('salaries', r));
       data.referrals = referrals.rows.map(r => normalizeRow('leads', r));
