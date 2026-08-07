@@ -938,9 +938,32 @@ const Dashboard = () => {
                     filteredList = todos.filter(t => t.status === 'Pending' && parseDate(t.dueDate) > today);
                   }
 
+                  const handleTabClick = () => {
+                    const spec = filter === 'Today' ? 'dueToday' : filter === 'Overdue' ? 'overdue' : 'upcoming';
+                    navigate(`/module/tasks?_special=${spec}`);
+                  };
+
                   return (
                     <Grid item xs={12} md={4} key={filter}>
-                      <Paper sx={{ p: 2, border: '1px solid #F1F5F9', backgroundColor: '#F8FAFC', borderRadius: '12px', boxShadow: 'none', height: '100%', minHeight: 180 }}>
+                      <Paper 
+                        onClick={handleTabClick}
+                        sx={{ 
+                          p: 2, 
+                          border: '1px solid #F1F5F9', 
+                          backgroundColor: '#F8FAFC', 
+                          borderRadius: '12px', 
+                          boxShadow: 'none', 
+                          height: '100%', 
+                          minHeight: 180, 
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: '#F1F5F9',
+                            borderColor: '#CBD5E1',
+                            transform: 'translateY(-2px)'
+                          }
+                        }}
+                      >
                         <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
                           <Typography variant="subtitle2" sx={{ fontWeight: 800, color: filter === 'Overdue' ? '#EF4444' : '#1E293B' }}>
                             {filter} ({filteredList.length})
@@ -956,9 +979,18 @@ const Dashboard = () => {
                           {filteredList.map((t, idx) => (
                             <ListItem key={idx} sx={{ p: 0, mb: 1, '&:last-child': { mb: 0 } }}>
                               <ListItemText 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/module/tasks/${t.id}`);
+                                }}
                                 primary={t.title} 
                                 secondary={`${t.dueTime || ''} | Priority: ${t.priority}`}
-                                primaryTypographyProps={{ fontWeight: 700, fontSize: '12px', color: '#1E293B' }}
+                                primaryTypographyProps={{ 
+                                  fontWeight: 700, 
+                                  fontSize: '12px', 
+                                  color: '#1E293B',
+                                  sx: { '&:hover': { color: '#2563EB' } }
+                                }}
                                 secondaryTypographyProps={{ fontSize: '10px' }}
                               />
                             </ListItem>

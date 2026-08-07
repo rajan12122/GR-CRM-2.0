@@ -930,6 +930,9 @@ const ModuleManager = () => {
         if (stackedFilters._special === 'dueToday' && moduleName === 'tasks') {
           if (rec.dueDate !== todayStr) return false;
         }
+        if (stackedFilters._special === 'upcoming' && moduleName === 'tasks') {
+          if (rec.status === 'Completed' || !rec.dueDate || rec.dueDate <= todayStr) return false;
+        }
         if (stackedFilters._special === 'inProgressQueries' && moduleName === 'queries') {
           if (rec.status !== 'Approved' || rec.stage === 'Closed') return false;
         }
