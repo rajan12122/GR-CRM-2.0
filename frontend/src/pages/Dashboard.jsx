@@ -483,7 +483,6 @@ const Dashboard = () => {
         'queries',
         'deals',
         'property_pitch_history',
-        'dealer_calls',
         'documents',
         'tasks',
         'wanted_properties'
@@ -518,7 +517,7 @@ const Dashboard = () => {
   const queries = moduleData.queries || [];
   const deals = moduleData.deals || [];
   const dealerMeetings = [];
-  const dealerCalls = moduleData.dealer_calls || [];
+  const dealerCalls = [];
   const documents = moduleData.documents || [];
   const propertyPitches = moduleData.property_pitch_history || [];
   const tasks = moduleData.tasks || [];
@@ -621,13 +620,19 @@ const Dashboard = () => {
 
   // Outreach Leaderboard Map
   const leaderboardMap = {};
-  dealerCalls.forEach(c => {
-    const rm = c.employeeName || 'Unknown RM';
-    leaderboardMap[rm] = (leaderboardMap[rm] || 0) + 1;
+  followUps.forEach(f => {
+    if (f.status === 'Completed' || f.status === 'Call Done') {
+      const emp = employees.find(e => String(e.id) === String(f.employeeId));
+      const rm = emp?.name || f.employeeId || 'Unknown RM';
+      leaderboardMap[rm] = (leaderboardMap[rm] || 0) + 1;
+    }
   });
-  dealerMeetings.filter(m => m.status === 'Completed').forEach(m => {
-    const rm = m.assignedEmployeeName || 'Unknown RM';
-    leaderboardMap[rm] = (leaderboardMap[rm] || 0) + 2; // Meetings count double weight!
+  siteVisits.forEach(v => {
+    if (v.result === 'Completed') {
+      const emp = employees.find(e => String(e.id) === String(v.employeeId));
+      const rm = emp?.name || v.employeeId || 'Unknown RM';
+      leaderboardMap[rm] = (leaderboardMap[rm] || 0) + 2; // Site visits count double weight!
+    }
   });
   const leaderboard = Object.keys(leaderboardMap).map(rm => ({
     name: rm,
@@ -1999,11 +2004,11 @@ const Dashboard = () => {
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <Paper 
-                    onClick={() => navigate('/module/dealer_calls')}
+                    onClick={() => navigate('/module/follow_ups')}
                     sx={{ p: 2, border: '1px solid #F1F5F9', backgroundColor: '#F8FAFC', boxShadow: 'none', cursor: 'pointer', '&:hover': { backgroundColor: '#F1F5F9' } }}
                   >
-                    <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontWeight: 600 }}>DEALER CALLS LOGGED</Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800, color: '#2563EB', mt: 0.5 }}>{dealerCalls.length}</Typography>
+                    <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontWeight: 600 }}>FOLLOW UPS SCHEDULED</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800, color: '#EA580C', mt: 0.5 }}>{followUps.length}</Typography>
                   </Paper>
                 </Grid>
                 <Grid item xs={6}>

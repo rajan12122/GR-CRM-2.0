@@ -1834,8 +1834,6 @@
       "dealerId": ""
     }
   ],
-  "dealer_calls": [],
-  "dealer_meetings": [],
   "activity_logs": [],
   "documents": [
     {
@@ -1844,36 +1842,6 @@
   ],
   "remarks": [],
   "sync_jobs": [
-    {
-      "id": "JOB-MOD-1784550175092-1ad1",
-      "moduleName": "dealer_meetings",
-      "crmRecordId": "ALL",
-      "operationType": "MODULE_SYNC",
-      "attemptCount": 0,
-      "maxAttempts": 5,
-      "lastError": null,
-      "idempotencyKey": "module:70444166aa798a43ce62b0e6d490d8d5",
-      "status": "SUCCESS",
-      "createdAt": "2026-07-20T12:22:55.092Z",
-      "updatedAt": "2026-07-20T12:24:01.618Z",
-      "syncedAt": "2026-07-20T12:24:01.618Z",
-      "nextAttemptAt": "2026-07-20T12:22:55.092Z"
-    },
-    {
-      "id": "JOB-MOD-1784550175090-483b",
-      "moduleName": "dealer_calls",
-      "crmRecordId": "ALL",
-      "operationType": "MODULE_SYNC",
-      "attemptCount": 0,
-      "maxAttempts": 5,
-      "lastError": null,
-      "idempotencyKey": "module:a12d7c753101b053115af8d9328322fd",
-      "status": "SUCCESS",
-      "createdAt": "2026-07-20T12:22:55.090Z",
-      "updatedAt": "2026-07-20T12:24:00.854Z",
-      "syncedAt": "2026-07-20T12:24:00.854Z",
-      "nextAttemptAt": "2026-07-20T12:22:55.090Z"
-    },
     {
       "id": "JOB-MOD-1784550175088-d9ef",
       "moduleName": "property_pitch_history",

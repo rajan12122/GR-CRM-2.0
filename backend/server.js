@@ -1079,16 +1079,6 @@ async function handleQueryStageChange(q, client, req) {
   }
 }
 
-async function handleDealerCallInsertion(c, client) {
-  if (!c.dealerId) return;
-  const dealerRes = await client.query('SELECT * FROM dealers WHERE id = $1', [c.dealerId]);
-  const dealer = dealerRes.rows[0];
-  if (dealer) {
-    await updateRecord('dealers', dealer.id, { remarks: c.remarks || '', callOutcome: c.callOutcome || '' }, client);
-    try { syncToSheets('dealers'); } catch(e) {}
-  }
-}
-
 async function handleDealerVisitAssignment(payload, client, req, oldPayload = null) {
   if (payload.assignedEmployeeId) {
     const hasChanged = !oldPayload || String(oldPayload.assignedEmployeeId) !== String(payload.assignedEmployeeId);
@@ -2151,31 +2141,6 @@ async function generateDynamicTimeline(moduleName, id, client = pool, preFetched
         icon: 'Building'
       });
       
-      const calls = preFetchedData && preFetchedData.calls
-        ? preFetchedData.calls
-        : (await client.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [id])).rows.map(r => normalizeRow('dealer_calls', r));
-
-      const meetings = preFetchedData && preFetchedData.meetings
-        ? preFetchedData.meetings
-        : (await client.query('SELECT * FROM dealer_meetings WHERE "dealerId" = $1', [id])).rows.map(r => normalizeRow('dealer_meetings', r));
-
-      calls.forEach(c => {
-        timeline.push({
-          date: c.date || '',
-          event: `Outreach Call logged`,
-          details: `Outcome: ${c.remarks} • Followup: ${c.followUpDate || 'None'} • By: ${c.employeeName}`,
-          icon: 'PhoneCall'
-        });
-      });
-
-      meetings.forEach(m => {
-        timeline.push({
-          date: m.meetingDate || '',
-          event: `Meeting ${m.status}`,
-          details: `Purpose: ${m.purpose} • Result: ${m.outcome || 'Awaiting Report'}`,
-          icon: 'Calendar'
-        });
-      });
     }
   }
 
@@ -2629,15 +2594,13 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         if (f.name === 'pitchDate' && !payload[f.name] && module === 'property_pitch_history') {
           payload[f.name] = new Date().toLocaleDateString('en-IN') + ' ' + new Date().toLocaleTimeString('en-IN');
         }
-        if (f.name === 'employeeName' && !payload[f.name] && (module === 'property_pitch_history' || module === 'dealer_calls')) {
-          payload[f.name] = req.user.name;
+        if (f.name === 'employeeName' && !payload[f.name] && module === 'property_pitch_history') {
+          payload[f.name] = req.user.name || 'Sales Rep';
         }
         if (f.name === 'employeeId' && !payload[f.name] && module === 'property_pitch_history') {
           payload[f.name] = req.user.id;
         }
-        if (f.name === 'assignedEmployeeId' && !payload[f.name] && module === 'dealer_meetings') {
-          payload[f.name] = req.user.id;
-        }
+
       });
 
       // Insert the main record
@@ -2686,7 +2649,6 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
         await syncAssignedEmployeeUniversally('follow_ups', insertedRec.id, insertedRec.employeeId, client);
       }
       if (module === 'follow_ups') await handleFollowUpPipelineAction(insertedRec, client, req);
-      if (module === 'dealer_calls') await handleDealerCallInsertion(insertedRec, client);
       if (module === 'dealers') await handleDealerVisitAssignment(insertedRec, client, req);
       
       if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && insertedRec.pitchedPropertyId) {
@@ -2720,12 +2682,7 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
           message: `New Site Visit ${insertedRec.id} scheduled/assigned to you.`
         });
       }
-      if (module === 'dealer_meetings' && insertedRec.assignedEmployeeId) {
-        notifyUser(insertedRec.assignedEmployeeId, 'meeting-assigned', {
-          meetingId: insertedRec.id,
-          message: `New Dealer Meeting ${insertedRec.id} assigned to you.`
-        });
-      }
+
       if (module === 'queries' && insertedRec.assignedEmployeeId && insertedRec.status === 'Approved') {
         notifyUser(insertedRec.assignedEmployeeId, 'query-approved', {
           queryId: insertedRec.id,
@@ -2961,12 +2918,7 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
           message: `Site Visit ${rec.id} has been updated/assigned to you.`
         });
       }
-      if (module === 'dealer_meetings' && rec.assignedEmployeeId) {
-        notifyUser(rec.assignedEmployeeId, 'meeting-assigned', {
-          meetingId: rec.id,
-          message: `Dealer Meeting ${rec.id} has been updated/assigned to you.`
-        });
-      }
+
       if (module === 'queries' && rec.assignedEmployeeId && rec.status === 'Approved') {
         notifyUser(rec.assignedEmployeeId, 'query-approved', {
           queryId: rec.id,
@@ -2981,7 +2933,6 @@ app.put('/api/data/:module/:id', authenticateToken, (req, res, next) => {
       }
 
       if (module === 'deals') await handleDealStatusChange(rec, client, req);
-      if (module === 'dealer_calls') await handleDealerCallInsertion(rec, client);
       if (module === 'dealers') await handleDealerVisitAssignment(rec, client, req, recordExists);
       if ((module === 'leads' || module === 'follow_ups' || module === 'queries') && rec.pitchedPropertyId) {
         await handleAutomatedPitchLogging(rec, client, req);
@@ -3811,13 +3762,14 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       const outerQuery = `
         SELECT * FROM (
           SELECT DISTINCT ON (employee_name, date_time, comment) * FROM remarks
-          WHERE (target_module = 'leads' AND target_id = ANY($1))
-             OR (target_module = 'customers' AND target_id = ANY($2))
-             OR (target_module = 'follow_ups' AND target_id = ANY($3))
-             OR (target_module = 'properties' AND target_id = ANY($4))
-             OR (target_module = 'queries' AND target_id = ANY($5))
-             OR (target_module = 'site_visits' AND target_id = ANY($6))
-             OR (target_module = 'deals' AND target_id = ANY($7))
+          WHERE (target_module = 'leads' AND target_id = ANY($1::text[]))
+             OR (target_module = 'customers' AND target_id = ANY($2::text[]))
+             OR (target_module = 'follow_ups' AND target_id = ANY($3::text[]))
+             OR (target_module = 'properties' AND target_id = ANY($4::text[]))
+             OR (target_module = 'queries' AND target_id = ANY($5::text[]))
+             OR (target_module = 'site_visits' AND target_id = ANY($6::text[]))
+             OR (target_module = 'deals' AND target_id = ANY($7::text[]))
+             OR (target_module = $8 AND target_id = $9)
           ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
         ) t
         ORDER BY created_at DESC, id DESC
@@ -3830,7 +3782,9 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           targets.properties,
           targets.queries,
           targets.site_visits,
-          targets.deals
+          targets.deals,
+          module,
+          id
         ]),
         client.query('SELECT * FROM documents WHERE target_module = $1 AND target_id = $2', [module, id])
       ]);
@@ -4093,10 +4047,8 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         data.timeline = await generateDynamicTimeline(module, id, pool, preFetchedData);
       }
     } else if (module === 'dealers') {
-      const [dealerRes, calls, meetings, properties, referrals, pitches, wantedProps] = await Promise.all([
+      const [dealerRes, properties, referrals, pitches, wantedProps] = await Promise.all([
         pool.query('SELECT * FROM dealers WHERE id = $1', [id]),
-        pool.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [id]),
-        pool.query('SELECT * FROM dealer_meetings WHERE "dealerId" = $1', [id]),
         pool.query('SELECT * FROM properties WHERE "dealerId" = $1', [id]),
         pool.query('SELECT * FROM leads WHERE "referrer_type" = \'dealers\' AND "referrer_id" = $1', [id]),
         pool.query('SELECT * FROM property_pitch_history WHERE "dealerId" = $1', [id]),
@@ -4105,23 +4057,6 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
 
       const dealer = dealerRes.rows[0] ? normalizeRow('dealers', dealerRes.rows[0]) : null;
       data.dealer = dealer;
-      data.calls = calls.rows.map(r => normalizeRow('dealer_calls', r)).reverse();
-      
-      const mtgs = meetings.rows.map(r => normalizeRow('dealer_meetings', r));
-      const empIds = Array.from(new Set(mtgs.map(m => m.assignedEmployeeId).filter(Boolean)));
-      let empNamesMap = {};
-      if (empIds.length > 0) {
-        const empRes = await pool.query('SELECT id, name FROM employees WHERE id = ANY($1)', [empIds]);
-        empRes.rows.forEach(row => {
-          empNamesMap[row.id] = row.name;
-        });
-      }
-      mtgs.forEach(m => {
-        if (m.assignedEmployeeId) {
-          m.assignedEmployeeName = empNamesMap[m.assignedEmployeeId] || m.assignedEmployeeId;
-        }
-      });
-      data.meetings = mtgs;
       data.properties = properties.rows.map(r => normalizeRow('properties', r));
       data.referrals = referrals.rows.map(r => normalizeRow('leads', r));
       data.pitches = pitches.rows.map(r => normalizeRow('property_pitch_history', r));
@@ -4129,9 +4064,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
 
       const preFetchedData = {
         remarks: data.remarks,
-        dealer: dealer,
-        calls: data.calls,
-        meetings: data.meetings
+        dealer: dealer
       };
       data.timeline = await generateDynamicTimeline(module, id, pool, preFetchedData);
     } else if (module === 'wanted_properties') {
@@ -4149,25 +4082,6 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
         data.property = propRes.rows[0] ? normalizeRow('properties', propRes.rows[0]) : null;
       }
       data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks, wanted_property: wp });
-    } else if (module === 'dealer_meetings') {
-      const meetingRes = await pool.query('SELECT * FROM dealer_meetings WHERE id = $1', [id]);
-      const meeting = meetingRes.rows[0] ? normalizeRow('dealer_meetings', meetingRes.rows[0]) : null;
-      data.meeting = meeting;
-      if (meeting) {
-        const dealerId = meeting.dealerId;
-        const [dealerRes, calls, remarks, docs] = await Promise.all([
-          pool.query('SELECT * FROM dealers WHERE id = $1', [dealerId]),
-          pool.query('SELECT * FROM dealer_calls WHERE "dealerId" = $1', [dealerId]),
-          pool.query('SELECT * FROM remarks WHERE (target_module = \'dealers\' AND target_id = $1) OR (target_module = \'dealer_meetings\' AND target_id = $2)', [dealerId, id]),
-          pool.query('SELECT * FROM documents WHERE (target_module = \'dealers\' AND target_id = $1) OR (target_module = \'dealer_meetings\' AND target_id = $2)', [dealerId, id])
-        ]);
-
-        data.dealer = dealerRes.rows[0] ? normalizeRow('dealers', dealerRes.rows[0]) : null;
-        data.calls = calls.rows.map(r => normalizeRow('dealer_calls', r));
-        data.remarks = remarks.rows.map(r => normalizeRow('remarks', r));
-        data.documents = docs.rows.map(r => normalizeRow('documents', r));
-      }
-      data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks });
     } else if (module === 'projects') {
       const projRes = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
       const proj = projRes.rows[0] ? normalizeRow('projects', projRes.rows[0]) : null;
@@ -4414,13 +4328,14 @@ app.get('/api/remarks/:module/:id', authenticateToken, async (req, res) => {
     const outerQuery = `
       SELECT * FROM (
         SELECT DISTINCT ON (employee_name, date_time, comment) * FROM remarks
-        WHERE (target_module = 'leads' AND target_id = ANY($1))
-           OR (target_module = 'customers' AND target_id = ANY($2))
-           OR (target_module = 'follow_ups' AND target_id = ANY($3))
-           OR (target_module = 'properties' AND target_id = ANY($4))
-           OR (target_module = 'queries' AND target_id = ANY($5))
-           OR (target_module = 'site_visits' AND target_id = ANY($6))
-           OR (target_module = 'deals' AND target_id = ANY($7))
+        WHERE (target_module = 'leads' AND target_id = ANY($1::text[]))
+           OR (target_module = 'customers' AND target_id = ANY($2::text[]))
+           OR (target_module = 'follow_ups' AND target_id = ANY($3::text[]))
+           OR (target_module = 'properties' AND target_id = ANY($4::text[]))
+           OR (target_module = 'queries' AND target_id = ANY($5::text[]))
+           OR (target_module = 'site_visits' AND target_id = ANY($6::text[]))
+           OR (target_module = 'deals' AND target_id = ANY($7::text[]))
+           OR (target_module = $8 AND target_id = $9)
         ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
       ) t
       ORDER BY created_at DESC, id DESC
@@ -4433,7 +4348,9 @@ app.get('/api/remarks/:module/:id', authenticateToken, async (req, res) => {
       targets.properties,
       targets.queries,
       targets.site_visits,
-      targets.deals
+      targets.deals,
+      module,
+      id
     ]);
     
     res.json(remarksRes.rows.map(r => normalizeRow('remarks', r)));
@@ -5176,7 +5093,7 @@ app.post('/api/public/quick-add', ipRateLimiter(15 * 60 * 1000, 10), async (req,
         projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
         tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
         daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-        property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealers: 'DEALER'
+        property_pitch_history: 'PITCH', dealers: 'DEALER'
       };
       const prefix = prefixMap[module] || module.substring(0, 4).toUpperCase();
       payload.id = await generateNextIdAsync(client, module, prefix);

@@ -142,8 +142,7 @@ const DynamicTable = ({
   setColMenuOpen,
   onEditClick, 
   onDeleteClick, 
-  onInspectClick,
-  onLogCallClick
+  onInspectClick
 }) => {
   const { user, metadata, moduleData, updateRecord } = useApp();
   const [page, setPage] = useState(0);
@@ -560,13 +559,7 @@ const DynamicTable = ({
                           )}
                         </Box>
                       )}
-                      {moduleKey === 'dealers' && onLogCallClick && (
-                        <Tooltip title="Log Outreach Call">
-                          <IconButton size="small" onClick={() => onLogCallClick(rec)} sx={{ color: '#10B981' }}>
-                            <Icons.PhoneCall size={16} />
-                          </IconButton>
-                        </Tooltip>
-                      )}
+
                       {onInspectClick && (
                         <Tooltip title="Inspect 360 View">
                           <IconButton size="small" onClick={() => onInspectClick(moduleKey, rec.id)} sx={{ color: '#2563EB' }}>

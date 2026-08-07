@@ -296,26 +296,7 @@ const ModuleManager = () => {
   const [viewMode, setViewMode] = useState('card'); // 'table' or 'card'
   const isMobile = useMediaQuery('(max-width:900px)');
 
-  // Outreach call states for Dealers in table row actions
-  const [callDialogOpen, setCallDialogOpen] = useState(false);
-  const [selectedDealerForCall, setSelectedDealerForCall] = useState(null);
-  const [callDuration, setCallDuration] = useState('');
-  const [callBudget, setCallBudget] = useState('');
-  const [callAreas, setCallAreas] = useState('');
-  const [callRemarks, setCallRemarks] = useState('');
-  const [callOutcomeOption, setCallOutcomeOption] = useState('Call Done');
-  const [callFollowUp, setCallFollowUp] = useState('');
 
-  const handleLogCallClick = (dealerRecord) => {
-    setSelectedDealerForCall(dealerRecord);
-    setCallDuration('');
-    setCallBudget('');
-    setCallAreas('');
-    setCallRemarks('');
-    setCallOutcomeOption('Call Done');
-    setCallFollowUp('');
-    setCallDialogOpen(true);
-  };
 
   // Removed isMobile viewMode useEffect to preserve card view as default on desktop and mobile
 
@@ -1564,7 +1545,6 @@ const ModuleManager = () => {
                 onEditClick={hasPermission(moduleName, 'edit') ? handleEditClick : null}
                 onDeleteClick={hasPermission(moduleName, 'delete') ? handleDeleteClick : null}
                 onInspectClick={handleInspectClick}
-                onLogCallClick={handleLogCallClick}
               />
             )}
           </CardContent>
@@ -1607,54 +1587,7 @@ const ModuleManager = () => {
         onSubmit={handleFormSubmit}
       />
 
-      {/* Log Outreach Call Dialog */}
-      <Dialog open={callDialogOpen} onClose={() => setCallDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>
-          Log Outreach Phone Call for {selectedDealerForCall?.person_name || 'Dealer'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1.5 }}>
-            <TextField label="Call Duration (minutes)" type="number" fullWidth value={callDuration} onChange={(e) => setCallDuration(e.target.value)} />
-            <FormControl fullWidth>
-              <InputLabel>Call Outcome Status</InputLabel>
-              <Select value={callOutcomeOption} onChange={(e) => setCallOutcomeOption(e.target.value)} label="Call Outcome Status">
-                <MenuItem value="Call Done">Call Done</MenuItem>
-                <MenuItem value="Not Picked the Call">Not Picked the Call</MenuItem>
-                <MenuItem value="Switch Off">Switch Off</MenuItem>
-                <MenuItem value="Not Reachable">Not Reachable</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField label="Discussed Budget expectation" type="number" fullWidth value={callBudget} onChange={(e) => setCallBudget(e.target.value)} />
-            <TextField label="Discussed Sectors/Areas" fullWidth value={callAreas} onChange={(e) => setCallAreas(e.target.value)} />
-            <TextField label="Next Followup Date" type="date" InputLabelProps={{ shrink: true }} fullWidth value={callFollowUp} onChange={(e) => setCallFollowUp(e.target.value)} />
-            <TextField label="Call Notes/Remarks" multiline rows={3} fullWidth value={callRemarks} onChange={(e) => setCallRemarks(e.target.value)} />
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setCallDialogOpen(false)} sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600 }}>Cancel</Button>
-          <Button variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }} onClick={async () => {
-            if (!selectedDealerForCall) return;
-            const payload = {
-              dealerId: selectedDealerForCall.id,
-              employeeName: localStorage.getItem('gr_crm_user_name') || 'Sales Representative',
-              date: new Date().toLocaleDateString('en-IN'),
-              duration: callDuration,
-              budget: Number(callBudget || 0),
-              areas: callAreas,
-              followUpDate: callFollowUp,
-              remarks: callRemarks,
-              callOutcome: callOutcomeOption
-            };
-            const res = await createRecord('dealer_calls', payload);
-            if (res.success) {
-              setCallDialogOpen(false);
-              fetchModuleData(moduleName); // Refresh the table
-            } else {
-              alert(res.message || "Failed to log outreach call");
-            }
-          }}>Log Call</Button>
-        </DialogActions>
-      </Dialog>
+
     </Box>
   );
 };

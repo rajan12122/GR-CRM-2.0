@@ -710,7 +710,7 @@ async function generateNextId(dbOrClient, moduleName, prefix) {
     projects: 'PROJ', site_visits: 'VISIT', follow_ups: 'FOLLOW', remarks: 'REM',
     tasks: 'TASK', sales: 'SALE', documents: 'DOC', attendance: 'ATT',
     daily_prices: 'PRICE', salaries: 'SAL', queries: 'QRY', deals: 'DEAL',
-    property_pitch_history: 'PITCH', dealer_calls: 'CALL', dealer_meetings: 'MEET',
+    property_pitch_history: 'PITCH',
     dealers: 'DEALER'
   };
   const effPrefix = prefix || prefixMap[moduleName] || String(moduleName).substring(0, 4).toUpperCase();
@@ -925,12 +925,7 @@ async function ensurePerformanceIndexes() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_pitches_property ON property_pitch_history ("propertyId")');
     await client.query('CREATE INDEX IF NOT EXISTS idx_pitches_dealer ON property_pitch_history ("dealerId")');
     
-    // Create indexes for dealer_calls
-    await client.query('CREATE INDEX IF NOT EXISTS idx_dealer_calls_dealer ON dealer_calls ("dealerId")');
-    
-    // Create indexes for dealer_meetings
-    await client.query('CREATE INDEX IF NOT EXISTS idx_dealer_meetings_dealer ON dealer_meetings ("dealerId")');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_dealer_meetings_employee ON dealer_meetings ("assignedEmployeeId")');
+
     
     // Create indexes for leads.phone/email for customers conversion mapping lookup
     await client.query('CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads ("phone")');

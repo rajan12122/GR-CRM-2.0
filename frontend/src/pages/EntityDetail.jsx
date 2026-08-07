@@ -126,14 +126,8 @@ const EntityDetail = () => {
   // Custom dialogs & form states for ERP features
   const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   const [pitchDialogOpen, setPitchDialogOpen] = useState(false);
-  const [callDialogOpen, setCallDialogOpen] = useState(false);
-  const [meetingReportDialogOpen, setMeetingReportDialogOpen] = useState(false);
   const [inlineOutcomes, setInlineOutcomes] = useState({});
   const [inlineRemarks, setInlineRemarks] = useState({});
-  
-  const [selectedMeetingId, setSelectedMeetingId] = useState('');
-  const [meetingOutcome, setMeetingOutcome] = useState('');
-  const [meetingDocCollected, setMeetingDocCollected] = useState('');
   
   const [pitchCustomerId, setPitchCustomerId] = useState('');
   const [pitchPropertyId, setPitchPropertyId] = useState('');
@@ -264,12 +258,7 @@ const EntityDetail = () => {
     }
   }, [queryDialogOpen, queryType, record]);
 
-  const [callDuration, setCallDuration] = useState('');
-  const [callOutcomeOption, setCallOutcomeOption] = useState('Call Done');
-  const [callBudget, setCallBudget] = useState('');
-  const [callAreas, setCallAreas] = useState('');
-  const [callFollowUp, setCallFollowUp] = useState('');
-  const [callRemarks, setCallRemarks] = useState('');
+
 
   // Map dialog state
   const [mapOpen, setMapOpen] = useState(false);
@@ -407,7 +396,6 @@ const EntityDetail = () => {
       list.push({ label: 'Activity Timeline', icon: 'Clock' });
       list.push({ label: `Property Listings (${connections?.properties?.length || 0})`, icon: 'Home' });
       list.push({ label: `Pitches & Showings (${connections?.pitches?.length || 0})`, icon: 'Eye' });
-      list.push({ label: `Call History (${connections?.calls?.length || 0})`, icon: 'PhoneCall' });
       list.push({ label: `Docs Vault (${connections?.documents?.length || 0})`, icon: 'FolderOpen' });
       list.push({ label: `Referrals (${connections?.referrals?.length || 0})`, icon: 'UserPlus' });
       list.push({ label: `Wanted Requirements (${connections?.wanted_properties?.length || 0})`, icon: 'Clipboard' });
@@ -418,9 +406,6 @@ const EntityDetail = () => {
       list.push({ label: `Price/Status History Logs (${connections.history?.length || 0})`, icon: 'Clock' });
       list.push({ label: `Connected Remarks (${connections.remarks?.length || 0})`, icon: 'MessageSquare' });
       list.push({ label: `Uploaded Documents (${connections.documents?.length || 0})`, icon: 'FileText' });
-    } else if (moduleName === 'dealer_meetings') {
-      list.push({ label: 'Meeting Overview & Outcome', icon: 'Handshake' });
-      list.push({ label: `Dealer Interaction History (${connections.calls?.length || 0})`, icon: 'PhoneCall' });
     } else {
       list.push({ label: 'Salesforce 360° Connections', icon: 'Layers' });
       list.push({ label: `Remarks History (${connections.remarks?.length || 0})`, icon: 'MessageSquare' });
@@ -2614,7 +2599,7 @@ const EntityDetail = () => {
               {moduleName === 'dealers' && (
                 <Box>
                   {/* Tab 0: Overview & Outreach */}
-                  {activeTab === 0 && (
+                  {tabs[activeTab]?.label === 'Overview & Outreach' && (
                     <Box>
                       <Typography variant="h5" sx={{ fontWeight: 850, mb: 1.5, fontFamily: 'Poppins', color: '#0F172A' }}>
                         Dealer Dashboard & Outreach Log
@@ -2806,7 +2791,7 @@ const EntityDetail = () => {
                   )}
 
                   {/* Tab 1: General Remarks & Comments */}
-                  {activeTab === 1 && (
+                  {tabs[activeTab]?.label?.startsWith('General Remarks') && (
                     <Box>
                       <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>
@@ -2856,7 +2841,7 @@ const EntityDetail = () => {
                   )}
 
                   {/* Tab 2: Outreach Activity Timeline */}
-                  {activeTab === 2 && (
+                  {tabs[activeTab]?.label === 'Activity Timeline' && (
                     <Box>
                       <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 3, fontFamily: 'Poppins' }}>
@@ -2884,7 +2869,7 @@ const EntityDetail = () => {
                   )}
 
                   {/* Tab 3: Associated Property Listings */}
-                  {activeTab === 3 && (
+                  {tabs[activeTab]?.label?.startsWith('Property Listings') && (
                     <Box>
                       <Paper sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: '16px', boxShadow: 'none' }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2935,7 +2920,7 @@ const EntityDetail = () => {
                   )}
 
                   {/* Tab 4: Pitches & Showings */}
-                  {activeTab === 4 && (
+                  {tabs[activeTab]?.label?.startsWith('Pitches & Showings') && (
                     <Box>
                       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins', color: '#0F172A' }}>
@@ -3007,26 +2992,10 @@ const EntityDetail = () => {
                     </Box>
                   )}
 
-                  {/* Tab 5: Call History */}
-                  {activeTab === 5 && (
-                    <Box>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>Calls History ({connections?.calls?.length || 0})</Typography>
-                      {connections?.calls?.length === 0 ? (
-                        <Typography variant="body2" sx={{ color: '#94A3B8', mb: 3 }}>No calls logged.</Typography>
-                      ) : (
-                        connections.calls.map(c => (
-                          <Paper key={c.id} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: 'none', backgroundColor: 'white' }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Call ID: {c.id} • RM: {c.employeeName}</Typography>
-                            <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>Date: {c.date} • Duration: {c.duration} mins • Budget: {c.budget}</Typography>
-                            <Typography variant="body2" sx={{ color: '#475569', mt: 1 }}>Remarks: {c.remarks}</Typography>
-                          </Paper>
-                        ))
-                      )}
-                    </Box>
-                  )}
+
 
                   {/* Tab 6: Docs Vault */}
-                  {activeTab === 6 && (
+                  {tabs[activeTab]?.label?.startsWith('Docs Vault') && (
                     <Box>
                       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                         <Typography variant="h6" sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Docs Vault</Typography>
@@ -3055,7 +3024,7 @@ const EntityDetail = () => {
                   )}
 
                   {/* Tab 7: Referrals List */}
-                  {activeTab === 7 && (
+                  {tabs[activeTab]?.label?.startsWith('Referrals') && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Poppins' }}>Referred Leads Log</Typography>
                       {!connections.referrals || connections.referrals.length === 0 ? (
@@ -3094,7 +3063,7 @@ const EntityDetail = () => {
                   )}
 
                   {/* Tab 8: Wanted Requirements */}
-                  {activeTab === 8 && (
+                  {tabs[activeTab]?.label?.startsWith('Wanted Requirements') && (
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins', color: '#0F172A' }}>
                         Wanted Requirements ({connections.wanted_properties?.length || 0})
@@ -3156,7 +3125,7 @@ const EntityDetail = () => {
                 </Box>
               )}
               {/* 4. OTHER GENERIC BACKWARD COMPATIBLE TABS */}
-              {!(moduleName === 'customers' || moduleName === 'properties' || moduleName === 'dealers' || moduleName === 'projects' || moduleName === 'dealer_meetings') && (
+              {!(moduleName === 'customers' || moduleName === 'properties' || moduleName === 'dealers' || moduleName === 'projects') && (
                 <Box>
                   {/* Tab 0: 360 Connections */}
                   {activeTab === 0 && (
@@ -3736,102 +3705,7 @@ const EntityDetail = () => {
                 </Box>
               )}
 
-              {/* 6. DEALER MEETINGS TABS */}
-              {moduleName === 'dealer_meetings' && connections && (
-                <Box>
-                  {/* Tab 0: Meeting Overview & Outcome Form */}
-                  {activeTab === 0 && (
-                    <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>Meeting Overview & Feed Outcome</Typography>
-                      <Paper sx={{ p: 3, mb: 3, border: '1px solid #FEF3C7', backgroundColor: '#FFFBEB', borderRadius: '12px' }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#D97706', mb: 1 }}>Purpose & Instructions</Typography>
-                        <Typography variant="body2" sx={{ color: '#475569', mb: 2 }}>{record.prepRemarks || 'No instructions provided.'}</Typography>
-                        <Divider sx={{ my: 1.5 }} />
-                        <Typography variant="body2" sx={{ mb: 0.5 }}>Meeting Scheduled Date: <strong>{record.meetingDate || record.date}</strong></Typography>
-                        <Typography variant="body2" sx={{ mb: 0.5 }}>Meeting Status: <strong>{record.status}</strong></Typography>
-                        <Typography variant="body2" sx={{ mb: 1 }}>Outcome Remarks: <strong>{record.outcome || 'Pending execution.'}</strong></Typography>
-                        {connections.dealer && (
-                          <>
-                            <Divider sx={{ my: 1.5 }} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 850, color: '#0F172A', mb: 1 }}>Dealer Reference Details</Typography>
-                            <Typography variant="body2">Firm: <strong>{connections.dealer.firm_name}</strong></Typography>
-                            <Typography variant="body2">Dealer Name: <strong>{connections.dealer.person_name}</strong></Typography>
-                            <Typography variant="body2">Dealer Phone: <strong>{connections.dealer.phone}</strong></Typography>
-                            <Typography variant="body2">Sectors / Localities: {connections.dealer.operational_sectors || 'None'}</Typography>
-                          </>
-                        )}
-                      </Paper>
 
-                      {/* Feed Outcome Form inline */}
-                      {record.status !== 'Completed' && (
-                        <Box sx={{ mt: 3, p: 3, border: '1px solid #E2E8F0', borderRadius: '16px' }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>Feed Meeting Outcome / Remarks</Typography>
-                          <TextField
-                            label="Outcome / Remark Remarks"
-                            multiline
-                            rows={4}
-                            fullWidth
-                            value={meetingOutcome}
-                            onChange={(e) => setMeetingOutcome(e.target.value)}
-                            sx={{ mb: 2 }}
-                            placeholder="Type details of what was discussed, dealer's response, deals proposed, etc."
-                          />
-                          <Button
-                            variant="contained"
-                            color="success"
-                            onClick={async () => {
-                              if (!meetingOutcome.trim()) return alert("Outcome remarks are required.");
-                              const res = await updateRecord('dealer_meetings', id, {
-                                status: 'Completed',
-                                outcome: meetingOutcome,
-                                actualMeetingDate: new Date().toLocaleDateString('en-IN')
-                              });
-                              if (res.success) {
-                                // Add remark log as well
-                                await handlePostRemark(null, `Completed Meeting Outcome: ${meetingOutcome}`);
-                                const rels = await fetchEntity360(moduleName, id);
-                                setConnections(rels);
-                                window.location.reload();
-                              } else {
-                                alert(res.message || "Failed to submit outcome.");
-                              }
-                            }}
-                          >
-                            Submit Outcome & Complete Meeting
-                          </Button>
-                        </Box>
-                      )}
-                    </Box>
-                  )}
-
-                  {/* Tab 1: Dealer History */}
-                  {activeTab === 1 && (
-                    <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, fontFamily: 'Poppins' }}>Past Dealer Phone Conversations & Outreach Remarks</Typography>
-                      {renderListControls([
-                        { value: 'date', label: 'Date' },
-                        { value: 'callOutcome', label: 'Outcome' }
-                      ])}
-                      
-                      {!connections.calls || connections.calls.length === 0 ? (
-                        <Typography variant="body2" sx={{ color: '#94A3B8' }}>No phone conversations logged for this dealer.</Typography>
-                      ) : (
-                        filterAndSortList(connections.calls || [], ['id', 'date', 'callOutcome', 'remarks', 'duration', 'budget']).map(c => (
-                          <Paper key={c.id} sx={{ p: 2.5, mb: 2, border: '1px solid #E2E8F0', borderRadius: '12px' }}>
-                            <Box display="flex" justifyContent="space-between" mb={1}>
-                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#2563EB' }}>Call Log ID: {c.id}</Typography>
-                              <Chip label={c.callOutcome} size="small" color={c.callOutcome === 'Call Done' ? 'success' : 'warning'} />
-                            </Box>
-                            <Typography variant="body2" sx={{ mb: 1 }}>Remarks: <strong>"{c.remarks}"</strong></Typography>
-                            <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>Discussed Budget: ₹{c.budget} • Sectors/Areas: {c.areas || 'None'}</Typography>
-                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>Date: {c.date} • Duration: {c.duration} mins • Logged by: {c.employeeName}</Typography>
-                          </Paper>
-                        ))
-                      )}
-                    </Box>
-                  )}
-                </Box>
-              )}
             </Box>
           </Card>
         </Grid>
@@ -5360,99 +5234,7 @@ const EntityDetail = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Log Outreach Call Dialog */}
-      <Dialog open={callDialogOpen} onClose={() => setCallDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Log Outreach Phone Call</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1.5 }}>
-                        <TextField label="Call Duration (minutes)" type="number" fullWidth value={callDuration} onChange={(e) => setCallDuration(e.target.value)} />
-            <FormControl fullWidth>
-              <InputLabel>Call Outcome Status</InputLabel>
-              <Select value={callOutcomeOption} onChange={(e) => setCallOutcomeOption(e.target.value)} label="Call Outcome Status">
-                <MenuItem value="Call Done">Call Done</MenuItem>
-                <MenuItem value="Not Picked the Call">Not Picked the Call</MenuItem>
-                <MenuItem value="Switch Off">Switch Off</MenuItem>
-                <MenuItem value="Not Reachable">Not Reachable</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField label="Discussed Budget expectation" type="number" fullWidth value={callBudget} onChange={(e) => setCallBudget(e.target.value)} />
-            <TextField label="Discussed Sectors/Areas" fullWidth value={callAreas} onChange={(e) => setCallAreas(e.target.value)} />
-            <TextField label="Next Followup Date" type="date" InputLabelProps={{ shrink: true }} fullWidth value={callFollowUp} onChange={(e) => setCallFollowUp(e.target.value)} />
-            <TextField label="Call Notes/Remarks" multiline rows={3} fullWidth value={callRemarks} onChange={(e) => setCallRemarks(e.target.value)} />
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setCallDialogOpen(false)} sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600 }}>Cancel</Button>
-          <Button variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }} onClick={async () => {
-            const payload = {
-              dealerId: id,
-              employeeName: localStorage.getItem('gr_crm_user_name') || 'Sales Representative',
-              date: new Date().toLocaleDateString('en-IN'),
-              duration: callDuration,
-              budget: Number(callBudget || 0),
-              areas: callAreas,
-              followUpDate: callFollowUp,
-              remarks: callRemarks,
-              callOutcome: callOutcomeOption
-            };
-            const res = await createRecord('dealer_calls', payload);
-            if (res.success) {
-              setCallDialogOpen(false);
-              loadData();
-            } else {
-              alert(res.message || "Failed to log outreach call");
-            }
-          }}>Log Call</Button>
-        </DialogActions>
-      </Dialog>
 
-      {/* Submit Meeting Report Dialog */}
-      <Dialog open={meetingReportDialogOpen} onClose={() => setMeetingReportDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>Log Meeting Visit Report</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1.5 }}>
-            <FormControl fullWidth>
-              <InputLabel>Select Meeting</InputLabel>
-              <Select value={selectedMeetingId} onChange={(e) => setSelectedMeetingId(e.target.value)} label="Select Meeting">
-                {(connections?.meetings || []).filter(m => m.status === 'Assigned').map(m => (
-                  <MenuItem key={m.id} value={m.id}>{m.purpose || 'Intro Meeting'} ({m.id})</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField label="Visit Outcomes & Notes" multiline rows={3} fullWidth value={meetingOutcome} onChange={(e) => setMeetingOutcome(e.target.value)} />
-            <TextField label="Documents Collected from Dealer" fullWidth value={meetingDocCollected} onChange={(e) => setMeetingDocCollected(e.target.value)} />
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setMeetingReportDialogOpen(false)} sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600 }}>Cancel</Button>
-          <Button variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }} onClick={async () => {
-            if (!selectedMeetingId) {
-              alert("Please select a meeting to report on");
-              return;
-            }
-            const meetingRec = connections.meetings.find(m => m.id === selectedMeetingId);
-            if (!meetingRec) return;
-
-            const payload = {
-              ...meetingRec,
-              status: 'Completed',
-              outcome: meetingOutcome,
-              documents_collected: meetingDocCollected,
-              last_updated: new Date().toLocaleString('en-IN')
-            };
-            
-            const res = await axios.put(`${API_BASE_URL}/data/dealer_meetings/${selectedMeetingId}`, payload, {
-              headers: { Authorization: `Bearer ${localStorage.getItem('gr_crm_token')}` }
-            });
-            if (res.data) {
-              setMeetingReportDialogOpen(false);
-              loadData();
-            } else {
-              alert("Failed to submit meeting report");
-            }
-          }}>Submit Visit Report</Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Add New Contact Person Dialog for Dealers */}
       <Dialog 
