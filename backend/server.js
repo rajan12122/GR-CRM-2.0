@@ -3670,7 +3670,7 @@ app.get('/api/search', authenticateToken, async (req, res) => {
           const [siteVisits, followUps, tasks, sales, remarks, docs] = await Promise.all([
             pool.query('SELECT * FROM site_visits WHERE "customerId" = $1', [id]),
             pool.query('SELECT * FROM follow_ups WHERE "customerId" = $1', [id]),
-            pool.query('SELECT * FROM tasks WHERE title ILIKE $1 OR description ILIKE $1', [`%${id}%`]),
+            pool.query('SELECT * FROM tasks WHERE title ILIKE $1', [`%${id}%`]),
             pool.query('SELECT * FROM sales WHERE "customerId" = $1', [id]),
             pool.query('SELECT * FROM remarks WHERE target_module = \'customers\' AND target_id = $1', [id]),
             pool.query('SELECT * FROM documents WHERE target_module = \'customers\' AND target_id = $1', [id])

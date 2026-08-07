@@ -101,7 +101,19 @@ const EntityDetail = () => {
   } = useApp();
 
   const [record, setRecord] = useState(null);
-  const [connections, setConnections] = useState(null);
+  const [connections, setConnections] = useState({
+    remarks: [],
+    pitches: [],
+    queries: [],
+    deals: [],
+    timeline: [],
+    documents: [],
+    referrals: [],
+    site_visits: [],
+    history: [],
+    ownerHistory: [],
+    attendance: []
+  });
   const [loading, setLoading] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = parseInt(searchParams.get('tab') || '0', 10);
@@ -568,8 +580,24 @@ const EntityDetail = () => {
       setRecord(item);
 
       if (item) {
-        const rels = await fetchEntity360(moduleName, id);
-        setConnections(rels);
+        try {
+          const rels = await fetchEntity360(moduleName, id);
+          setConnections(rels || {
+            remarks: [],
+            pitches: [],
+            queries: [],
+            deals: [],
+            timeline: [],
+            documents: [],
+            referrals: [],
+            site_visits: [],
+            history: [],
+            ownerHistory: [],
+            attendance: []
+          });
+        } catch (e) {
+          console.error('Error fetching entity 360 data:', e);
+        }
         
         // Fetch pitch lookup dependencies
         await Promise.all([
