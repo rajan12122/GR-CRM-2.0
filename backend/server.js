@@ -1465,6 +1465,10 @@ async function handlePitchStatusChange(p, dbOrClient, req) {
     
   }
 
+  if (p.customerId && String(p.customerId).startsWith('LEAD-')) {
+    await syncPropertyAndStatusToLead(p.customerId, mappedStage, p.propertyId, p.quotedPrice, client);
+  }
+
   const isDealClosed = p.status === 'Deal Closed' || 
                        p.status === 'Property Registered/Sold Out' || 
                        p.propertyStatus === 'Property Registered/Sold Out';
@@ -1765,6 +1769,61 @@ async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmploy
   }
 }
 
+const mapFollowUpActionToLeadStatus = (action) => {
+  if (!action) return null;
+  const a = String(action).toLowerCase().trim();
+  if (a.includes('new') || a.includes('fresh')) return 'Open';
+  if (a.includes('contacted')) return 'Contacted';
+  if (a.includes('interested') || a.includes('nurture')) return 'In-Progress';
+  if (a.includes('visit') || a.includes('scheduled') || a.includes('arranged')) return 'Visit Scheduled';
+  if (a.includes('negotiation') || a.includes('under negotiation')) return 'Negotiation';
+  if (a.includes('booked') || a.includes('closed') || a.includes('completed') || a.includes('converted') || a.includes('sold')) return 'Converted';
+  if (a.includes('lost') || a.includes('junk') || a.includes('dropped')) return 'Junk';
+  return null;
+};
+
+async function syncPropertyAndStatusToLead(leadId, status, propertyId, quotedPrice, client) {
+  if (!leadId || !String(leadId).startsWith('LEAD-')) return;
+  
+  const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+  const lead = leadRes.rows[0];
+  if (!lead) return;
+
+  const updates = {};
+
+  // 1. Map status if provided
+  if (status) {
+    const leadStatus = mapFollowUpActionToLeadStatus(status);
+    if (leadStatus && lead.status !== leadStatus) {
+      updates.status = leadStatus;
+    }
+  }
+
+  // 2. Map property details if propertyId is provided
+  if (propertyId) {
+    const propRes = await client.query('SELECT * FROM properties WHERE id = $1', [propertyId]);
+    const prop = propRes.rows[0];
+    if (prop) {
+      const normalizedProp = normalizeRow('properties', prop);
+      if (normalizedProp.r_c_i) updates.r_c_i = normalizedProp.r_c_i;
+      if (normalizedProp.propertyType) updates.propertyType = normalizedProp.propertyType;
+      if (normalizedProp.locality) updates.locality = normalizedProp.locality;
+      if (normalizedProp.sector_block) updates.sector_block = normalizedProp.sector_block;
+      if (normalizedProp.size) updates.size = normalizedProp.size;
+      
+      const priceVal = quotedPrice || normalizedProp.demand;
+      if (priceVal) {
+        updates.demand = priceVal;
+        updates.budget = priceVal;
+      }
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await updateRecord('leads', leadId, updates, client);
+  }
+}
+
 async function handleFollowUpPipelineAction(f, dbOrClient, req) {
   if (!f.pipelineAction) return;
 
@@ -1869,21 +1928,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req) {
       await handleQueryStageChange(updatedQ, client, req);
     }
   } else if (customerId && String(customerId).startsWith('LEAD-')) {
-    const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [customerId]);
-    const lead = leadRes.rows[0];
-    if (lead) {
-      let leadStatus = lead.status;
-      if (action === 'Lost' || action === 'Lost Lead') {
-        leadStatus = 'Junk';
-      } else if (action === 'Closed' || action === 'Deal Closed' || action === 'Property Registered/Sold Out' || action === 'Booked' || action === 'Property Booked') {
-        leadStatus = 'Converted';
-      } else {
-        leadStatus = action;
-      }
-      
-      const updatedLead = await updateRecord('leads', lead.id, { status: leadStatus }, client);
-      
-    }
+    await syncPropertyAndStatusToLead(customerId, action, f.pitchedPropertyId, f.pitchPrice, client);
   } else if (customerId && String(customerId).startsWith('CUST-')) {
     const custRes = await client.query('SELECT * FROM customers WHERE id = $1', [customerId]);
     const cust = custRes.rows[0];
