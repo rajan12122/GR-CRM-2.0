@@ -1157,9 +1157,10 @@ const EntityDetail = () => {
                               ...(metadata?.chips?.pipelineActionGroup || []),
                               ...(metadata?.chips?.customerStages || [])
                             ];
+                            const filteredGroup = (metadata?.chips?.pipelineActionGroup || []).filter(item => item.value !== 'None' && item.label !== 'Keep Current Stage');
                             menuChoices = [
                               { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
-                              ...(metadata?.chips?.pipelineActionGroup || [])
+                              ...filteredGroup
                             ];
                           }
                         }

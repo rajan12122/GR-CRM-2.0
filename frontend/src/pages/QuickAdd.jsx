@@ -463,14 +463,17 @@ const QuickAdd = () => {
                               }}
                             >
                                {(selectedModule === 'follow_ups'
-                                 ? (f.name === 'status'
-                                    ? (metadata?.chips?.followUpStatus || [])
-                                    : [
-                                        { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
-                                        ...(metadata?.chips?.pipelineActionGroup || [])
-                                      ]
-                                   )
-                                 : (metadata.chips[f.chipGroup] || [])
+                                  ? (f.name === 'status'
+                                     ? (metadata?.chips?.followUpStatus || [])
+                                     : (() => {
+                                         const filteredGroup = (metadata?.chips?.pipelineActionGroup || []).filter(item => item.value !== 'None' && item.label !== 'Keep Current Stage');
+                                         return [
+                                           { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
+                                           ...filteredGroup
+                                         ];
+                                       })()
+                                    )
+                                  : (metadata.chips[f.chipGroup] || [])
                                ).map(choice => {
                                  const choiceVal = typeof choice === 'object' ? choice.value : choice;
                                  const choiceLabel = typeof choice === 'object' ? choice.label : choice;

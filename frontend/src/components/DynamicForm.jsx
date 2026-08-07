@@ -970,9 +970,10 @@ const DynamicForm = ({
                   if (f.name === 'status') {
                     options = metadata?.chips?.followUpStatus || [];
                   } else if (f.name === 'pipelineAction') {
+                    const filteredGroup = (metadata?.chips?.pipelineActionGroup || []).filter(item => item.value !== 'None' && item.label !== 'Keep Current Stage');
                     options = [
                       { value: 'None', label: 'Keep Current Stage', color: '#64748B' },
-                      ...(metadata?.chips?.pipelineActionGroup || [])
+                      ...filteredGroup
                     ];
                   }
                 }
