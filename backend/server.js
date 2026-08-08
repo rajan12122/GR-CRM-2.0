@@ -4451,6 +4451,151 @@ app.post('/api/remarks', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/call-punch', authenticateToken, async (req, res) => {
+  const { targetModule, targetId, callTiming, remarks, nextCall, mapPhoneMatches } = req.body;
+  if (!targetModule || !targetId || !remarks) {
+    return res.status(400).json({ message: 'Target module, record ID, and remarks are required.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Fetch phone number from the current record if it exists
+    let phoneNum = null;
+    const tableMap = {
+      leads: 'leads',
+      customers: 'customers',
+      dealers: 'dealers',
+      employees: 'employees'
+    };
+    const dbTable = tableMap[targetModule];
+    if (dbTable) {
+      const recordRes = await client.query(`SELECT phone FROM ${dbTable} WHERE id = $1`, [targetId]);
+      if (recordRes.rows[0]) {
+        phoneNum = recordRes.rows[0].phone;
+      }
+    }
+
+    // 2. Resolve all phone matches across modules if phone exists
+    const matchedTargets = new Set();
+    matchedTargets.add(`${targetModule}:${targetId}`);
+
+    if (phoneNum) {
+      const digitsOnly = String(phoneNum).replace(/[^0-9]/g, '');
+      const cleanPhone = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+      if (cleanPhone) {
+        const custRes = await client.query("SELECT id FROM customers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+        const leadRes = await client.query("SELECT id FROM leads WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+        const dealerRes = await client.query("SELECT id FROM dealers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+
+        custRes.rows.forEach(r => matchedTargets.add(`customers:${r.id}`));
+        leadRes.rows.forEach(r => matchedTargets.add(`leads:${r.id}`));
+        dealerRes.rows.forEach(r => matchedTargets.add(`dealers:${r.id}`));
+      }
+    }
+
+    // 3. For each target, also run getRelatedRemarksTargets to catch standard relationships
+    const allFinalTargets = new Set();
+    for (const key of matchedTargets) {
+      const [mod, id] = key.split(':');
+      allFinalTargets.add(`${mod}:${id}`);
+      
+      const related = await getRelatedRemarksTargets(mod, id, client);
+      related.leads.forEach(rid => allFinalTargets.add(`leads:${rid}`));
+      related.customers.forEach(rid => allFinalTargets.add(`customers:${rid}`));
+      related.follow_ups.forEach(rid => allFinalTargets.add(`follow_ups:${rid}`));
+      related.properties.forEach(rid => allFinalTargets.add(`properties:${rid}`));
+      related.queries.forEach(rid => allFinalTargets.add(`queries:${rid}`));
+      related.site_visits.forEach(rid => allFinalTargets.add(`site_visits:${rid}`));
+      related.deals.forEach(rid => allFinalTargets.add(`deals:${rid}`));
+    }
+
+    // 4. Create call punch comment
+    let formattedTiming = callTiming;
+    if (String(callTiming).includes('T')) {
+      const tParts = String(callTiming).split('T');
+      formattedTiming = `${tParts[0].split('-').reverse().join('/')} ${tParts[1]}`;
+    }
+    const punchComment = `📞 Call Punch Logged\n- Call Timing: ${formattedTiming || new Date().toLocaleString()}\n- Remarks: ${remarks}${nextCall ? `\n- Scheduled Next Call: ${String(nextCall).split('T')[0].split('-').reverse().join('/')} ${String(nextCall).split('T')[1] || '12:00'}` : ''}`;
+
+    // 5. Insert remarks for all resolved targets
+    const dt = new Date().toLocaleString();
+    for (const key of allFinalTargets) {
+      const [mod, id] = key.split(':');
+      const newRemark = {
+        id: generateUniqueId('REM'),
+        targetModule: mod,
+        targetId: id,
+        employeeName: req.user ? req.user.name : 'System',
+        dateTime: dt,
+        comment: punchComment
+      };
+      await insertRecord('remarks', newRemark, client);
+    }
+
+    // 6. Schedule next call (if provided)
+    if (nextCall) {
+      const dateParts = String(nextCall).split('T');
+      const rawDate = dateParts[0];
+      const rawTime = dateParts[1] || '12:00';
+
+      let formattedDate = rawDate;
+      const parts = rawDate.split('-');
+      if (parts.length === 3) {
+        formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+
+      if (targetModule === 'customers' || targetModule === 'leads') {
+        const followUpId = await generateNextIdAsync(client, 'follow_ups', 'FOLLOW');
+        const newFollowUp = {
+          id: followUpId,
+          customerId: targetId,
+          employeeId: req.user ? req.user.id : 'EMP-001',
+          date: formattedDate,
+          time: rawTime,
+          status: 'Pending Call',
+          pipelineAction: 'Follow-Up Scheduled',
+          remarks: `Auto-scheduled from Call Punch next call setup. Remarks: ${remarks}`
+        };
+        await insertRecord('follow_ups', newFollowUp, client);
+      }
+
+      // Also create a Todo task for the employee
+      const todoId = generateUniqueId('TODO');
+      const newTodo = {
+        id: todoId,
+        title: `Call Punch Next Call: ${targetId} (${remarks.slice(0, 30)}...)`,
+        dueDate: formattedDate,
+        dueTime: rawTime,
+        priority: 'Medium',
+        status: 'Pending',
+        assignedTo: req.user ? req.user.id : 'EMP-001',
+        linkedModule: targetModule,
+        linkedId: targetId
+      };
+      await insertRecord('todos', newTodo, client);
+    }
+
+    await client.query('COMMIT');
+    try { syncToSheets('remarks'); } catch(e) {}
+    if (nextCall) {
+      try { syncToSheets('todos'); } catch(e) {}
+      if (targetModule === 'customers' || targetModule === 'leads') {
+        try { syncToSheets('follow_ups'); } catch(e) {}
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Call punch successfully logged and mapped!' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Call punch error:', err);
+    res.status(500).json({ error: 'Failed to process call punch: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // --- DOCUMENT SYSTEM ---
 
 app.post('/api/upload', authenticateToken, (req, res) => {

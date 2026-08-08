@@ -143,6 +143,16 @@ const EntityDetail = () => {
   const [meetingOutcome, setMeetingOutcome] = useState('');
   const [meetingDocCollected, setMeetingDocCollected] = useState('');
   
+  const [callPunchOpen, setCallPunchOpen] = useState(false);
+  const [callPunchTiming, setCallPunchTiming] = useState(() => {
+    const d = new Date();
+    const tzoffset = d.getTimezoneOffset() * 60000;
+    return (new Date(d.getTime() - tzoffset)).toISOString().slice(0, 16);
+  });
+  const [callPunchRemarks, setCallPunchRemarks] = useState('');
+  const [callPunchNextCall, setCallPunchNextCall] = useState('');
+  const [callPunchLoading, setCallPunchLoading] = useState(false);
+  
   const [pitchCustomerId, setPitchCustomerId] = useState('');
   const [pitchPropertyId, setPitchPropertyId] = useState('');
   const [pitchEmployeeId, setPitchEmployeeId] = useState('');
@@ -909,6 +919,30 @@ const EntityDetail = () => {
           <Typography variant="body2" sx={{ color: '#64748B' }}>
             System ID Reference: <strong>{record.id}</strong>
           </Typography>
+        </Box>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<Icons.PhoneCall size={18} />}
+            onClick={() => {
+              const d = new Date();
+              const tzoffset = d.getTimezoneOffset() * 60000;
+              setCallPunchTiming(new Date(d.getTime() - tzoffset).toISOString().slice(0, 16));
+              setCallPunchRemarks('');
+              setCallPunchNextCall('');
+              setCallPunchOpen(true);
+            }}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              borderRadius: '8px',
+              backgroundColor: '#2563EB',
+              '&:hover': { backgroundColor: '#1D4ED8' }
+            }}
+          >
+            Call Punch
+          </Button>
         </Box>
       </Box>
 
@@ -5133,6 +5167,95 @@ const EntityDetail = () => {
             }}
           >
             Save Contact
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Call Punch Dialog */}
+      <Dialog 
+        open={callPunchOpen} 
+        onClose={() => setCallPunchOpen(false)}
+        PaperProps={{ sx: { borderRadius: '16px', p: 1, width: '450px' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontFamily: 'Poppins' }}>📞 Log Call Punch</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+            <TextField
+              label="Call Timing"
+              type="datetime-local"
+              fullWidth
+              variant="outlined"
+              value={callPunchTiming}
+              onChange={(e) => setCallPunchTiming(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+            
+            <TextField
+              label="Call Remarks / Discussion Summary"
+              placeholder="What was discussed during the call?"
+              type="text"
+              fullWidth
+              multiline
+              rows={3}
+              variant="outlined"
+              value={callPunchRemarks}
+              onChange={(e) => setCallPunchRemarks(e.target.value)}
+              required
+            />
+
+            <TextField
+              label="Schedule Next Call (Optional)"
+              type="datetime-local"
+              fullWidth
+              variant="outlined"
+              value={callPunchNextCall}
+              onChange={(e) => setCallPunchNextCall(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              helperText="Auto-schedules a follow-up activity & todo task for you"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setCallPunchOpen(false)} sx={{ textTransform: 'none', color: '#64748B', fontWeight: 600 }}>Cancel</Button>
+          <Button 
+            variant="contained"
+            disabled={callPunchLoading}
+            sx={{ textTransform: 'none', fontWeight: 700, backgroundColor: '#2563EB', '&:hover': { backgroundColor: '#1D4ED8' } }}
+            onClick={async () => {
+              if (!callPunchRemarks.trim()) {
+                alert('Remarks are required.');
+                return;
+              }
+              setCallPunchLoading(true);
+              try {
+                const token = localStorage.getItem('gr_crm_token');
+                const res = await axios.post(`${API_BASE_URL}/call-punch`, {
+                  targetModule: moduleName,
+                  targetId: id,
+                  callTiming: callPunchTiming,
+                  remarks: callPunchRemarks,
+                  nextCall: callPunchNextCall
+                }, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.data.success) {
+                  setCallPunchOpen(false);
+                  setCallPunchRemarks('');
+                  setCallPunchNextCall('');
+                  const rels = await fetchEntity360(moduleName, id);
+                  setConnections(rels);
+                } else {
+                  alert(res.data.error || 'Failed to submit call punch.');
+                }
+              } catch (err) {
+                console.error(err);
+                alert('Error submitting call punch: ' + (err.response?.data?.error || err.message));
+              } finally {
+                setCallPunchLoading(false);
+              }
+            }}
+          >
+            {callPunchLoading ? 'Saving...' : 'Punch Call'}
           </Button>
         </DialogActions>
       </Dialog>
