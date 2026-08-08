@@ -3865,7 +3865,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           pool.query('SELECT * FROM properties WHERE "current_owner_id" = ANY($1::text[])', [clientIds]),
           pool.query('SELECT * FROM deals WHERE "customerId" = ANY($1::text[]) OR "sellerCustomerId" = ANY($1::text[])', [clientIds]),
           pool.query('SELECT * FROM property_pitch_history WHERE "customerId" = ANY($1::text[])', [clientIds]),
-          pool.query('SELECT * FROM leads WHERE "referrer_type" = \'customers\' AND "referrer_id" = $2', [clientIds, id])
+          pool.query('SELECT * FROM leads WHERE "referrer_type" = \'customers\' AND "referrer_id" = $1', [id])
         ]);
 
         const svs = siteVisits.rows.map(r => normalizeRow('site_visits', r));

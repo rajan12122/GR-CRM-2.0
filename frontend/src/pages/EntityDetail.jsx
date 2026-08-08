@@ -37,7 +37,8 @@ import {
   Select,
   MenuItem,
   FormHelperText,
-  InputAdornment
+  InputAdornment,
+  Fab
 } from '@mui/material';
 import * as Icons from 'lucide-react';
 import { useApp, API_BASE_URL } from '../context/AppContext';
@@ -5259,6 +5260,41 @@ const EntityDetail = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Floating Call Punch Button */}
+      <Fab
+        color="primary"
+        aria-label="call-punch"
+        onClick={() => {
+          const d = new Date();
+          const tzoffset = d.getTimezoneOffset() * 60000;
+          setCallPunchTiming(new Date(d.getTime() - tzoffset).toISOString().slice(0, 16));
+          setCallPunchRemarks('');
+          setCallPunchNextCall('');
+          setCallPunchOpen(true);
+        }}
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          right: 96,
+          backgroundColor: '#2563EB',
+          color: '#FFFFFF',
+          textTransform: 'none',
+          borderRadius: '24px',
+          px: 3,
+          boxShadow: '0px 4px 20px rgba(37, 99, 235, 0.4)',
+          '&:hover': { 
+            backgroundColor: '#1D4ED8',
+            boxShadow: '0px 6px 24px rgba(37, 99, 235, 0.6)'
+          },
+          transition: 'all 0.2s ease-in-out',
+          zIndex: 1201
+        }}
+        variant="extended"
+      >
+        <Icons.PhoneCall size={18} style={{ marginRight: 8 }} />
+        Call Punch
+      </Fab>
 
       {formOpen && (
         <DynamicForm 
