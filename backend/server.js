@@ -3795,7 +3795,8 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
              OR (target_module = 'queries' AND target_id = ANY($5::text[]))
              OR (target_module = 'site_visits' AND target_id = ANY($6::text[]))
              OR (target_module = 'deals' AND target_id = ANY($7::text[]))
-             OR (target_module = $8 AND target_id = $9)
+             OR (target_module = 'dealers' AND target_id = ANY($8::text[]))
+             OR (target_module = $9 AND target_id = $10)
           ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
         ) t
         ORDER BY created_at DESC, id DESC
@@ -3809,6 +3810,7 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
           targets.queries,
           targets.site_visits,
           targets.deals,
+          targets.dealers,
           module,
           id
         ]),
@@ -4224,6 +4226,7 @@ async function getRelatedRemarksTargets(moduleName, id, client) {
   const queryIds = new Set();
   const siteVisitIds = new Set();
   const dealIds = new Set();
+  const dealerIds = new Set();
 
   if (moduleName === 'leads') leadIds.add(id);
   else if (moduleName === 'customers') customerIds.add(id);
@@ -4232,6 +4235,7 @@ async function getRelatedRemarksTargets(moduleName, id, client) {
   else if (moduleName === 'queries') queryIds.add(id);
   else if (moduleName === 'site_visits') siteVisitIds.add(id);
   else if (moduleName === 'deals') dealIds.add(id);
+  else if (moduleName === 'dealers') dealerIds.add(id);
 
   try {
     // 1. Resolve initial links based on target type
@@ -4276,11 +4280,14 @@ async function getRelatedRemarksTargets(moduleName, id, client) {
       });
     }
     if (propertyIds.size > 0) {
-      const resProp = await client.query('SELECT current_owner_id FROM properties WHERE id = ANY($1)', [Array.from(propertyIds)]);
+      const resProp = await client.query('SELECT current_owner_id, "dealerId" FROM properties WHERE id = ANY($1)', [Array.from(propertyIds)]);
       resProp.rows.forEach(r => {
         if (r.current_owner_id) {
           if (String(r.current_owner_id).startsWith('LEAD')) leadIds.add(r.current_owner_id);
           else customerIds.add(r.current_owner_id);
+        }
+        if (r.dealerId) {
+          dealerIds.add(r.dealerId);
         }
       });
       const resPitch = await client.query('SELECT "customerId" FROM property_pitch_history WHERE "propertyId" = ANY($1)', [Array.from(propertyIds)]);
@@ -4290,6 +4297,11 @@ async function getRelatedRemarksTargets(moduleName, id, client) {
           else customerIds.add(r.customerId);
         }
       });
+    }
+
+    if (dealerIds.size > 0) {
+      const resD = await client.query('SELECT id FROM properties WHERE "dealerId" = ANY($1)', [Array.from(dealerIds)]);
+      resD.rows.forEach(r => propertyIds.add(r.id));
     }
 
     // 2. Cross-link leads and customers
@@ -4339,7 +4351,8 @@ async function getRelatedRemarksTargets(moduleName, id, client) {
     properties: Array.from(propertyIds),
     queries: Array.from(queryIds),
     site_visits: Array.from(siteVisitIds),
-    deals: Array.from(dealIds)
+    deals: Array.from(dealIds),
+    dealers: Array.from(dealerIds)
   };
 }
 
@@ -4360,7 +4373,8 @@ app.get('/api/remarks/:module/:id', authenticateToken, async (req, res) => {
            OR (target_module = 'queries' AND target_id = ANY($5::text[]))
            OR (target_module = 'site_visits' AND target_id = ANY($6::text[]))
            OR (target_module = 'deals' AND target_id = ANY($7::text[]))
-           OR (target_module = $8 AND target_id = $9)
+           OR (target_module = 'dealers' AND target_id = ANY($8::text[]))
+           OR (target_module = $9 AND target_id = $10)
         ORDER BY employee_name, date_time, comment, created_at DESC, id DESC
       ) t
       ORDER BY created_at DESC, id DESC
@@ -4374,6 +4388,7 @@ app.get('/api/remarks/:module/:id', authenticateToken, async (req, res) => {
       targets.queries,
       targets.site_visits,
       targets.deals,
+      targets.dealers,
       module,
       id
     ]);
@@ -4418,6 +4433,7 @@ app.post('/api/remarks', authenticateToken, async (req, res) => {
     targets.queries.forEach(id => addUniqueTarget('queries', id));
     targets.site_visits.forEach(id => addUniqueTarget('site_visits', id));
     targets.deals.forEach(id => addUniqueTarget('deals', id));
+    targets.dealers.forEach(id => addUniqueTarget('dealers', id));
 
     // Ensure original target is included
     addUniqueTarget(targetModule, targetId);
@@ -4509,6 +4525,7 @@ app.post('/api/call-punch', authenticateToken, async (req, res) => {
       related.queries.forEach(rid => allFinalTargets.add(`queries:${rid}`));
       related.site_visits.forEach(rid => allFinalTargets.add(`site_visits:${rid}`));
       related.deals.forEach(rid => allFinalTargets.add(`deals:${rid}`));
+      related.dealers?.forEach(rid => allFinalTargets.add(`dealers:${rid}`));
     }
 
     // 4. Create call punch comment
