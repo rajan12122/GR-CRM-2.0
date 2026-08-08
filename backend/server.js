@@ -1142,9 +1142,13 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
       return null;
     }
 
-    const cleanPhone = String(lead.phone || '').trim();
-    const custRes = await client.query('SELECT * FROM customers WHERE phone = $1', [cleanPhone]);
-    let existingCust = custRes.rows[0];
+    const digitsOnly = String(lead.phone || '').replace(/[^0-9]/g, '');
+    const cleanPhone = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+    let existingCust = null;
+    if (cleanPhone) {
+      const custRes = await client.query("SELECT * FROM customers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+      existingCust = custRes.rows[0];
+    }
 
     if (!existingCust) {
       const custId = await generateNextIdAsync(client, 'customers');
@@ -1153,7 +1157,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
         leadId: leadId,
         name: lead.name,
         email: lead.email || '',
-        phone: lead.phone,
+        phone: cleanPhone || lead.phone,
         stage: 'Converted Buyer Deal Closed',
         assignedEmployeeId: lead.assignedEmployeeId || 'EMP-001',
         budget: lead.budget || '',
@@ -2371,70 +2375,74 @@ app.post('/api/data/:module', authenticateToken, (req, res, next) => {
 
       // 4. Duplicate prevention / query redirect for customers & leads (with phone)
       if (payload.phone && (module === 'customers' || module === 'leads')) {
-        const cleanPhone = String(payload.phone).trim();
-        const custRes = await client.query('SELECT * FROM customers WHERE phone = $1', [cleanPhone]);
-        const leadRes = await client.query('SELECT * FROM leads WHERE phone = $1', [cleanPhone]);
-        const existingCust = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
-        const existingLead = leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null;
-        
-        if (existingCust || existingLead) {
-          const existingPerson = existingCust || existingLead;
-          const queryId = await generateNextIdAsync(client, 'queries', 'QRY');
-          const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
+        const digitsOnly = String(payload.phone).replace(/[^0-9]/g, '');
+        const cleanPhone = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+        if (cleanPhone) {
+          payload.phone = cleanPhone;
+          const custRes = await client.query("SELECT * FROM customers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+          const leadRes = await client.query("SELECT * FROM leads WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+          const existingCust = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
+          const existingLead = leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null;
           
-          const newQuery = {
-            id: queryId,
-            customerId: existingPerson.id,
-            assignedEmployeeId: payload.assignedEmployeeId || existingPerson.assignedEmployeeId || 'EMP-001',
-            date: new Date().toLocaleDateString('en-IN'),
-            status: 'Pending Approval',
-            queryType: queryType,
-            stage: 'New Query',
-            budget: payload.budget || '',
-            demand: payload.demand || '',
-            r_c_i: payload.r_c_i || '',
-            propertyType: payload.propertyType || '',
-            locality: payload.locality || '',
-            sector_block: payload.sector_block || '',
-            size: payload.size || '',
-            remarks: payload.remarks || payload.initial_notes || 'Auto-created query due to duplicate lead/customer submission.'
-          };
-          
-          await insertRecord('queries', newQuery, client);
-
-          if (newQuery.queryType === 'Buy Property' && String(existingPerson.id).startsWith('LEAD')) {
-            const followUpId = await generateNextIdAsync(client, 'follow_ups', 'FOLLOW');
-            const newFollowUp = {
-              id: followUpId,
-              customerId: existingPerson.id,
-              queryId: queryId,
-              employeeId: payload.assignedEmployeeId || existingPerson.assignedEmployeeId || 'EMP-001',
-              date: new Date().toLocaleDateString('en-IN'),
-              time: '12:00 PM',
-              status: 'Pending Call',
-              pipelineAction: 'Fresh Lead',
-              remarks: `Auto-scheduled follow up for auto-created duplicate check Query ${queryId}.`
-            };
-            await insertRecord('follow_ups', newFollowUp, client);
+          if (existingCust || existingLead) {
+            const existingPerson = existingCust || existingLead;
+            const queryId = await generateNextIdAsync(client, 'queries', 'QRY');
+            const queryType = payload.leadType === 'Seller' ? 'Sell Property' : 'Buy Property';
             
-            try { syncToSheets('follow_ups'); } catch(e) {}
-          }
-          
-          const dupLog = {
-            id: generateUniqueId('LOG'),
-            employeeName: req.user ? req.user.name : 'System',
-            action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing ${existingPerson.id.startsWith('LEAD') ? 'lead' : 'customer'} ${existingPerson.id}`,
-            dateTime: new Date().toLocaleString()
-          };
-          await insertRecord('activity_logs', dupLog, client);
+            const newQuery = {
+              id: queryId,
+              customerId: existingPerson.id,
+              assignedEmployeeId: payload.assignedEmployeeId || existingPerson.assignedEmployeeId || 'EMP-001',
+              date: new Date().toLocaleDateString('en-IN'),
+              status: 'Pending Approval',
+              queryType: queryType,
+              stage: 'New Query',
+              budget: payload.budget || '',
+              demand: payload.demand || '',
+              r_c_i: payload.r_c_i || '',
+              propertyType: payload.propertyType || '',
+              locality: payload.locality || '',
+              sector_block: payload.sector_block || '',
+              size: payload.size || '',
+              remarks: payload.remarks || payload.initial_notes || 'Auto-created query due to duplicate lead/customer submission.'
+            };
+            
+            await insertRecord('queries', newQuery, client);
 
-          try { syncToSheets('queries'); } catch(e) {}
-          
-          return {
-            __is_redirected_query: true,
-            message: `Customer/Lead already exists. Created Query (${queryId}) linked to customer profile instead.`,
-            data: newQuery
-          };
+            if (newQuery.queryType === 'Buy Property' && String(existingPerson.id).startsWith('LEAD')) {
+              const followUpId = await generateNextIdAsync(client, 'follow_ups', 'FOLLOW');
+              const newFollowUp = {
+                id: followUpId,
+                customerId: existingPerson.id,
+                queryId: queryId,
+                employeeId: payload.assignedEmployeeId || existingPerson.assignedEmployeeId || 'EMP-001',
+                date: new Date().toLocaleDateString('en-IN'),
+                time: '12:00 PM',
+                status: 'Pending Call',
+                pipelineAction: 'Fresh Lead',
+                remarks: `Auto-scheduled follow up for auto-created duplicate check Query ${queryId}.`
+              };
+              await insertRecord('follow_ups', newFollowUp, client);
+              
+              try { syncToSheets('follow_ups'); } catch(e) {}
+            }
+            
+            const dupLog = {
+              id: generateUniqueId('LOG'),
+              employeeName: req.user ? req.user.name : 'System',
+              action: `Detected duplicate phone ${cleanPhone}. Created Query ${queryId} for existing ${existingPerson.id.startsWith('LEAD') ? 'lead' : 'customer'} ${existingPerson.id}`,
+              dateTime: new Date().toLocaleString()
+            };
+            await insertRecord('activity_logs', dupLog, client);
+
+            try { syncToSheets('queries'); } catch(e) {}
+            
+            return {
+              __is_redirected_query: true,
+              message: `Customer/Lead already exists. Created Query (${queryId}) linked to customer profile instead.`,
+              data: newQuery
+            };
+          }
         }
       }
 
@@ -4891,8 +4899,8 @@ app.post('/api/public/lead-intake', ipRateLimiter(15 * 60 * 1000, 10), async (re
   try {
     const result = await runTransaction(async (client) => {
       // Find duplicate lead/customer by phone
-      const custRes = await client.query('SELECT * FROM customers WHERE phone = $1', [cleanPhone]);
-      const leadRes = await client.query('SELECT * FROM leads WHERE phone = $1', [cleanPhone]);
+      const custRes = await client.query("SELECT * FROM customers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+      const leadRes = await client.query("SELECT * FROM leads WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
       
       const existingCust = custRes.rows[0] ? normalizeRow('customers', custRes.rows[0]) : null;
       const existingLead = leadRes.rows[0] ? normalizeRow('leads', leadRes.rows[0]) : null;
