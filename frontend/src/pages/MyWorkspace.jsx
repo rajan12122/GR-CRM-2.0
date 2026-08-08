@@ -395,6 +395,9 @@ const MyWorkspace = () => {
       todos.forEach(t => {
         const p = parseDate(t.dueDate);
         if (p && p.toISOString().split('T')[0] === dateStr && String(t.assignedTo) === String(user?.id)) {
+          if (t.linkedModule === 'follow_ups' || t.linkedModule === 'site_visits') {
+            return;
+          }
           list.push({ type: 'todo', label: t.title, id: t.id, status: t.status, rawTodo: t });
         }
       });
