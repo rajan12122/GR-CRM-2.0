@@ -5275,8 +5275,8 @@ const EntityDetail = () => {
         }}
         sx={{
           position: 'fixed',
-          bottom: 24,
-          right: 96,
+          bottom: 96,
+          right: 24,
           backgroundColor: '#2563EB',
           color: '#FFFFFF',
           textTransform: 'none',
