@@ -140,6 +140,8 @@ const EntityDetail = () => {
   const [pitchDialogOpen, setPitchDialogOpen] = useState(false);
   const [inlineOutcomes, setInlineOutcomes] = useState({});
   const [inlineRemarks, setInlineRemarks] = useState({});
+  const [meetingOutcome, setMeetingOutcome] = useState('');
+  const [meetingDocCollected, setMeetingDocCollected] = useState('');
   
   const [pitchCustomerId, setPitchCustomerId] = useState('');
   const [pitchPropertyId, setPitchPropertyId] = useState('');
