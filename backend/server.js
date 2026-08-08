@@ -4479,15 +4479,28 @@ app.post('/api/call-punch', authenticateToken, async (req, res) => {
 
     // 1. Fetch phone number from the current record if it exists
     let phoneNum = null;
-    const tableMap = {
-      leads: 'leads',
-      customers: 'customers',
-      dealers: 'dealers',
-      employees: 'employees'
-    };
-    const dbTable = tableMap[targetModule];
-    if (dbTable) {
-      const recordRes = await client.query(`SELECT phone FROM ${dbTable} WHERE id = $1`, [targetId]);
+    let phoneCol = null;
+    let dbTable = null;
+
+    if (targetModule === 'leads') {
+      dbTable = 'leads';
+      phoneCol = 'phone';
+    } else if (targetModule === 'customers') {
+      dbTable = 'customers';
+      phoneCol = 'phone';
+    } else if (targetModule === 'dealers') {
+      dbTable = 'dealers';
+      phoneCol = 'contact_num';
+    } else if (targetModule === 'properties') {
+      dbTable = 'properties';
+      phoneCol = 'contact_number';
+    } else if (targetModule === 'employees') {
+      dbTable = 'employees';
+      phoneCol = 'phone';
+    }
+
+    if (dbTable && phoneCol) {
+      const recordRes = await client.query(`SELECT "${phoneCol}" AS phone FROM "${dbTable}" WHERE id = $1`, [targetId]);
       if (recordRes.rows[0]) {
         phoneNum = recordRes.rows[0].phone;
       }
@@ -4503,7 +4516,7 @@ app.post('/api/call-punch', authenticateToken, async (req, res) => {
       if (cleanPhone) {
         const custRes = await client.query("SELECT id FROM customers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
         const leadRes = await client.query("SELECT id FROM leads WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
-        const dealerRes = await client.query("SELECT id FROM dealers WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
+        const dealerRes = await client.query("SELECT id FROM dealers WHERE RIGHT(regexp_replace(contact_num, '[^0-9]', '', 'g'), 10) = $1", [cleanPhone]);
 
         custRes.rows.forEach(r => matchedTargets.add(`customers:${r.id}`));
         leadRes.rows.forEach(r => matchedTargets.add(`leads:${r.id}`));
