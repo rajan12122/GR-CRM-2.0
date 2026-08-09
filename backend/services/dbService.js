@@ -619,6 +619,48 @@ async function getTableColumns(moduleName, executor) {
   }
 }
 
+async function syncToEntityContacts(moduleName, record, executor) {
+  if (moduleName !== 'leads' && moduleName !== 'customers' && moduleName !== 'dealers') {
+    return;
+  }
+  try {
+    let name = null;
+    let phone = null;
+    let dateAdded = record.dateAdded;
+
+    if (moduleName === 'leads' || moduleName === 'customers') {
+      name = record.name;
+      phone = record.phone;
+    } else if (moduleName === 'dealers') {
+      name = record.person_name;
+      phone = record.contact_num;
+      if (!dateAdded) {
+        dateAdded = record.created_at ? new Date(record.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
+      }
+    }
+
+    const contactId = `CON-${record.id}`;
+    await executor.query(`
+      INSERT INTO "entity_contacts" (id, record_id, module, contact_name, phone, "dateAdded", created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+      ON CONFLICT (record_id) DO UPDATE SET
+        contact_name = EXCLUDED.contact_name,
+        phone = EXCLUDED.phone,
+        "dateAdded" = EXCLUDED."dateAdded",
+        updated_at = now()
+    `, [contactId, record.id, moduleName, name, phone, dateAdded]);
+
+    try {
+      const { syncToSheets } = require('./sheetsService');
+      syncToSheets('entity_contacts');
+    } catch (sheetErr) {
+      console.error('Failed to sync entity_contacts to sheets:', sheetErr.message);
+    }
+  } catch (err) {
+    console.error('Failed to sync to entity_contacts table:', err.message);
+  }
+}
+
 async function insertRecord(moduleName, data, dbOrClient) {
   const executor = getExecutor(dbOrClient);
   const tableCols = await getTableColumns(moduleName, executor);
@@ -653,6 +695,7 @@ async function insertRecord(moduleName, data, dbOrClient) {
     } catch (e) {
       console.error('Todo trigger error:', e);
     }
+    await syncToEntityContacts(moduleName, inserted, executor);
   }
   return inserted;
 }
@@ -692,6 +735,7 @@ async function updateRecord(moduleName, id, data, dbOrClient) {
     } catch (e) {
       console.error('Todo trigger error:', e);
     }
+    await syncToEntityContacts(moduleName, updated, executor);
   }
   return updated;
 }

@@ -2246,6 +2246,61 @@
           "editable": true
         }
       ]
+    },
+    "entity_contacts": {
+      "id": "entity_contacts",
+      "label": "Entity Contacts Registry",
+      "icon": "Contact",
+      "fields": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": false
+        },
+        {
+          "name": "record_id",
+          "label": "Record ID",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": false
+        },
+        {
+          "name": "module",
+          "label": "Module",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": false
+        },
+        {
+          "name": "contact_name",
+          "label": "Contact Person Name",
+          "type": "text",
+          "required": true,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "phone",
+          "label": "Phone/Contact Number",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": true
+        },
+        {
+          "name": "dateAdded",
+          "label": "Date Added",
+          "type": "text",
+          "required": false,
+          "showInTable": true,
+          "editable": false
+        }
+      ]
     }
   },
   "chips": {
@@ -3385,6 +3440,14 @@
         "delete",
         "export",
         "print"
+      ],
+      "entity_contacts": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "export",
+        "print"
       ]
     },
     "Manager": {
@@ -3505,6 +3568,13 @@
         "view",
         "create",
         "edit"
+      ],
+      "entity_contacts": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "export"
       ]
     },
     "Sales": {
@@ -3587,6 +3657,11 @@
         "view",
         "create",
         "edit"
+      ],
+      "entity_contacts": [
+        "view",
+        "create",
+        "edit"
       ]
     },
     "Employee": {
@@ -3651,6 +3726,7 @@
       "modules": [
         "leads",
         "customers",
+        "entity_contacts",
         "deals",
         "queries",
         "follow_ups",
