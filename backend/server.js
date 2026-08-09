@@ -116,6 +116,53 @@ const {
   ensurePerformanceIndexes
 } = require('./services/dbService');
 
+// Health Check Endpoints
+app.get('/health', async (req, res) => {
+  try {
+    const dbRes = await pool.query('SELECT 1');
+    if (dbRes.rows && dbRes.rows.length > 0) {
+      return res.status(200).json({
+        status: 'healthy',
+        database: 'connected',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+    }
+    throw new Error('Database ping returned empty');
+  } catch (err) {
+    console.error('Health check failed:', err.message);
+    return res.status(500).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/api/health', async (req, res) => {
+  try {
+    const dbRes = await pool.query('SELECT 1');
+    if (dbRes.rows && dbRes.rows.length > 0) {
+      return res.status(200).json({
+        status: 'healthy',
+        database: 'connected',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+    }
+    throw new Error('Database ping returned empty');
+  } catch (err) {
+    console.error('Health check failed:', err.message);
+    return res.status(500).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 const getTodayDateString = () => {
   const d = new Date();
   const day = String(d.getDate()).padStart(2, '0');
