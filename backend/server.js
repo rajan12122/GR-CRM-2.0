@@ -1,11 +1,13 @@
 require('dotenv').config();
 
-// Process-level crash guards to prevent unhandled errors from killing the server
+// Process-level crash guards to handle unhandled errors and restart cleanly
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception thrown:', error);
+  process.exit(1);
 });
 
 const originalToLocaleDateString = Date.prototype.toLocaleDateString;
