@@ -128,8 +128,12 @@ async function syncToSheets(moduleName) {
       5, null, idempotencyKey, 'PENDING', now, now, null, now
     ]);
     
-    // Trigger the queue runner
-    setImmediate(() => processSyncQueue());
+    // Trigger the queue runner and handle any potential rejection
+    setImmediate(() => {
+      processSyncQueue().catch(err => {
+        console.error(`Async processSyncQueue failed for ${moduleName}:`, err.message);
+      });
+    });
     return jobId;
   } catch (err) {
     console.error(`Failed to enqueue module sync for ${moduleName}:`, err.message);
