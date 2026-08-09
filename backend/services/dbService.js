@@ -49,6 +49,25 @@ async function initializeMetadata() {
         value JSONB
       );
     `);
+
+    // Auto-migrate local default metadata to DB if a new module or structural category is present
+    if (fs.existsSync(defaultMetadataPath)) {
+      try {
+        const localDefault = JSON.parse(fs.readFileSync(defaultMetadataPath, 'utf8'));
+        const dbRes = await client.query(`SELECT value FROM app_metadata WHERE key = 'main_metadata';`);
+        const dbMeta = dbRes.rows[0]?.value;
+        if (!dbMeta || !dbMeta.modules || !dbMeta.modules.entity_contacts) {
+          console.log("Forcing metadata sync to include entity_contacts in app_metadata...");
+          await client.query(`
+            INSERT INTO app_metadata (key, value)
+            VALUES ('main_metadata', $1)
+            ON CONFLICT (key) DO UPDATE SET value = $1;
+          `, [JSON.stringify(localDefault)]);
+        }
+      } catch (err) {
+        console.error("Local default metadata auto-migration failed:", err.message);
+      }
+    }
     
     // 2. Fetch main_metadata
     const res = await client.query(`SELECT value FROM app_metadata WHERE key = 'main_metadata';`);
