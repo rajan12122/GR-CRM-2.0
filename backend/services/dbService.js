@@ -63,36 +63,10 @@ async function initializeMetadata() {
         try {
           const localMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
           let needsUpdate = false;
-          if (localMetadata && localMetadata.modules) {
-            for (const mKey of Object.keys(localMetadata.modules)) {
-              if (!metadataCache.modules || !metadataCache.modules[mKey]) {
-                console.log(`Local metadata contains new module "${mKey}" not present in PostgreSQL. Syncing...`);
-                needsUpdate = true;
-                break;
-              }
-            }
-            if (!needsUpdate) {
-              for (const mKey of Object.keys(localMetadata.modules)) {
-                const localFields = localMetadata.modules[mKey].fields || [];
-                const dbFields = metadataCache.modules?.[mKey]?.fields || [];
-                if (localFields.length !== dbFields.length) {
-                  console.log(`Local fields count for "${mKey}" differs from PostgreSQL. Syncing...`);
-                  needsUpdate = true;
-                  break;
-                }
-              }
-            }
-            if (!needsUpdate) {
-              if (JSON.stringify(localMetadata.sidebarCategories) !== JSON.stringify(metadataCache.sidebarCategories)) {
-                console.log(`Local sidebar categories differ from PostgreSQL. Syncing...`);
-                needsUpdate = true;
-              }
-            }
-            if (!needsUpdate) {
-              if (JSON.stringify(localMetadata.chips?.propertyStatus) !== JSON.stringify(metadataCache.chips?.propertyStatus)) {
-                console.log(`Local propertyStatus chips differ from PostgreSQL. Syncing...`);
-                needsUpdate = true;
-              }
+          if (localMetadata) {
+            if (JSON.stringify(localMetadata) !== JSON.stringify(metadataCache)) {
+              console.log(`Local metadata differs from PostgreSQL. Syncing...`);
+              needsUpdate = true;
             }
           }
           if (needsUpdate) {

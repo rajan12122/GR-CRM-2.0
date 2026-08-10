@@ -542,7 +542,7 @@ const ModuleManager = () => {
           }
           const stageLower = String(c.stage || '').toLowerCase();
           if (stageLower.includes('seller')) return true;
-          return properties.some(p => String(p.current_owner_id) === String(c.id) || String(p.booked_by_customer_id) === String(c.id));
+          return properties.some(p => String(p.current_owner_id) === String(c.id));
         };
 
         const sellerCusts = records.filter(isSellerCustomer);
@@ -884,7 +884,7 @@ const ModuleManager = () => {
             }
             const stageLower = String(c.stage || '').toLowerCase();
             if (stageLower.includes('seller')) return true;
-            return properties.some(p => String(p.current_owner_id) === String(c.id) || String(p.booked_by_customer_id) === String(c.id));
+            return properties.some(p => String(p.current_owner_id) === String(c.id));
           };
 
           const isSeller = isSellerCustomer(rec);

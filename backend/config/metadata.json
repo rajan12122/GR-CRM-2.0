@@ -148,7 +148,7 @@
           "label": "Pipeline Stage",
           "type": "select",
           "required": true,
-          "showInTable": true,
+          "showInTable": false,
           "editable": true,
           "chipGroup": "customerStages"
         },
