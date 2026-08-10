@@ -346,6 +346,10 @@ const ModuleManager = () => {
       fetchModuleData(moduleName);
       setErrorMsg('');
 
+      if (moduleName === 'customers' && (!moduleData.leads || moduleData.leads.length === 0)) {
+        fetchModuleData('leads').catch(() => {});
+      }
+
       // Check if we need to auto-open creation form dialog
       const params = new URLSearchParams(window.location.search);
       if (params.get('new') === 'true') {
@@ -353,7 +357,7 @@ const ModuleManager = () => {
         setFormOpen(true);
       }
     }
-  }, [moduleName, metadata]);
+  }, [moduleName, metadata, moduleData.leads]);
 
   if (!metadata) return null;
 
@@ -522,6 +526,30 @@ const ModuleManager = () => {
           }),
           createCardObj('Follow Ups', followupsCount, 'PhoneCall', '#EC4899', 'Assigned followups', stackedFilters.visitStatus === 'Assigned', () => {
             setStackedFilters({ visitStatus: 'Assigned' });
+          })
+        ];
+      }
+
+      case 'customers': {
+        const leads = moduleData.leads || [];
+        const sellerCusts = records.filter(c => {
+          const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
+          return matchingLead && (matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client');
+        });
+        const buyerCusts = records.filter(c => {
+          const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
+          return matchingLead && (matchingLead.leadType === 'Buyer' || matchingLead.leadType === 'Buyer Client');
+        });
+
+        return [
+          createCardObj('Total Customers', total, 'UserCheck', '#3B82F6', 'Total customers', Object.keys(stackedFilters).length === 0 || stackedFilters._special === 'allCustomers', () => {
+            setStackedFilters({ _special: 'allCustomers' });
+          }),
+          createCardObj('Converted from Seller', sellerCusts.length, 'Home', '#10B981', 'Seller leads', stackedFilters._special === 'sellerCusts', () => {
+            setStackedFilters({ _special: 'sellerCusts' });
+          }),
+          createCardObj('Converted from Buyer', buyerCusts.length, 'ShoppingBag', '#3B82F6', 'Buyer leads', stackedFilters._special === 'buyerCusts', () => {
+            setStackedFilters({ _special: 'buyerCusts' });
           })
         ];
       }
@@ -829,6 +857,25 @@ const ModuleManager = () => {
         if (stackedFilters._special === 'pendingLeads') {
           const isLost = rec.status === 'Lost' || rec.status === 'Dead' || rec.status === 'Closed/Lost' || rec.stage === 'Lost';
           if (isConv || isLost) return false;
+        }
+      }
+
+      // Customers Stacked Filters
+      if (moduleName === 'customers' && stackedFilters._special) {
+        if (stackedFilters._special === 'allCustomers') {
+          // Show all
+        }
+        if (stackedFilters._special === 'sellerCusts' || stackedFilters._special === 'buyerCusts') {
+          const leads = moduleData.leads || [];
+          const matchingLead = leads.find(l => String(l.id) === String(rec.leadId));
+          if (!matchingLead) return false;
+          
+          if (stackedFilters._special === 'sellerCusts') {
+            if (matchingLead.leadType !== 'Seller' && matchingLead.leadType !== 'Seller Client') return false;
+          }
+          if (stackedFilters._special === 'buyerCusts') {
+            if (matchingLead.leadType !== 'Buyer' && matchingLead.leadType !== 'Buyer Client') return false;
+          }
         }
       }
 

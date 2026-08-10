@@ -189,6 +189,26 @@ async function initializeMetadata() {
     } catch (e) {
       console.warn('Migration warning (wanted_properties.budget):', e.message);
     }
+    try {
+      await client.query('ALTER TABLE "customers" ALTER COLUMN "budget" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (customers.budget):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "follow_ups" ALTER COLUMN "pitchPrice" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (follow_ups.pitchPrice):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "property_pitch_history" ALTER COLUMN "quotedPrice" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (property_pitch_history.quotedPrice):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "property_pitch_history" ALTER COLUMN "closingPrice" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (property_pitch_history.closingPrice):', e.message);
+    }
 
     // Auto-create missing tables for modules in metadata
     await ensureModuleTablesExist(client);
