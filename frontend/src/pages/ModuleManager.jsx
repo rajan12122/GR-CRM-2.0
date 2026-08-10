@@ -536,13 +536,18 @@ const ModuleManager = () => {
         const isSellerCustomer = (c) => {
           if (c.leadId) {
             const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
-            if (matchingLead && (matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client')) {
-              return true;
+            if (matchingLead) {
+              return matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client';
             }
           }
           const stageLower = String(c.stage || '').toLowerCase();
           if (stageLower.includes('seller')) return true;
-          return properties.some(p => String(p.current_owner_id) === String(c.id));
+          if (stageLower.includes('buyer')) return false;
+          return properties.some(p => 
+            String(p.current_owner_id) === String(c.id) && 
+            p.dealer_owner_booked !== 'Booked By Us' && 
+            p.dealer_owner_booked !== 'Booked'
+          );
         };
 
         const sellerCusts = records.filter(isSellerCustomer);
@@ -878,13 +883,18 @@ const ModuleManager = () => {
           const isSellerCustomer = (c) => {
             if (c.leadId) {
               const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
-              if (matchingLead && (matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client')) {
-                return true;
+              if (matchingLead) {
+                return matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client';
               }
             }
             const stageLower = String(c.stage || '').toLowerCase();
             if (stageLower.includes('seller')) return true;
-            return properties.some(p => String(p.current_owner_id) === String(c.id));
+            if (stageLower.includes('buyer')) return false;
+            return properties.some(p => 
+              String(p.current_owner_id) === String(c.id) && 
+              p.dealer_owner_booked !== 'Booked By Us' && 
+              p.dealer_owner_booked !== 'Booked'
+            );
           };
 
           const isSeller = isSellerCustomer(rec);

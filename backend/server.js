@@ -1217,7 +1217,7 @@ async function convertLeadToCustomer(leadId, dbOrClient, remarks = '') {
         name: lead.name,
         email: lead.email || '',
         phone: cleanPhone || lead.phone,
-        stage: 'Converted Buyer Deal Closed',
+        stage: (lead.leadType === 'Seller' || lead.leadType === 'Seller Client') ? 'Active Seller' : 'Converted Buyer Deal Closed',
         assignedEmployeeId: lead.assignedEmployeeId || 'EMP-001',
         budget: lead.budget || '',
         city: lead.locality || '',
