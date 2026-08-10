@@ -142,9 +142,18 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "droppedBy" JSONB DEFAULT '[]';
     `);
 
-    // Ensure land_type column exists in properties table
+    // Ensure land_type, linkedLeadId, booked_by_customer_id, and linkedQueryId columns exist in properties table
     await client.query(`
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS "land_type" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS "linkedLeadId" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS "booked_by_customer_id" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS "linkedQueryId" TEXT;
     `);
 
     // Ensure new dealer info columns exist in wanted_properties table

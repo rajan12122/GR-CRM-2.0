@@ -479,10 +479,13 @@ const DynamicForm = ({
         if (formData.referrer_id !== undefined) {
           updated.referrer_id = formData.referrer_id;
         }
+        if (formData.source !== undefined) {
+          updated.lead_source = formData.source;
+        }
         return updated;
       });
     }
-  }, [showSellerPropertyForm, formData.name, formData.person_name, formData.phone, formData.contact_num, formData.customerId, formData.referrer_type, formData.referrer_id, moduleData.customers, moduleData.leads]);
+  }, [showSellerPropertyForm, formData.name, formData.person_name, formData.phone, formData.contact_num, formData.customerId, formData.referrer_type, formData.referrer_id, formData.source, moduleData.customers, moduleData.leads]);
 
   useEffect(() => {
     if (isSellerLead && !formData.status) {
@@ -2188,7 +2191,19 @@ const DynamicForm = ({
                     {(metadata?.modules?.properties?.fields || []).filter(f => {
                       if (f.name === 'id') return false;
                       if (f.name === 'current_owner_id') return false;
-                      if (f.name === 'source' || f.name === 'leadSource' || f.name === 'lead_source') return false;
+                      if (f.name === 'source' || f.name === 'leadSource') return false;
+                      if (f.name === 'referrer_type') return false;
+
+                      const src = formData.source || formData.lead_source || '';
+                      const isReferral = ['Employee Referral', 'Client Referral', 'Dealer Referral'].includes(src);
+
+                      if (f.name === 'referrer_id') {
+                        return isReferral;
+                      }
+                      if (f.name === 'lead_source') {
+                        return src && !isReferral;
+                      }
+
                       if (f.name === 'dealerId' || f.name === 'dealer_deal_type') {
                         return nestedPropertyData.dealer_owner_booked === 'Dealer';
                       }
