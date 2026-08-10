@@ -144,6 +144,12 @@ async function initializeMetadata() {
       ALTER TABLE wanted_properties ADD COLUMN IF NOT EXISTS "dealerAddress" TEXT;
     `);
 
+    // Ensure matchedPropertyId column exists in queries table with correct casing
+    try {
+      await client.query('ALTER TABLE queries RENAME COLUMN matchedpropertyid TO "matchedPropertyId";');
+    } catch (e) {}
+    await client.query('ALTER TABLE queries ADD COLUMN IF NOT EXISTS "matchedPropertyId" TEXT;');
+
     // Migration to change demand/budget column types to TEXT to support values like "1.5 Cr"
     try {
       await client.query('ALTER TABLE "leads" ALTER COLUMN "demand" TYPE TEXT;');

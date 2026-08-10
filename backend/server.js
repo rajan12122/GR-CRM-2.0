@@ -1751,26 +1751,41 @@ async function syncPropertyDetailsUniversally(propId, dbOrClient) {
     demand: prop.demand || ''
   };
 
-  await client.query(
-    'UPDATE leads SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7 OR id = $8',
-    [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId, prop.linkedLeadId]
-  );
+  try {
+    await client.query(
+      'UPDATE leads SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7 OR id = $8',
+      [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId, prop.linkedLeadId]
+    );
+  } catch (err) {
+    console.error('Error syncing property details to leads:', err.message);
+  }
 
-  await client.query(
-    'UPDATE customers SET city = $1, budget = $2 WHERE id = $3 OR id = $4',
-    [fieldsToSync.locality, fieldsToSync.demand, prop.current_owner_id, prop.booked_by_customer_id]
-  );
+  try {
+    await client.query(
+      'UPDATE customers SET city = $1, budget = $2 WHERE id = $3 OR id = $4',
+      [fieldsToSync.locality, fieldsToSync.demand, prop.current_owner_id, prop.booked_by_customer_id]
+    );
+  } catch (err) {
+    console.error('Error syncing property details to customers:', err.message);
+  }
 
-  await client.query(
-    'UPDATE queries SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "matchedPropertyId" = $7',
-    [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId]
-  );
+  try {
+    await client.query(
+      'UPDATE queries SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "matchedPropertyId" = $7',
+      [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId]
+    );
+  } catch (err) {
+    console.error('Error syncing property details to queries:', err.message);
+  }
 
-  await client.query(
-    'UPDATE follow_ups SET "pitchPrice" = $1 WHERE "pitchedPropertyId" = $2',
-    [fieldsToSync.demand, propId]
-  );
-  
+  try {
+    await client.query(
+      'UPDATE follow_ups SET "pitchPrice" = $1 WHERE "pitchedPropertyId" = $2',
+      [fieldsToSync.demand, propId]
+    );
+  } catch (err) {
+    console.error('Error syncing property details to follow-ups:', err.message);
+  }
 }
 
 async function syncAssignedEmployeeUniversally(sourceModule, recordId, newEmployeeId, dbOrClient) {
