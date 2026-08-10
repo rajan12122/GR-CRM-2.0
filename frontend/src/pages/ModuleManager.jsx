@@ -1104,6 +1104,7 @@ const ModuleManager = () => {
     } else {
       setErrorMsg(res.message || 'Failed to save record.');
     }
+    return res;
   };
 
   const handleInspectClick = (type, id) => {

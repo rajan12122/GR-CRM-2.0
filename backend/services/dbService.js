@@ -158,6 +158,38 @@ async function initializeMetadata() {
       ALTER TABLE wanted_properties ADD COLUMN IF NOT EXISTS "dealerAddress" TEXT;
     `);
 
+    // Migration to change demand/budget column types to TEXT to support values like "1.5 Cr"
+    try {
+      await client.query('ALTER TABLE "leads" ALTER COLUMN "demand" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (leads.demand):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "leads" ALTER COLUMN "budget" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (leads.budget):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "properties" ALTER COLUMN "demand" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (properties.demand):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "queries" ALTER COLUMN "demand" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (queries.demand):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "queries" ALTER COLUMN "budget" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (queries.budget):', e.message);
+    }
+    try {
+      await client.query('ALTER TABLE "wanted_properties" ALTER COLUMN "budget" TYPE TEXT;');
+    } catch (e) {
+      console.warn('Migration warning (wanted_properties.budget):', e.message);
+    }
+
     // Auto-create missing tables for modules in metadata
     await ensureModuleTablesExist(client);
 

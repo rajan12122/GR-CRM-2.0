@@ -794,7 +794,10 @@ const DynamicForm = ({
         payload = await resolveDirectSellerCustomer(payload);
         payload = await resolvePitchedProperty(payload);
         payload = await resolveSellerProperty(payload);
-        onSubmit(payload);
+        const res = await onSubmit(payload);
+        if (res && !res.success) {
+          setErrors({ submit: res.message || 'Failed to save record.' });
+        }
       } catch (err) {
         setErrors({ submit: err.message });
       }
