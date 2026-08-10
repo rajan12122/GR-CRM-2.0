@@ -483,8 +483,8 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
     sql += ` WHERE ` + whereClauses.join(' AND ');
   }
 
-  // Ordering to guarantee deterministic pagination results
-  sql += ` ORDER BY id ASC`;
+  // Ordering to guarantee deterministic pagination results (newest first)
+  sql += ` ORDER BY id DESC`;
 
   let limitVal = limit !== undefined && limit !== null ? parseInt(limit, 10) : null;
   let offsetVal = offset !== undefined && offset !== null ? parseInt(offset, 10) : null;
