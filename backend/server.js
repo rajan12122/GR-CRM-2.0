@@ -907,6 +907,27 @@ app.post('/api/metadata', authenticateToken, checkPermission('settings', 'edit')
       await writeMetadata(newMetadata);
     });
 
+    // Re-sync every existing row of every affected module so old records
+    // pick up the schema change immediately in Google Sheets.
+    const modulesToSync = Object.keys(newMetadata.modules || {});
+    for (const moduleName of modulesToSync) {
+      if (moduleName === 'location_tracker') continue;
+      try {
+        const countRes = await pool.query(`SELECT COUNT(*) FROM "${moduleName}"`);
+        const count = parseInt(countRes.rows[0]?.count || '0', 10);
+        if (count > 0) {
+          try {
+            await syncToSheets(moduleName);
+            console.log(`Successfully triggered sheet re-sync for "${moduleName}" after metadata update.`);
+          } catch (sheetErr) {
+            console.error(`Error re-syncing "${moduleName}" to Google Sheets:`, sheetErr.message);
+          }
+        }
+      } catch (dbErr) {
+        console.warn(`Could not check/sync table "${moduleName}" after metadata update (it may not exist yet):`, dbErr.message);
+      }
+    }
+
     notifyAllUsers('metadata-updated', { message: 'Metadata schema has been updated.' });
     res.json({ success: true, message: 'Metadata schema saved successfully and database records updated.' });
   } catch (error) {
