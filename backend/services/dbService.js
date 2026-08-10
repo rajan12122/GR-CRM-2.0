@@ -264,6 +264,25 @@ async function ensureModuleTablesExist(client) {
       const createSql = `CREATE TABLE IF NOT EXISTS "${modKey}" (\n  ${columnDefs.join(',\n  ')}\n);`;
       await client.query(createSql);
       console.log(`Successfully created table "${modKey}".`);
+    } else {
+      // Ensure all columns defined in metadata exist in the table
+      const fields = modConfig.fields || [];
+      for (const f of fields) {
+        if (f.name === 'id') continue;
+        let pgType = 'TEXT';
+        if (f.type === 'number') {
+          pgType = 'NUMERIC';
+        } else if (f.type === 'boolean' || f.type === 'checkbox') {
+          pgType = 'BOOLEAN DEFAULT false';
+        } else if (f.type === 'multiref' || f.type === 'jsonb') {
+          pgType = 'JSONB';
+        }
+        try {
+          await client.query(`ALTER TABLE "${modKey}" ADD COLUMN IF NOT EXISTS "${f.name}" ${pgType}`);
+        } catch (alterErr) {
+          console.warn(`Could not add column "${f.name}" to table "${modKey}":`, alterErr.message);
+        }
+      }
     }
   }
 }
