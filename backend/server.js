@@ -1762,7 +1762,7 @@ async function syncPropertyDetailsUniversally(propId, dbOrClient) {
   );
 
   await client.query(
-    'UPDATE queries SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "propertyId" = $7',
+    'UPDATE queries SET r_c_i = $1, "propertyType" = $2, locality = $3, sector_block = $4, size = $5, demand = $6, budget = $6 WHERE "matchedPropertyId" = $7',
     [fieldsToSync.r_c_i, fieldsToSync.propertyType, fieldsToSync.locality, fieldsToSync.sector_block, fieldsToSync.size, fieldsToSync.demand, propId]
   );
 
