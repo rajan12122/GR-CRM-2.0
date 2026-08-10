@@ -3897,13 +3897,15 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
     data.documents = docsRows.map(r => normalizeRow('documents', r));
 
     if (module === 'employees') {
-      const [attendance, leaves, customers, tasks, salaries, referrals] = await Promise.all([
+      const [attendance, leaves, customers, tasks, salaries, referrals, deals, site_visits] = await Promise.all([
         pool.query('SELECT * FROM attendance WHERE "employeeId" = $1', [id]),
         pool.query('SELECT * FROM leaves WHERE "employeeId" = $1', [id]),
         pool.query('SELECT * FROM customers WHERE "assignedEmployeeId" = $1', [id]),
         pool.query('SELECT * FROM tasks WHERE "assignedTo" = $1', [id]),
         pool.query('SELECT * FROM salaries WHERE "employeeId" = $1', [id]),
-        pool.query('SELECT * FROM leads WHERE "referrer_type" = \'employees\' AND "referrer_id" = $1', [id])
+        pool.query('SELECT * FROM leads WHERE "referrer_type" = \'employees\' AND "referrer_id" = $1', [id]),
+        pool.query('SELECT * FROM deals WHERE "employeeId" = $1', [id]),
+        pool.query('SELECT * FROM site_visits WHERE "employeeId" = $1', [id])
       ]);
 
       data.attendance = attendance.rows.map(r => normalizeRow('attendance', r));
@@ -3913,6 +3915,8 @@ app.get('/api/360/:module/:id', authenticateToken, async (req, res) => {
       data.tasks = tasks.rows.map(r => normalizeRow('tasks', r));
       data.salaries = salaries.rows.map(r => normalizeRow('salaries', r));
       data.referrals = referrals.rows.map(r => normalizeRow('leads', r));
+      data.deals = deals.rows.map(r => normalizeRow('deals', r));
+      data.site_visits = site_visits.rows.map(r => normalizeRow('site_visits', r));
       data.timeline = await generateDynamicTimeline(module, id, pool, { remarks: data.remarks });
     } else if (module === 'customers') {
       const custRes = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);

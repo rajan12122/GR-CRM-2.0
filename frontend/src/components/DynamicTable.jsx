@@ -264,6 +264,29 @@ const DynamicTable = ({
       );
     }
 
+    if (moduleKey === 'properties' && field.name === 'contact_person_name') {
+      let clickModule = null;
+      let clickId = null;
+      if (rec.dealer_owner_booked === 'Dealer' && rec.dealerId) {
+        clickModule = 'dealers';
+        clickId = rec.dealerId;
+      } else if (rec.current_owner_id) {
+        clickModule = 'customers';
+        clickId = rec.current_owner_id;
+      }
+      if (clickModule && clickId) {
+        return (
+          <Typography 
+            variant="body2" 
+            onClick={(e) => { e.stopPropagation(); onInspectClick(clickModule, clickId); }}
+            sx={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, display: 'inline' }}
+          >
+            {val}
+          </Typography>
+        );
+      }
+    }
+
     if (field.name === 'pipelineAction') {
       const allChips = [
         ...(metadata?.chips?.customerStages || []),

@@ -202,7 +202,28 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
                         >
                           {displayVal}
                         </span>
-                      ) : displayVal
+                      ) : (moduleName === 'properties' && f.name === 'contact_person_name') ? (() => {
+                        let clickModule = null;
+                        let clickId = null;
+                        if (rec.dealer_owner_booked === 'Dealer' && rec.dealerId) {
+                          clickModule = 'dealers';
+                          clickId = rec.dealerId;
+                        } else if (rec.current_owner_id) {
+                          clickModule = 'customers';
+                          clickId = rec.current_owner_id;
+                        }
+                        if (clickModule && clickId) {
+                          return (
+                            <span 
+                              style={{ color: '#2563EB', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline' }} 
+                              onClick={() => handleInspectClick(clickModule, clickId)}
+                            >
+                              {displayVal}
+                            </span>
+                          );
+                        }
+                        return displayVal;
+                      })() : displayVal
                     )}
                   </Typography>
                 </Box>

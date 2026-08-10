@@ -3038,6 +3038,40 @@ const EntityDetail = () => {
                                   ))
                                 )}
                               </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '16px', mb: 2, fontFamily: 'Poppins' }}>
+                                  Deals Closed ({connections.deals?.length || 0})
+                                </Typography>
+                                {!connections.deals || connections.deals.length === 0 ? (
+                                  <Typography variant="body2" sx={{ color: '#94A3B8' }}>No closed deals recorded.</Typography>
+                                ) : (
+                                  connections.deals.map(d => (
+                                    <Paper key={d.id} sx={{ p: 1.5, mb: 1, border: '1px solid #E2E8F0', boxShadow: 'none', cursor: 'pointer' }} onClick={() => navigate(`/module/deals/${d.id}`)}>
+                                      <Typography variant="body2" sx={{ fontWeight: 700 }}>Deal: {d.id}</Typography>
+                                      <Typography variant="caption" sx={{ color: '#64748B' }}>
+                                        Value: ₹{formatCurrency(d.purchasePrice)} • Date: {d.registrationDate} • Status: {d.status}
+                                      </Typography>
+                                    </Paper>
+                                  ))
+                                )}
+                              </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '16px', mb: 2, fontFamily: 'Poppins' }}>
+                                  Site Visits Scheduled/Handled ({connections.site_visits?.length || 0})
+                                </Typography>
+                                {!connections.site_visits || connections.site_visits.length === 0 ? (
+                                  <Typography variant="body2" sx={{ color: '#94A3B8' }}>No site visits assigned.</Typography>
+                                ) : (
+                                  connections.site_visits.map(v => (
+                                    <Paper key={v.id} sx={{ p: 1.5, mb: 1, border: '1px solid #E2E8F0', boxShadow: 'none', cursor: 'pointer' }} onClick={() => navigate(`/module/site_visits/${v.id}`)}>
+                                      <Typography variant="body2" sx={{ fontWeight: 700 }}>Visit: {v.id}</Typography>
+                                      <Typography variant="caption" sx={{ color: '#64748B' }}>
+                                        Date: {v.date} • Result: {v.result} • Time: {v.time}
+                                      </Typography>
+                                    </Paper>
+                                  ))
+                                )}
+                              </Grid>
                               <Grid item xs={12}>
                                 <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '16px', mb: 2, mt: 2, fontFamily: 'Poppins', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                   <Icons.Clock size={18} style={{ color: '#2563EB' }} />
