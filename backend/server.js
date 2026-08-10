@@ -113,7 +113,8 @@ const {
   deleteRecord,
   pool,
   normalizeRow,
-  ensurePerformanceIndexes
+  ensurePerformanceIndexes,
+  getTableColumns
 } = require('./services/dbService');
 
 // Health Check Endpoints
@@ -3553,7 +3554,7 @@ app.get('/api/search', authenticateToken, async (req, res) => {
         continue; // Skip search if role cannot view this module
       }
 
-      const cols = getTableColumns(moduleName);
+      const cols = await getTableColumns(moduleName, pool);
       const allowedCols = cols.filter(col => {
         if (userRole !== 'Admin' && metadata.fieldPermissions && metadata.fieldPermissions[userRole]) {
           const allowed = metadata.fieldPermissions[userRole][moduleName];

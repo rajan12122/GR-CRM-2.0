@@ -606,8 +606,9 @@ async function getTableColumns(moduleName, executor) {
   if (tableColumnsCache[moduleName]) {
     return tableColumnsCache[moduleName];
   }
+  const exec = executor || pool;
   try {
-    const res = await executor.query(`
+    const res = await exec.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = $1
@@ -1162,6 +1163,7 @@ module.exports = {
   runTransaction,
   generateNextId,
   handlePropertyDealerAssociation,
+  getTableColumns,
   
   // Granular functions
   getRecords,
