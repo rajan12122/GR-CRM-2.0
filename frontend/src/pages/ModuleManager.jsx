@@ -352,7 +352,7 @@ const ModuleManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [stackedFilters, setStackedFilters] = useState({});
   const [sortField, setSortField] = useState('id');
-  const [sortDirection, setSortDirection] = useState('asc');
+  const [sortDirection, setSortDirection] = useState('desc');
   const [visibleColumns, setVisibleColumns] = useState({});
   const [selectedRows, setSelectedRows] = useState([]);
 
