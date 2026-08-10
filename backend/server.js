@@ -117,22 +117,6 @@ const {
   getTableColumns
 } = require('./services/dbService');
 
-// Temporary DB Schema Endpoint
-app.get('/api/db-schema', async (req, res) => {
-  try {
-    const dbRes = await pool.query(`
-      SELECT table_name, column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name IN ('leads', 'properties', 'queries', 'wanted_properties') 
-        AND column_name IN ('demand', 'budget')
-      ORDER BY table_name, column_name;
-    `);
-    res.json(dbRes.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Health Check Endpoints
 app.get('/health', async (req, res) => {
   try {
