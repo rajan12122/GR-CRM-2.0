@@ -1602,6 +1602,10 @@ async function handlePitchStatusChange(p, dbOrClient, req) {
       updates.sellerCustomerId = sellerId || finalCustomerId;
       updated = true;
     }
+    if (finalPrice && existingDeal.purchasePrice !== finalPrice) {
+      updates.purchasePrice = finalPrice;
+      updated = true;
+    }
     if (updated) {
       const updatedDeal = await updateRecord('deals', existingDeal.id, updates, client);
       existingDeal = updatedDeal;
@@ -1965,6 +1969,14 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req) {
       const prop = propRes.rows[0];
       const sellerId = prop ? (prop.current_owner_id || '') : '';
       
+      let pitchPriceVal = f.pitchPrice || '';
+      if (!pitchPriceVal) {
+        const pitchRes = await client.query('SELECT "closingPrice", "quotedPrice" FROM property_pitch_history WHERE "linkedFollowUpId" = $1 OR ("customerId" = $2 AND "propertyId" = $3) ORDER BY created_at DESC LIMIT 1', [f.id, finalCustomerId, propId]);
+        if (pitchRes.rows[0]) {
+          pitchPriceVal = pitchRes.rows[0].closingPrice || pitchRes.rows[0].quotedPrice || '';
+        }
+      }
+
       const newDeal = {
         id: dealId,
         customerId: finalCustomerId,
@@ -1972,7 +1984,7 @@ async function handleFollowUpPipelineAction(f, dbOrClient, req) {
         propertyId: propId,
         employeeId: f.employeeId || 'EMP-001',
         status: 'Closed',
-        purchasePrice: f.pitchPrice || (prop ? (prop.demand || '') : ''),
+        purchasePrice: pitchPriceVal || (prop ? (prop.demand || '') : ''),
         registrationDate: new Date().toLocaleDateString('en-IN')
       };
       

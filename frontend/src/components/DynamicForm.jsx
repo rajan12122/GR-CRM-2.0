@@ -157,6 +157,7 @@ const DynamicForm = ({
 
     if (moduleKey === 'leads') {
       const type = formData.leadType;
+      if (f.name === 'propertyId') return false;
       if (f.name === 'assignmentStatus' || f.name === 'assignmentTime' || f.name === 'droppedBy') {
         return false;
       }
