@@ -437,10 +437,18 @@ const ModuleManager = () => {
           r.status !== 'Lost' && r.status !== 'Dead' && r.status !== 'Closed/Lost' &&
           r.stage !== 'Lost'
         );
+        const sellerLeads = records.filter(r => r.leadType === 'Seller' || r.leadType === 'Seller Client');
+        const buyerLeads = records.filter(r => r.leadType === 'Buyer' || r.leadType === 'Buyer Client');
 
         return [
           createCardObj('Total Leads', total, 'Users', '#3B82F6', 'Total leads', Object.keys(stackedFilters).length === 0 || stackedFilters._special === 'allLeads', () => {
             setStackedFilters({ _special: 'allLeads' });
+          }),
+          createCardObj('Seller Leads', sellerLeads.length, 'Home', '#10B981', 'Seller clients', stackedFilters._special === 'sellerLeads', () => {
+            setStackedFilters({ _special: 'sellerLeads' });
+          }),
+          createCardObj('Buyer Leads', buyerLeads.length, 'ShoppingBag', '#3B82F6', 'Buyer clients', stackedFilters._special === 'buyerLeads', () => {
+            setStackedFilters({ _special: 'buyerLeads' });
           }),
           createCardObj('New Leads', fresh.length, 'CheckCircle', '#22C55E', 'Created today', stackedFilters._special === 'newLeads', () => {
             setStackedFilters({ _special: 'newLeads' });
@@ -800,6 +808,12 @@ const ModuleManager = () => {
         }
         if (stackedFilters._special === 'allLeads') {
           // Show all leads (do not filter out)
+        }
+        if (stackedFilters._special === 'sellerLeads') {
+          if (rec.leadType !== 'Seller' && rec.leadType !== 'Seller Client') return false;
+        }
+        if (stackedFilters._special === 'buyerLeads') {
+          if (rec.leadType !== 'Buyer' && rec.leadType !== 'Buyer Client') return false;
         }
         if (stackedFilters._special === 'newLeads') {
           const isNew = (rec.dateAdded && rec.dateAdded === todayStr) ||
@@ -1183,16 +1197,16 @@ const ModuleManager = () => {
         </Alert>
       )}
 
-      {/* KPI Cards Row */}
       {(() => {
         const cards = getKPICards();
         if (cards.length === 0) return null;
+        const mdVal = cards.length === 5 ? 2.4 : (cards.length >= 6 ? 2 : (12 / cards.length));
         return (
           <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
             {cards.map((card, idx) => {
               const CardIcon = Icons[card.iconName] || Icons.Circle;
               return (
-                <Grid item xs={12} sm={6} md={2.4} key={idx}>
+                <Grid item xs={12} sm={6} md={mdVal} key={idx}>
                   <Card 
                     onClick={card.onClick}
                     sx={{ 
