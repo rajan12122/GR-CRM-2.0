@@ -79,7 +79,7 @@ const DynamicForm = ({
   initialData, 
   onSubmit 
 }) => {
-  const { moduleData, fetchModuleData, metadata, createRecord, user } = useApp();
+  const { moduleData, fetchModuleData, metadata, createRecord, deleteRecord, user } = useApp();
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
   const [customValues, setCustomValues] = useState({});
@@ -772,41 +772,7 @@ const DynamicForm = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (validate()) {
-      try {
-        let payload = { ...formData };
-        fields.forEach(f => {
-          if ((f.type === 'select' || f.type === 'ref') && formData[f.name] === 'Other') {
-            payload[f.name] = customValues[f.name] || '';
-          }
-          if (f.type === 'date' && payload[f.name]) {
-            const dateVal = payload[f.name];
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
-              const parts = dateVal.split('-');
-              const y = parts[0];
-              const m = String(parts[1]).padStart(2, '0');
-              const d = String(parts[2]).padStart(2, '0');
-              payload[f.name] = `${d}/${m}/${y}`;
-            }
-          }
-        });
-        payload = compileSize(payload, false);
-        payload = await resolveDealerId(payload);
-        payload = await resolveDirectSellerCustomer(payload);
-        payload = await resolvePitchedProperty(payload);
-        payload = await resolveSellerProperty(payload);
-        const res = await onSubmit(payload);
-        if (res && !res.success) {
-          setErrors({ submit: res.message || 'Failed to save record.' });
-        }
-      } catch (err) {
-        setErrors({ submit: err.message });
-      }
-    }
-  };
-
-  const handleSaveAndAddAnother = async (e) => {
-    e.preventDefault();
-    if (validate()) {
+      let newlyCreatedPropertyId = null;
       try {
         let payload = { ...formData };
         fields.forEach(f => {
@@ -830,6 +796,67 @@ const DynamicForm = ({
         payload = await resolvePitchedProperty(payload);
         payload = await resolveSellerProperty(payload);
         
+        if (payload.propertyId && !formData.propertyId) {
+          newlyCreatedPropertyId = payload.propertyId;
+        }
+
+        const res = await onSubmit(payload);
+        if (res && !res.success) {
+          setErrors({ submit: res.message || 'Failed to save record.' });
+          if (newlyCreatedPropertyId) {
+            try {
+              await deleteRecord('properties', newlyCreatedPropertyId);
+              fetchModuleData('properties');
+            } catch (delErr) {
+              console.error("Failed to rollback created property:", delErr);
+            }
+          }
+        }
+      } catch (err) {
+        setErrors({ submit: err.message });
+        if (newlyCreatedPropertyId) {
+          try {
+            await deleteRecord('properties', newlyCreatedPropertyId);
+            fetchModuleData('properties');
+          } catch (delErr) {
+            console.error("Failed to rollback created property:", delErr);
+          }
+        }
+      }
+    }
+  };
+
+  const handleSaveAndAddAnother = async (e) => {
+    e.preventDefault();
+    if (validate()) {
+      let newlyCreatedPropertyId = null;
+      try {
+        let payload = { ...formData };
+        fields.forEach(f => {
+          if ((f.type === 'select' || f.type === 'ref') && formData[f.name] === 'Other') {
+            payload[f.name] = customValues[f.name] || '';
+          }
+          if (f.type === 'date' && payload[f.name]) {
+            const dateVal = payload[f.name];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+              const parts = dateVal.split('-');
+              const y = parts[0];
+              const m = String(parts[1]).padStart(2, '0');
+              const d = String(parts[2]).padStart(2, '0');
+              payload[f.name] = `${d}/${m}/${y}`;
+            }
+          }
+        });
+        payload = compileSize(payload, false);
+        payload = await resolveDealerId(payload);
+        payload = await resolveDirectSellerCustomer(payload);
+        payload = await resolvePitchedProperty(payload);
+        payload = await resolveSellerProperty(payload);
+        
+        if (payload.propertyId && !formData.propertyId) {
+          newlyCreatedPropertyId = payload.propertyId;
+        }
+
         const res = await createRecord(moduleKey, payload);
         if (res.success) {
           // Clear all fields to let user enter next property
@@ -843,9 +870,25 @@ const DynamicForm = ({
           fetchModuleData(moduleKey);
         } else {
           setErrors({ submit: res.message || 'Failed to save record.' });
+          if (newlyCreatedPropertyId) {
+            try {
+              await deleteRecord('properties', newlyCreatedPropertyId);
+              fetchModuleData('properties');
+            } catch (delErr) {
+              console.error("Failed to rollback created property:", delErr);
+            }
+          }
         }
       } catch (err) {
         setErrors({ submit: err.message });
+        if (newlyCreatedPropertyId) {
+          try {
+            await deleteRecord('properties', newlyCreatedPropertyId);
+            fetchModuleData('properties');
+          } catch (delErr) {
+            console.error("Failed to rollback created property:", delErr);
+          }
+        }
       }
     }
   };
