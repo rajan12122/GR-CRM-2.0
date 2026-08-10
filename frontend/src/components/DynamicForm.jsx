@@ -166,6 +166,7 @@ const DynamicForm = ({
       if (type === 'Seller' || type === 'Seller Client') {
         if (f.name === 'budget') return false;
         if (f.name === 'demand') return false;
+        if (f.name === 'status') return false;
         const duplicateFields = [
           'r_c_i',
           'propertyType',
@@ -472,10 +473,25 @@ const DynamicForm = ({
           updated.contact_number = ownerPhone;
           updated._lastSyncPhone = ownerPhone;
         }
+        if (formData.referrer_type !== undefined) {
+          updated.referrer_type = formData.referrer_type;
+        }
+        if (formData.referrer_id !== undefined) {
+          updated.referrer_id = formData.referrer_id;
+        }
         return updated;
       });
     }
-  }, [showSellerPropertyForm, formData.name, formData.person_name, formData.phone, formData.contact_num, formData.customerId, moduleData.customers, moduleData.leads]);
+  }, [showSellerPropertyForm, formData.name, formData.person_name, formData.phone, formData.contact_num, formData.customerId, formData.referrer_type, formData.referrer_id, moduleData.customers, moduleData.leads]);
+
+  useEffect(() => {
+    if (isSellerLead && !formData.status) {
+      setFormData(prev => ({
+        ...prev,
+        status: 'Open'
+      }));
+    }
+  }, [isSellerLead, formData.status]);
 
   const handleNestedPropertyChange = (name, val) => {
     setNestedPropertyData(prev => {
