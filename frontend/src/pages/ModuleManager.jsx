@@ -532,14 +532,21 @@ const ModuleManager = () => {
 
       case 'customers': {
         const leads = moduleData.leads || [];
-        const sellerCusts = records.filter(c => {
-          const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
-          return matchingLead && (matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client');
-        });
-        const buyerCusts = records.filter(c => {
-          const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
-          return matchingLead && (matchingLead.leadType === 'Buyer' || matchingLead.leadType === 'Buyer Client');
-        });
+        const properties = moduleData.properties || [];
+        const isSellerCustomer = (c) => {
+          if (c.leadId) {
+            const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
+            if (matchingLead && (matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client')) {
+              return true;
+            }
+          }
+          const stageLower = String(c.stage || '').toLowerCase();
+          if (stageLower.includes('seller')) return true;
+          return properties.some(p => String(p.current_owner_id) === String(c.id) || String(p.booked_by_customer_id) === String(c.id));
+        };
+
+        const sellerCusts = records.filter(isSellerCustomer);
+        const buyerCusts = records.filter(c => !isSellerCustomer(c));
 
         return [
           createCardObj('Total Customers', total, 'UserCheck', '#3B82F6', 'Total customers', Object.keys(stackedFilters).length === 0 || stackedFilters._special === 'allCustomers', () => {
@@ -867,15 +874,22 @@ const ModuleManager = () => {
         }
         if (stackedFilters._special === 'sellerCusts' || stackedFilters._special === 'buyerCusts') {
           const leads = moduleData.leads || [];
-          const matchingLead = leads.find(l => String(l.id) === String(rec.leadId));
-          if (!matchingLead) return false;
-          
-          if (stackedFilters._special === 'sellerCusts') {
-            if (matchingLead.leadType !== 'Seller' && matchingLead.leadType !== 'Seller Client') return false;
-          }
-          if (stackedFilters._special === 'buyerCusts') {
-            if (matchingLead.leadType !== 'Buyer' && matchingLead.leadType !== 'Buyer Client') return false;
-          }
+          const properties = moduleData.properties || [];
+          const isSellerCustomer = (c) => {
+            if (c.leadId) {
+              const matchingLead = leads.find(l => String(l.id) === String(c.leadId));
+              if (matchingLead && (matchingLead.leadType === 'Seller' || matchingLead.leadType === 'Seller Client')) {
+                return true;
+              }
+            }
+            const stageLower = String(c.stage || '').toLowerCase();
+            if (stageLower.includes('seller')) return true;
+            return properties.some(p => String(p.current_owner_id) === String(c.id) || String(p.booked_by_customer_id) === String(c.id));
+          };
+
+          const isSeller = isSellerCustomer(rec);
+          if (stackedFilters._special === 'sellerCusts' && !isSeller) return false;
+          if (stackedFilters._special === 'buyerCusts' && isSeller) return false;
         }
       }
 
