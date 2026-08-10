@@ -79,7 +79,7 @@ const DynamicForm = ({
   initialData, 
   onSubmit 
 }) => {
-  const { moduleData, fetchModuleData, metadata, createRecord, deleteRecord, user } = useApp();
+  const { moduleData, fetchModuleData, metadata, createRecord, updateRecord, deleteRecord, user } = useApp();
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
   const [customValues, setCustomValues] = useState({});
@@ -754,9 +754,17 @@ const DynamicForm = ({
         date: new Date().toLocaleDateString('en-IN')
       };
       
-      const propRes = await createRecord('properties', propPayload);
+      let propRes;
+      if (payload.propertyId) {
+        propRes = await updateRecord('properties', payload.propertyId, propPayload);
+      } else if (nestedPropertyData.id) {
+        propRes = await updateRecord('properties', nestedPropertyData.id, propPayload);
+      } else {
+        propRes = await createRecord('properties', propPayload);
+      }
+
       if (propRes.success) {
-        payload.propertyId = propRes.data.id;
+        payload.propertyId = propRes.data?.id || payload.propertyId || nestedPropertyData.id;
         payload.r_c_i = nestedPropertyData.r_c_i || '';
         payload.propertyType = nestedPropertyData.propertyType || '';
         payload.locality = nestedPropertyData.locality || '';
@@ -766,7 +774,7 @@ const DynamicForm = ({
         payload.dealer_owner_booked = nestedPropertyData.dealer_owner_booked || 'Direct';
         fetchModuleData('properties');
       } else {
-        throw new Error(propRes.message || "Failed to auto-create seller property");
+        throw new Error(propRes.message || "Failed to auto-create/update seller property");
       }
     }
     return payload;

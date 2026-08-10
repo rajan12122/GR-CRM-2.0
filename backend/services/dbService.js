@@ -111,9 +111,12 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "assignmentTime" TEXT;
     `);
 
-    // Ensure droppedBy column exists in leads table
+    // Ensure droppedBy and propertyId columns exist in leads table
     await client.query(`
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "droppedBy" JSONB DEFAULT '[]';
+    `);
+    await client.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS "propertyId" TEXT;
     `);
 
     // Ensure land_type, linkedLeadId, booked_by_customer_id, and linkedQueryId columns exist in properties table

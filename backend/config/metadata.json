@@ -374,6 +374,15 @@
           "required": false,
           "showInTable": false,
           "editable": true
+        },
+        {
+          "name": "propertyId",
+          "label": "Associated Property",
+          "type": "ref",
+          "refModule": "properties",
+          "required": false,
+          "showInTable": false,
+          "editable": true
         }
       ]
     },
