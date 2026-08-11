@@ -329,12 +329,23 @@ app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
     return res.status(400).json({ message: 'Email/Phone and password required.' });
   }
 
-  pool.query(
-    `SELECT * FROM employees 
-     WHERE LOWER(email) = LOWER($1) 
-        OR regexp_replace(phone, '[^0-9]', '', 'g') = regexp_replace($2, '[^0-9]', '', 'g')`,
-    [email, email]
-  ).then(result => {
+  let query = 'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)';
+  let queryParams = [email];
+
+  const digits = String(email).replace(/[^0-9]/g, '');
+  if (digits.length >= 7) {
+    const phoneSuffix = digits.slice(-10);
+    query = `
+      SELECT * FROM employees 
+      WHERE LOWER(email) = LOWER($1) 
+         OR phone = $2 
+         OR phone = $3
+         OR phone LIKE $4
+    `;
+    queryParams = [email, email, digits, '%' + phoneSuffix];
+  }
+
+  pool.query(query, queryParams).then(result => {
     const employee = result.rows[0];
     if (!employee) {
       return res.status(401).json({ message: 'Invalid credentials.' });
@@ -370,29 +381,33 @@ app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
       status: employee.status
     };
 
-    // Asynchronously log login details (device, location, time)
-    const ua = req.headers['user-agent'] || '';
-    const device = parseUserAgent(ua);
-    
-    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
-    if (ip && ip.includes(',')) {
-      ip = ip.split(',')[0].trim();
-    }
-    if (ip && ip.startsWith('::ffff:')) {
-      ip = ip.substring(7);
-    }
-    
-    getIpLocation(ip).then(location => {
-      const loginTime = new Date().toISOString();
-      pool.query(
-        'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
-        [device, location, loginTime, employee.id]
-      ).catch(dbErr => {
-        console.error('Error updating login details on employee:', dbErr.message);
+    // Send response instantly
+    res.json({ token, user: sanitizedUser });
+
+    // Asynchronously log login details (device, location, time) AFTER response is flushed
+    setImmediate(() => {
+      const ua = req.headers['user-agent'] || '';
+      const device = parseUserAgent(ua);
+      
+      let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
+      if (ip && ip.includes(',')) {
+        ip = ip.split(',')[0].trim();
+      }
+      if (ip && ip.startsWith('::ffff:')) {
+        ip = ip.substring(7);
+      }
+      
+      getIpLocation(ip).then(location => {
+        const loginTime = new Date().toISOString();
+        pool.query(
+          'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
+          [device, location, loginTime, employee.id]
+        ).catch(dbErr => {
+          console.error('Error updating login details on employee:', dbErr.message);
+        });
       });
     });
 
-    res.json({ token, user: sanitizedUser });
   }).catch(err => {
     console.error('Login database error:', err);
     res.status(500).json({ message: 'Database error during login.' });
@@ -404,29 +419,33 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const employee = await getRecord('employees', req.user.id);
     if (!employee) return res.status(404).json({ message: 'Profile not found.' });
 
-    // Asynchronously update login details (device, location, time) on profile fetch/verification
-    const ua = req.headers['user-agent'] || '';
-    const device = parseUserAgent(ua);
-    
-    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
-    if (ip && ip.includes(',')) {
-      ip = ip.split(',')[0].trim();
-    }
-    if (ip && ip.startsWith('::ffff:')) {
-      ip = ip.substring(7);
-    }
-    
-    getIpLocation(ip).then(location => {
-      const loginTime = new Date().toISOString();
-      pool.query(
-        'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
-        [device, location, loginTime, employee.id]
-      ).catch(dbErr => {
-        console.error('Error updating login details on employee profile fetch:', dbErr.message);
+    // Send response instantly
+    res.json(employee);
+
+    // Asynchronously update login details (device, location, time) on profile fetch/verification AFTER response is flushed
+    setImmediate(() => {
+      const ua = req.headers['user-agent'] || '';
+      const device = parseUserAgent(ua);
+      
+      let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
+      if (ip && ip.includes(',')) {
+        ip = ip.split(',')[0].trim();
+      }
+      if (ip && ip.startsWith('::ffff:')) {
+        ip = ip.substring(7);
+      }
+      
+      getIpLocation(ip).then(location => {
+        const loginTime = new Date().toISOString();
+        pool.query(
+          'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
+          [device, location, loginTime, employee.id]
+        ).catch(dbErr => {
+          console.error('Error updating login details on employee profile fetch:', dbErr.message);
+        });
       });
     });
 
-    res.json(employee);
   } catch (err) {
     console.error('Get profile database error:', err);
     res.status(500).json({ message: 'Database error fetching profile.' });
