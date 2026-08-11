@@ -2254,11 +2254,18 @@ const Settings = () => {
                               </Box>
                             </TableCell>
                             <TableCell sx={{ py: 1.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Icons.MapPin size={16} style={{ color: '#EF4444' }} />
-                                <Typography variant="body2" sx={{ fontSize: '13px' }}>
-                                  {emp.lastLoginLocation || 'No location info'}
-                                </Typography>
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Icons.MapPin size={16} style={{ color: '#EF4444' }} />
+                                  <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                                    {emp.lastLoginLocation || 'No location info'}
+                                  </Typography>
+                                </Box>
+                                {emp.lastLoginIp && (
+                                  <Typography variant="caption" sx={{ color: '#64748B', fontSize: '11px', pl: 3.2, fontWeight: 500 }}>
+                                    IP: {emp.lastLoginIp}
+                                  </Typography>
+                                )}
                               </Box>
                             </TableCell>
                             <TableCell sx={{ py: 1.5 }}>

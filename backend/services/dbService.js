@@ -121,6 +121,9 @@ async function initializeMetadata() {
     try {
       await client.query('ALTER TABLE employees RENAME COLUMN lastlogintime TO "lastLoginTime";');
     } catch (e) {}
+    try {
+      await client.query('ALTER TABLE employees RENAME COLUMN lastloginip TO "lastLoginIp";');
+    } catch (e) {}
 
     await client.query(`
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginDevice" TEXT;
@@ -130,6 +133,9 @@ async function initializeMetadata() {
     `);
     await client.query(`
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginTime" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginIp" TEXT;
     `);
 
     // Ensure droppedBy and propertyId columns exist in leads table

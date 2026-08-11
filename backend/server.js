@@ -271,11 +271,46 @@ function parseUserAgent(ua) {
   if (!ua) return 'Unknown Device';
   
   let os = 'Unknown OS';
-  if (ua.includes('Windows')) os = 'Windows';
-  else if (ua.includes('Macintosh') || ua.includes('Mac OS') || ua.includes('Mac OS X')) os = 'macOS';
-  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-  else if (ua.includes('Android')) os = 'Android';
-  else if (ua.includes('Linux')) os = 'Linux';
+  let model = '';
+  
+  if (ua.includes('Windows')) {
+    os = 'Windows';
+  } else if (ua.includes('Macintosh') || ua.includes('Mac OS') || ua.includes('Mac OS X')) {
+    os = 'macOS';
+  } else if (ua.includes('iPhone')) {
+    os = 'iOS';
+    model = 'iPhone';
+  } else if (ua.includes('iPad')) {
+    os = 'iOS';
+    model = 'iPad';
+  } else if (ua.includes('Android')) {
+    os = 'Android';
+    // Try to extract Android model name from User Agent parentheses
+    // Mozilla/5.0 (Linux; Android 10; SM-G960F Build/QP1A.190711.020; wv) ...
+    const match = ua.match(/\(([^)]+)\)/);
+    if (match && match[1]) {
+      const parts = match[1].split(';');
+      const androidIdx = parts.findIndex(p => p.includes('Android'));
+      if (androidIdx > -1 && parts[androidIdx + 1]) {
+        const potentialModel = parts[androidIdx + 1].trim();
+        if (!potentialModel.includes('Linux') && !potentialModel.includes('Build') && potentialModel.length > 2) {
+          model = potentialModel;
+        }
+      }
+      if (!model) {
+        // Fallback: look for a part with 'Build/'
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (trimmed.includes('Build/')) {
+            model = trimmed.split('Build/')[0].trim();
+            break;
+          }
+        }
+      }
+    }
+  } else if (ua.includes('Linux')) {
+    os = 'Linux';
+  }
   
   let browser = 'Unknown Browser';
   if (ua.includes('Firefox')) browser = 'Firefox';
@@ -284,7 +319,8 @@ function parseUserAgent(ua) {
   else if (ua.includes('Edge') || ua.includes('Edg')) browser = 'Edge';
   else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera';
   
-  return `${os} (${browser})`;
+  const osDisplay = model ? `${os} (${model})` : os;
+  return `${osDisplay} - ${browser}`;
 }
 
 function getIpLocation(ip) {
@@ -400,8 +436,8 @@ app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
       getIpLocation(ip).then(location => {
         const loginTime = new Date().toISOString();
         pool.query(
-          'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
-          [device, location, loginTime, employee.id]
+          'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3, "lastLoginIp" = $4 WHERE id = $5',
+          [device, location, loginTime, ip, employee.id]
         ).catch(dbErr => {
           console.error('Error updating login details on employee:', dbErr.message);
         });
@@ -438,8 +474,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       getIpLocation(ip).then(location => {
         const loginTime = new Date().toISOString();
         pool.query(
-          'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
-          [device, location, loginTime, employee.id]
+          'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3, "lastLoginIp" = $4 WHERE id = $5',
+          [device, location, loginTime, ip, employee.id]
         ).catch(dbErr => {
           console.error('Error updating login details on employee profile fetch:', dbErr.message);
         });
