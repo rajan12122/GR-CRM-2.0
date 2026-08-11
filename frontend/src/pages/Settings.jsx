@@ -1201,6 +1201,10 @@ const Settings = () => {
                   <Icons.Lock size={18} style={{ marginRight: 10 }} />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>Reset Passwords</Typography>
                 </ListItem>
+                <ListItem button onClick={() => setActiveTab('devices')} selected={activeTab === 'devices'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'devices' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'devices' ? '#2563EB' : '#4B5563' }}>
+                  <Icons.Smartphone size={18} style={{ marginRight: 10 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Login Devices & Location</Typography>
+                </ListItem>
                 <ListItem button onClick={() => setActiveTab('sheets')} selected={activeTab === 'sheets'} sx={{ borderRadius: '8px', mb: 0.5, py: 1.5, backgroundColor: activeTab === 'sheets' ? 'rgba(37,99,235,0.08) !important' : 'transparent', color: activeTab === 'sheets' ? '#2563EB' : '#4B5563' }}>
                   <Icons.FileSpreadsheet size={18} style={{ marginRight: 10 }} />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>Google Sheets Config</Typography>
@@ -2191,6 +2195,82 @@ const Settings = () => {
                       </Button>
                     </Grid>
                   </Grid>
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TAB: LOGIN DEVICES & LOCATIONS */}
+          {activeTab === 'devices' && (
+            <Card sx={{ border: '1px solid #E2E8F0', borderRadius: '16px' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, fontSize: '20px', fontFamily: 'Poppins', mb: 1 }}>
+                  Login Devices & Locations
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748B', mb: 3 }}>
+                  Monitor the last login device, browser, IP address, and location for each employee account.
+                </Typography>
+
+                <Box sx={{ overflowX: 'auto' }}>
+                  <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                    <Table size="small">
+                      <TableHead sx={{ backgroundColor: '#F8FAFC' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Employee ID</TableCell>
+                          <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Employee Name</TableCell>
+                          <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Role</TableCell>
+                          <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Last Login Device</TableCell>
+                          <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Last Login Location</TableCell>
+                          <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Last Login Time</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {(moduleData.employees || []).map((emp) => (
+                          <TableRow key={emp.id} hover>
+                            <TableCell sx={{ py: 1.5, fontWeight: 600 }}>{emp.id}</TableCell>
+                            <TableCell sx={{ py: 1.5 }}>{emp.name}</TableCell>
+                            <TableCell sx={{ py: 1.5 }}>
+                              <Chip 
+                                label={emp.role} 
+                                size="small" 
+                                sx={{ 
+                                  fontWeight: 600, 
+                                  fontSize: '11px',
+                                  backgroundColor: emp.role === 'Admin' ? '#EEF2FF' : '#F1F5F9',
+                                  color: emp.role === 'Admin' ? '#4F46E5' : '#475569'
+                                }} 
+                              />
+                            </TableCell>
+                            <TableCell sx={{ py: 1.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {emp.lastLoginDevice?.toLowerCase().includes('phone') || emp.lastLoginDevice?.toLowerCase().includes('mobile') || emp.lastLoginDevice?.toLowerCase().includes('android') || emp.lastLoginDevice?.toLowerCase().includes('iphone') ? (
+                                  <Icons.Smartphone size={16} style={{ color: '#64748B' }} />
+                                ) : (
+                                  <Icons.Monitor size={16} style={{ color: '#64748B' }} />
+                                )}
+                                <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                                  {emp.lastLoginDevice || 'No device info'}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ py: 1.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Icons.MapPin size={16} style={{ color: '#EF4444' }} />
+                                <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                                  {emp.lastLoginLocation || 'No location info'}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ py: 1.5 }}>
+                              <Typography variant="body2" sx={{ fontSize: '13px', color: '#64748B' }}>
+                                {emp.lastLoginTime ? new Date(emp.lastLoginTime).toLocaleString('en-IN') : 'Never'}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 </Box>
               </CardContent>
             </Card>

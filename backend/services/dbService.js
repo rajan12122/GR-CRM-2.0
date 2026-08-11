@@ -111,6 +111,17 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "assignmentTime" TEXT;
     `);
 
+    // Ensure login tracking columns exist in employees table
+    await client.query(`
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginDevice" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginLocation" TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginTime" TEXT;
+    `);
+
     // Ensure droppedBy and propertyId columns exist in leads table
     await client.query(`
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "droppedBy" JSONB DEFAULT '[]';

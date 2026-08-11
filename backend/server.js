@@ -267,6 +267,42 @@ function checkPermission(moduleName, action) {
 
 // --- AUTHENTICATION ROUTES ---
 
+function parseUserAgent(ua) {
+  if (!ua) return 'Unknown Device';
+  
+  let os = 'Unknown OS';
+  if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Macintosh') || ua.includes('Mac OS') || ua.includes('Mac OS X')) os = 'macOS';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('Linux')) os = 'Linux';
+  
+  let browser = 'Unknown Browser';
+  if (ua.includes('Firefox')) browser = 'Firefox';
+  else if (ua.includes('Chrome') && !ua.includes('Chromium')) browser = 'Chrome';
+  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+  else if (ua.includes('Edge') || ua.includes('Edg')) browser = 'Edge';
+  else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera';
+  
+  return `${os} (${browser})`;
+}
+
+async function getIpLocation(ip) {
+  if (!ip || ip === '::1' || ip === '127.0.0.1' || ip.startsWith('10.') || ip.startsWith('192.168.')) {
+    return 'Local/Private Network';
+  }
+  try {
+    const res = await fetch(`http://ip-api.com/json/${ip}`, { signal: AbortSignal.timeout(2000) });
+    const data = await res.json();
+    if (data && data.status === 'success') {
+      return `${data.city}, ${data.regionName}, ${data.country}`;
+    }
+  } catch (err) {
+    console.error('IP geocoding error:', err.message);
+  }
+  return ip;
+}
+
 app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -308,6 +344,28 @@ app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
       role: employee.role,
       status: employee.status
     };
+
+    // Asynchronously log login details (device, location, time)
+    const ua = req.headers['user-agent'] || '';
+    const device = parseUserAgent(ua);
+    
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
+    if (ip && ip.includes(',')) {
+      ip = ip.split(',')[0].trim();
+    }
+    if (ip && ip.startsWith('::ffff:')) {
+      ip = ip.substring(7);
+    }
+    
+    getIpLocation(ip).then(location => {
+      const loginTime = new Date().toISOString();
+      pool.query(
+        'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
+        [device, location, loginTime, employee.id]
+      ).catch(dbErr => {
+        console.error('Error updating login details on employee:', dbErr.message);
+      });
+    });
 
     res.json({ token, user: sanitizedUser });
   }).catch(err => {
