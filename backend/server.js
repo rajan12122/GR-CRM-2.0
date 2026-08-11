@@ -287,20 +287,40 @@ function parseUserAgent(ua) {
   return `${os} (${browser})`;
 }
 
-async function getIpLocation(ip) {
-  if (!ip || ip === '::1' || ip === '127.0.0.1' || ip.startsWith('10.') || ip.startsWith('192.168.')) {
-    return 'Local/Private Network';
-  }
-  try {
-    const res = await fetch(`http://ip-api.com/json/${ip}`, { signal: AbortSignal.timeout(2000) });
-    const data = await res.json();
-    if (data && data.status === 'success') {
-      return `${data.city}, ${data.regionName}, ${data.country}`;
+function getIpLocation(ip) {
+  return new Promise((resolve) => {
+    if (!ip || ip === '::1' || ip === '127.0.0.1' || ip.startsWith('10.') || ip.startsWith('192.168.')) {
+      return resolve('Local/Private Network');
     }
-  } catch (err) {
-    console.error('IP geocoding error:', err.message);
-  }
-  return ip;
+    
+    const http = require('http');
+    const req = http.get(`http://ip-api.com/json/${ip}`, { timeout: 2000 }, (res) => {
+      let rawData = '';
+      res.on('data', (chunk) => { rawData += chunk; });
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(rawData);
+          if (data && data.status === 'success') {
+            resolve(`${data.city}, ${data.regionName}, ${data.country}`);
+          } else {
+            resolve(ip);
+          }
+        } catch (e) {
+          resolve(ip);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('IP geocoding error:', err.message);
+      resolve(ip);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(ip);
+    });
+  });
 }
 
 app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {

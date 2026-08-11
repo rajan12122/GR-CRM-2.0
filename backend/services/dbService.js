@@ -111,7 +111,17 @@ async function initializeMetadata() {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS "assignmentTime" TEXT;
     `);
 
-    // Ensure login tracking columns exist in employees table
+    // Ensure login tracking columns exist in employees table with correct casing
+    try {
+      await client.query('ALTER TABLE employees RENAME COLUMN lastlogindevice TO "lastLoginDevice";');
+    } catch (e) {}
+    try {
+      await client.query('ALTER TABLE employees RENAME COLUMN lastloginlocation TO "lastLoginLocation";');
+    } catch (e) {}
+    try {
+      await client.query('ALTER TABLE employees RENAME COLUMN lastlogintime TO "lastLoginTime";');
+    } catch (e) {}
+
     await client.query(`
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS "lastLoginDevice" TEXT;
     `);
