@@ -509,7 +509,7 @@ async function getRecords(moduleName, dbOrClient, options = {}) {
   }
 
   // Ordering to guarantee deterministic pagination results (newest first)
-  sql += ` ORDER BY id DESC`;
+  sql += ` ORDER BY created_at DESC, id DESC`;
 
   let limitVal = limit !== undefined && limit !== null ? parseInt(limit, 10) : null;
   let offsetVal = offset !== undefined && offset !== null ? parseInt(offset, 10) : null;
