@@ -5309,25 +5309,31 @@ const EntityDetail = () => {
         }}
         sx={{
           position: 'fixed',
-          bottom: 96,
-          right: 24,
+          bottom: { xs: 80, md: 96 },
+          right: { xs: 16, md: 24 },
           backgroundColor: '#2563EB',
           color: '#FFFFFF',
           textTransform: 'none',
-          borderRadius: '24px',
-          px: 3,
+          borderRadius: { xs: '50%', md: '24px' },
+          minWidth: { xs: 48, md: 120 },
+          width: { xs: 48, md: 'auto' },
+          height: { xs: 48, md: 'auto' },
           boxShadow: '0px 4px 20px rgba(37, 99, 235, 0.4)',
           '&:hover': { 
             backgroundColor: '#1D4ED8',
             boxShadow: '0px 6px 24px rgba(37, 99, 235, 0.6)'
           },
           transition: 'all 0.2s ease-in-out',
-          zIndex: 1201
+          zIndex: 1201,
+          p: { xs: 0, md: '0 20px' }
         }}
-        variant="extended"
       >
-        <Icons.PhoneCall size={18} style={{ marginRight: 8 }} />
-        Call Punch
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 0, md: 1 } }}>
+          <Icons.PhoneCall size={18} />
+          <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontWeight: 700 }}>
+            Call Punch
+          </Box>
+        </Box>
       </Fab>
 
       {formOpen && (
