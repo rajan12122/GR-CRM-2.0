@@ -326,10 +326,15 @@ function getIpLocation(ip) {
 app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password required.' });
+    return res.status(400).json({ message: 'Email/Phone and password required.' });
   }
 
-  pool.query('SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]).then(result => {
+  pool.query(
+    `SELECT * FROM employees 
+     WHERE LOWER(email) = LOWER($1) 
+        OR regexp_replace(phone, '[^0-9]', '', 'g') = regexp_replace($2, '[^0-9]', '', 'g')`,
+    [email, email]
+  ).then(result => {
     const employee = result.rows[0];
     if (!employee) {
       return res.status(401).json({ message: 'Invalid credentials.' });
@@ -398,6 +403,29 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const employee = await getRecord('employees', req.user.id);
     if (!employee) return res.status(404).json({ message: 'Profile not found.' });
+
+    // Asynchronously update login details (device, location, time) on profile fetch/verification
+    const ua = req.headers['user-agent'] || '';
+    const device = parseUserAgent(ua);
+    
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
+    if (ip && ip.includes(',')) {
+      ip = ip.split(',')[0].trim();
+    }
+    if (ip && ip.startsWith('::ffff:')) {
+      ip = ip.substring(7);
+    }
+    
+    getIpLocation(ip).then(location => {
+      const loginTime = new Date().toISOString();
+      pool.query(
+        'UPDATE employees SET "lastLoginDevice" = $1, "lastLoginLocation" = $2, "lastLoginTime" = $3 WHERE id = $4',
+        [device, location, loginTime, employee.id]
+      ).catch(dbErr => {
+        console.error('Error updating login details on employee profile fetch:', dbErr.message);
+      });
+    });
+
     res.json(employee);
   } catch (err) {
     console.error('Get profile database error:', err);

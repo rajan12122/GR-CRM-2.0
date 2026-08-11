@@ -66,29 +66,34 @@ const Header = ({ onSearchClick, onMenuClick, onReload }) => {
     return (
       <AppBar position="sticky" sx={{ zIndex: 1100, backgroundColor: '#FFFFFF', borderBottom: '1px solid #E2E8F0', boxShadow: 'none' }}>
         <Toolbar sx={{ px: 2, display: 'flex', justifyContent: 'space-between', minHeight: 65 }}>
-          {/* Left: Avatar + Greeting */}
-          <Box display="flex" alignItems="center" gap={1.5} onClick={() => navigate('/settings')} sx={{ cursor: 'pointer' }}>
-            <Box sx={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              backgroundColor: '#2563EB',
-              color: '#FFFFFF',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              fontWeight: 700,
-              fontFamily: 'Poppins'
-            }}>
-              {user?.name ? user.name[0].toUpperCase() : 'U'}
-            </Box>
-            <Box>
-              <Typography variant="caption" sx={{ color: '#64748B', display: 'block', lineHeight: 1.1 }}>
-                Welcome Back,
-              </Typography>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', fontFamily: 'Poppins', lineHeight: 1.1 }}>
-                {user?.name?.split(' ')[0] || 'User'}
-              </Typography>
+          {/* Left: Hamburger + Avatar + Greeting */}
+          <Box display="flex" alignItems="center" gap={1}>
+            <IconButton onClick={onMenuClick} sx={{ color: '#475569', p: 0.5 }}>
+              <Icons.Menu size={20} />
+            </IconButton>
+            <Box display="flex" alignItems="center" gap={1.5} onClick={() => navigate('/settings')} sx={{ cursor: 'pointer' }}>
+              <Box sx={{
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                backgroundColor: '#2563EB',
+                color: '#FFFFFF',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                fontWeight: 700,
+                fontFamily: 'Poppins'
+              }}>
+                {user?.name ? user.name[0].toUpperCase() : 'U'}
+              </Box>
+              <Box>
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', lineHeight: 1.1 }}>
+                  Welcome Back,
+                </Typography>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0F172A', fontFamily: 'Poppins', lineHeight: 1.1 }}>
+                  {user?.name?.split(' ')[0] || 'User'}
+                </Typography>
+              </Box>
             </Box>
           </Box>
 
