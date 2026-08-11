@@ -130,10 +130,10 @@ const Auth = () => {
               <form onSubmit={handleSubmit}>
                 <Box mb={2.5}>
                   <Typography variant="body2" sx={{ color: '#E2E8F0', fontWeight: 600, mb: 1 }}>
-                    Registered Email Address
+                    Email Address or Phone Number
                   </Typography>
                   <TextField
-                    placeholder="name@gaganrealtech.com"
+                    placeholder="email or registered phone number"
                     fullWidth
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
