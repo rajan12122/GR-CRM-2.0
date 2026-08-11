@@ -12,11 +12,70 @@ export const API_BASE_URL = Capacitor.isNativePlatform()
       ? 'http://localhost:5000/api'
       : 'https://gr-crm-backend.onrender.com/api');
 
-// Set default auth token header if cached
+// Helper to detect specific device models on the client side (especially iOS where userAgent is generic)
+const getDeviceModel = () => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return '';
+  const ua = navigator.userAgent;
+  
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    const width = window.screen.width;
+    const height = window.screen.height;
+    const ratio = window.devicePixelRatio;
+    
+    if (width === 430 && height === 932) return "iPhone 15 Pro Max / 16 Plus";
+    if (width === 393 && height === 852) return "iPhone 15 / 15 Pro / 16";
+    if (width === 428 && height === 926) return "iPhone 13 Pro Max / 14 Plus";
+    if (width === 390 && height === 844) return "iPhone 13 / 13 Pro / 14";
+    if (width === 414 && height === 896) {
+      return ratio === 3 ? "iPhone 11 Pro Max / XS Max" : "iPhone 11 / XR";
+    }
+    if (width === 375 && height === 812) return "iPhone 11 Pro / XS / X";
+    if (width === 375 && height === 667) return "iPhone SE (2nd/3rd Gen) / 8 / 7";
+    if (width === 440 && height === 956) return "iPhone 16 Pro Max";
+    if (width === 402 && height === 874) return "iPhone 16 Pro";
+    
+    return "iPhone";
+  }
+  
+  if (/Android/.test(ua)) {
+    const match = ua.match(/\(([^)]+)\)/);
+    if (match && match[1]) {
+      const parts = match[1].split(';');
+      const androidIdx = parts.findIndex(p => p.includes('Android'));
+      let model = "";
+      if (androidIdx > -1 && parts[androidIdx + 1]) {
+        const potentialModel = parts[androidIdx + 1].trim();
+        if (!potentialModel.includes('Linux') && !potentialModel.includes('Build') && potentialModel.length > 2) {
+          model = potentialModel;
+        }
+      }
+      if (!model) {
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (trimmed.includes('Build/')) {
+            model = trimmed.split('Build/')[0].trim();
+            break;
+          }
+        }
+      }
+      if (model) return model;
+    }
+    return "Android Device";
+  }
+  
+  if (ua.includes('Windows')) return "Windows PC";
+  if (ua.includes('Macintosh')) return "MacBook / iMac";
+  if (ua.includes('Linux')) return "Linux PC";
+  
+  return "";
+};
+
+// Set default auth token header if cached and client device model
 const cachedToken = localStorage.getItem('gr_crm_token');
 if (cachedToken) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${cachedToken}`;
 }
+axios.defaults.headers.common['x-client-device-model'] = getDeviceModel();
 
 export const AppProvider = ({ children }) => {
   const [token, setToken] = useState(cachedToken);

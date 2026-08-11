@@ -267,11 +267,11 @@ function checkPermission(moduleName, action) {
 
 // --- AUTHENTICATION ROUTES ---
 
-function parseUserAgent(ua) {
-  if (!ua) return 'Unknown Device';
+function parseUserAgent(ua, clientModel = '') {
+  if (!ua) return clientModel || 'Unknown Device';
   
   let os = 'Unknown OS';
-  let model = '';
+  let model = clientModel || '';
   
   if (ua.includes('Windows')) {
     os = 'Windows';
@@ -279,37 +279,112 @@ function parseUserAgent(ua) {
     os = 'macOS';
   } else if (ua.includes('iPhone')) {
     os = 'iOS';
-    model = 'iPhone';
+    if (!model) model = 'iPhone';
   } else if (ua.includes('iPad')) {
     os = 'iOS';
-    model = 'iPad';
+    if (!model) model = 'iPad';
   } else if (ua.includes('Android')) {
     os = 'Android';
-    // Try to extract Android model name from User Agent parentheses
-    // Mozilla/5.0 (Linux; Android 10; SM-G960F Build/QP1A.190711.020; wv) ...
-    const match = ua.match(/\(([^)]+)\)/);
-    if (match && match[1]) {
-      const parts = match[1].split(';');
-      const androidIdx = parts.findIndex(p => p.includes('Android'));
-      if (androidIdx > -1 && parts[androidIdx + 1]) {
-        const potentialModel = parts[androidIdx + 1].trim();
-        if (!potentialModel.includes('Linux') && !potentialModel.includes('Build') && potentialModel.length > 2) {
-          model = potentialModel;
+    if (!model) {
+      // Try to extract Android model name from User Agent parentheses
+      const match = ua.match(/\(([^)]+)\)/);
+      if (match && match[1]) {
+        const parts = match[1].split(';');
+        const androidIdx = parts.findIndex(p => p.includes('Android'));
+        if (androidIdx > -1 && parts[androidIdx + 1]) {
+          const potentialModel = parts[androidIdx + 1].trim();
+          if (!potentialModel.includes('Linux') && !potentialModel.includes('Build') && potentialModel.length > 2) {
+            model = potentialModel;
+          }
         }
-      }
-      if (!model) {
-        // Fallback: look for a part with 'Build/'
-        for (const part of parts) {
-          const trimmed = part.trim();
-          if (trimmed.includes('Build/')) {
-            model = trimmed.split('Build/')[0].trim();
-            break;
+        if (!model) {
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (trimmed.includes('Build/')) {
+              model = trimmed.split('Build/')[0].trim();
+              break;
+            }
           }
         }
       }
     }
   } else if (ua.includes('Linux')) {
     os = 'Linux';
+  }
+
+  // Map raw model numbers to friendly device names
+  if (model) {
+    const modelMap = {
+      // Samsung Galaxy S24 Series
+      'SM-S928': 'Samsung Galaxy S24 Ultra',
+      'SM-S926': 'Samsung Galaxy S24+',
+      'SM-S921': 'Samsung Galaxy S24',
+      // Samsung Galaxy S23 Series
+      'SM-S918': 'Samsung Galaxy S23 Ultra',
+      'SM-S916': 'Samsung Galaxy S23+',
+      'SM-S911': 'Samsung Galaxy S23',
+      // Samsung Galaxy S22 Series
+      'SM-S908': 'Samsung Galaxy S22 Ultra',
+      'SM-S906': 'Samsung Galaxy S22+',
+      'SM-S901': 'Samsung Galaxy S22',
+      // Samsung Galaxy S21 Series
+      'SM-G998': 'Samsung Galaxy S21 Ultra',
+      'SM-G996': 'Samsung Galaxy S21+',
+      'SM-G991': 'Samsung Galaxy S21',
+      // Samsung Galaxy S20 Series
+      'SM-G988': 'Samsung Galaxy S20 Ultra',
+      'SM-G986': 'Samsung Galaxy S20+',
+      'SM-G981': 'Samsung Galaxy S20',
+      // Samsung Galaxy Note Series
+      'SM-N986': 'Samsung Galaxy Note 20 Ultra',
+      'SM-N981': 'Samsung Galaxy Note 20',
+      'SM-N975': 'Samsung Galaxy Note 10+',
+      'SM-N970': 'Samsung Galaxy Note 10',
+      // Samsung Galaxy Fold/Flip Series
+      'SM-F946': 'Samsung Galaxy Z Fold 5',
+      'SM-F731': 'Samsung Galaxy Z Flip 5',
+      'SM-F936': 'Samsung Galaxy Z Fold 4',
+      'SM-F721': 'Samsung Galaxy Z Flip 4',
+      'SM-F926': 'Samsung Galaxy Z Fold 3',
+      'SM-F711': 'Samsung Galaxy Z Flip 3',
+      // Samsung Galaxy A Series
+      'SM-A546': 'Samsung Galaxy A54 5G',
+      'SM-A536': 'Samsung Galaxy A53 5G',
+      'SM-A346': 'Samsung Galaxy A34 5G',
+      'SM-A336': 'Samsung Galaxy A33 5G',
+      'SM-A146': 'Samsung Galaxy A14 5G',
+      // Samsung Galaxy M / F Series
+      'SM-M346': 'Samsung Galaxy M34 5G',
+      'SM-M546': 'Samsung Galaxy M54 5G',
+      'SM-E546': 'Samsung Galaxy F54 5G',
+      // OnePlus
+      'NE2211': 'OnePlus 10 Pro',
+      'PHB110': 'OnePlus 11',
+      'CPH2449': 'OnePlus 11',
+      'CPH2581': 'OnePlus 12',
+      'CPH2423': 'OnePlus Nord CE 2 Lite',
+      'KB2001': 'OnePlus 8T',
+      'HD1901': 'OnePlus 7T',
+      // Google Pixel
+      'GP4BC': 'Google Pixel 7 Pro',
+      'GVU6C': 'Google Pixel 7',
+      'G10': 'Google Pixel 7a',
+      'GC3VE': 'Google Pixel 8 Pro',
+      'GKWSY': 'Google Pixel 8',
+      'G9S9B': 'Google Pixel 6 Pro',
+      'GB7N6': 'Google Pixel 6',
+      // Xiaomi / Redmi / Poco
+      'M2101K7': 'Xiaomi Redmi Note 10S',
+      '2201117': 'Xiaomi Redmi Note 11',
+      '23049PCD8G': 'Poco F5'
+    };
+
+    for (const [code, friendlyName] of Object.entries(modelMap)) {
+      if (model.startsWith(code) || model.includes(code)) {
+        model = friendlyName;
+        break;
+      }
+    }
   }
   
   let browser = 'Unknown Browser';
@@ -423,7 +498,7 @@ app.post('/api/auth/login', ipRateLimiter(15 * 60 * 1000, 10), (req, res) => {
     // Asynchronously log login details (device, location, time) AFTER response is flushed
     setImmediate(() => {
       const ua = req.headers['user-agent'] || '';
-      const device = parseUserAgent(ua);
+      const device = parseUserAgent(ua, req.headers['x-client-device-model']);
       
       let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
       if (ip && ip.includes(',')) {
@@ -461,7 +536,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     // Asynchronously update login details (device, location, time) on profile fetch/verification AFTER response is flushed
     setImmediate(() => {
       const ua = req.headers['user-agent'] || '';
-      const device = parseUserAgent(ua);
+      const device = parseUserAgent(ua, req.headers['x-client-device-model']);
       
       let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
       if (ip && ip.includes(',')) {
