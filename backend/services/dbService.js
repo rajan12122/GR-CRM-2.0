@@ -1025,6 +1025,18 @@ async function ensurePerformanceIndexes() {
     // Create indexes for leads.phone/email for customers conversion mapping lookup
     await client.query('CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads ("phone")');
     await client.query('CREATE INDEX IF NOT EXISTS idx_leads_email ON leads ("email")');
+
+    // Clean up existing seller lead tasks from todos table
+    try {
+      await client.query(`
+        DELETE FROM todos 
+        WHERE "linkedModule" = 'leads' 
+          AND "linkedId" IN (SELECT id FROM leads WHERE "leadType" = 'Seller')
+      `);
+      console.log('Successfully cleaned up existing Seller lead tasks from workspace.');
+    } catch (e) {
+      console.error('Error cleaning up Seller lead tasks:', e.message);
+    }
     
     console.log('Successfully verified/created database performance indexes.');
   } catch (err) {
@@ -1123,6 +1135,11 @@ async function handleTodoTriggers(moduleName, record, client, action) {
 
   // 3. LEADS TRIGGER
   if (moduleName === 'leads') {
+    if (record.leadType === 'Seller') {
+      // Seller leads should not show as tasks/todos in workspace
+      await client.query('DELETE FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['leads', record.id]);
+      return;
+    }
     const todoTitle = `Accept or review new lead: ${record.name}`;
     const checkTodo = await client.query('SELECT id FROM todos WHERE "linkedModule" = $1 AND "linkedId" = $2', ['leads', record.id]);
     const isCompleted = record.status !== 'Open';
