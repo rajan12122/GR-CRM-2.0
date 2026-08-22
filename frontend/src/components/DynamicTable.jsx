@@ -51,6 +51,8 @@ const EntityChip = ({ moduleName, id, field, rowRecord, onClick }) => {
     resolvedModule = 'leads';
   } else if (moduleName === 'customers' && String(id).startsWith('CUST-')) {
     resolvedModule = 'customers';
+  } else if (moduleName === 'customers' && (String(id).startsWith('QRY-') || String(id).startsWith('QUERY-'))) {
+    resolvedModule = 'queries';
   }
   
   let resolvedName = '';
@@ -271,7 +273,8 @@ const DynamicTable = ({
         clickModule = 'dealers';
         clickId = rec.dealerId;
       } else if (rec.current_owner_id) {
-        clickModule = 'customers';
+        const ownerId = String(rec.current_owner_id);
+        clickModule = ownerId.startsWith('LEAD-') ? 'leads' : (ownerId.startsWith('QRY-') || ownerId.startsWith('QUERY-') ? 'queries' : 'customers');
         clickId = rec.current_owner_id;
       }
       if (clickModule && clickId) {
@@ -345,6 +348,7 @@ const DynamicTable = ({
         if (String(val).startsWith('EMP-')) resolvedModule = 'employees';
         else if (String(val).startsWith('CUST-')) resolvedModule = 'customers';
         else if (String(val).startsWith('LEAD-')) resolvedModule = 'leads';
+        else if (String(val).startsWith('QRY-') || String(val).startsWith('QUERY-')) resolvedModule = 'queries';
         else resolvedModule = 'employees';
       }
       return (

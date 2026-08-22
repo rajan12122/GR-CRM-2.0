@@ -135,7 +135,12 @@ const GlobalSearch = ({ open, onClose }) => {
   const handleFullViewRedirect = () => {
     if (activeRecord) {
       onClose();
-      navigate(`/module/${activeRecordType}/${activeRecord.id}`);
+      let resolvedType = activeRecordType;
+      if (activeRecordType === 'customers') {
+        if (String(activeRecord.id).startsWith('LEAD-')) resolvedType = 'leads';
+        else if (String(activeRecord.id).startsWith('QRY-') || String(activeRecord.id).startsWith('QUERY-')) resolvedType = 'queries';
+      }
+      navigate(`/module/${resolvedType}/${activeRecord.id}`);
     }
   };
 

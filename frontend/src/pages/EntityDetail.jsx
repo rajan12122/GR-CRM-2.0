@@ -1324,7 +1324,13 @@ const EntityDetail = () => {
                       ) : f.type === 'ref' ? ( (() => {
                         let isClickable = true;
                         let resolvedLabel = '';
-                        let onClickAction = () => navigate(`/module/${f.refModule}/${val}`);
+                        let resolvedRefModule = f.refModule;
+                        if (f.refModule === 'customers') {
+                          if (String(val).startsWith('LEAD-')) resolvedRefModule = 'leads';
+                          else if (String(val).startsWith('CUST-')) resolvedRefModule = 'customers';
+                          else if (String(val).startsWith('QRY-') || String(val).startsWith('QUERY-')) resolvedRefModule = 'queries';
+                        }
+                        let onClickAction = () => navigate(`/module/${resolvedRefModule}/${val}`);
 
                         if (moduleName === 'deals' && f.name === 'sellerCustomerId' && record && record.propertyId) {
                           const prop = (moduleData.properties || []).find(p => String(p.id) === String(record.propertyId));
@@ -1351,13 +1357,13 @@ const EntityDetail = () => {
                         }
 
                         if (!resolvedLabel) {
-                          const refArray = moduleData[f.refModule] || [];
+                          const refArray = moduleData[resolvedRefModule] || [];
                           const referencedRecord = refArray.find(r => String(r.id) === String(val));
                           resolvedLabel = referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || val) : val;
                         }
 
                         return (
-                          <EntityTooltip moduleName={f.refModule} id={val} disabled={!isClickable}>
+                          <EntityTooltip moduleName={resolvedRefModule} id={val} disabled={!isClickable}>
                             <Chip 
                               label={resolvedLabel} 
                               size="small" 
@@ -1379,20 +1385,28 @@ const EntityDetail = () => {
                       })()
                       ) : f.type === 'multiref' ? (
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {String(val).split(',').filter(Boolean).map(itemId => (
-                            <EntityTooltip key={itemId} moduleName={f.refModule} id={itemId}>
-                              <Chip 
-                                label={(() => {
-                                  const refArray = moduleData[f.refModule] || [];
-                                  const referencedRecord = refArray.find(r => String(r.id) === String(itemId));
-                                  return referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || itemId) : itemId;
-                                })()} 
-                                size="small" 
-                                onClick={() => navigate(`/module/${f.refModule}/${itemId}`)}
-                                sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
-                              />
-                            </EntityTooltip>
-                          ))}
+                          {String(val).split(',').filter(Boolean).map(itemId => {
+                            let resolvedItemModule = f.refModule;
+                            if (f.refModule === 'customers') {
+                              if (String(itemId).startsWith('LEAD-')) resolvedItemModule = 'leads';
+                              else if (String(itemId).startsWith('CUST-')) resolvedItemModule = 'customers';
+                              else if (String(itemId).startsWith('QRY-') || String(itemId).startsWith('QUERY-')) resolvedItemModule = 'queries';
+                            }
+                            return (
+                              <EntityTooltip key={itemId} moduleName={resolvedItemModule} id={itemId}>
+                                <Chip 
+                                  label={(() => {
+                                    const refArray = moduleData[resolvedItemModule] || [];
+                                    const referencedRecord = refArray.find(r => String(r.id) === String(itemId));
+                                    return referencedRecord ? (referencedRecord.name || referencedRecord.person_name || referencedRecord.title || itemId) : itemId;
+                                  })()} 
+                                  size="small" 
+                                  onClick={() => navigate(`/module/${resolvedItemModule}/${itemId}`)}
+                                  sx={{ height: 20, fontSize: '10px', fontWeight: 700, cursor: 'pointer' }} 
+                                />
+                              </EntityTooltip>
+                            );
+                          })}
                         </Box>
                       ) : f.name === 'price' || f.name === 'budget' || f.name === 'salary' ? (
                         (() => {
@@ -2346,7 +2360,7 @@ const EntityDetail = () => {
                           ) : (
                             connections.site_visits.map((sv, idx) => (
                               <Paper key={idx} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', boxShadow: 'none' }}>
-                                <Typography variant="body2" sx={{ fontWeight: 700 }}>Client: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/customers/${sv.customerId}`)}>{sv.customer?.name || sv.customerId}</span></Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>Client: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(String(sv.customerId).startsWith('LEAD-') ? `/module/leads/${sv.customerId}` : (String(sv.customerId).startsWith('QRY-') || String(sv.customerId).startsWith('QUERY-') ? `/module/queries/${sv.customerId}` : `/module/customers/${sv.customerId}`))}>{sv.customer?.name || sv.customerId}</span></Typography>
                                 <Typography variant="caption" sx={{ color: '#64748B', display: 'block' }}>
                                   Showed on: {sv.date} • Showed by: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/employees/${sv.employeeId}`)}>{sv.employeeId}</span> • Outcome: <strong>{(metadata?.chips?.visitResults || []).find(c => String(c.value).toLowerCase() === String(sv.result).toLowerCase())?.label || sv.result}</strong>
                                 </Typography>
@@ -2360,8 +2374,11 @@ const EntityDetail = () => {
                             <Typography variant="body2" sx={{ color: '#94A3B8' }}>No pitch logs registered for this property listing.</Typography>
                           ) : (
                             connections.pitches.map(p => {
-                              const isLead = String(p.customerId).startsWith('LEAD-');
-                              const clientPath = isLead ? `/module/leads/${p.customerId}` : `/module/customers/${p.customerId}`;
+                              const clientPath = String(p.customerId).startsWith('LEAD-')
+                                ? `/module/leads/${p.customerId}`
+                                : (String(p.customerId).startsWith('QRY-') || String(p.customerId).startsWith('QUERY-')
+                                  ? `/module/queries/${p.customerId}`
+                                  : `/module/customers/${p.customerId}`);
                               return (
                                 <Paper key={p.id} sx={{ p: 2, mb: 1.5, border: '1px solid #E2E8F0', boxShadow: 'none' }}>
                                   <Typography variant="body2" sx={{ fontWeight: 700 }}>Client: <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(clientPath)}>{p.customerName || p.customerId}</span></Typography>
@@ -2421,7 +2438,7 @@ const EntityDetail = () => {
                             <Typography variant="subtitle2" sx={{ color: '#065F46', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Active Owner</Typography>
                           </Box>
                           <Typography variant="h6" sx={{ fontWeight: 800, color: '#064E3B', fontSize: '16px' }}>
-                            <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#059669' }} onClick={() => navigate(`/module/customers/${connections.currentOwner.id}`)}>
+                            <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#059669' }} onClick={() => navigate(String(connections.currentOwner.id).startsWith('LEAD-') ? `/module/leads/${connections.currentOwner.id}` : (String(connections.currentOwner.id).startsWith('QRY-') || String(connections.currentOwner.id).startsWith('QUERY-') ? `/module/queries/${connections.currentOwner.id}` : `/module/customers/${connections.currentOwner.id}`))}>
                               {connections.currentOwner.name} ({connections.currentOwner.id})
                             </span>
                           </Typography>
@@ -2453,7 +2470,7 @@ const EntityDetail = () => {
                               <Box sx={{ position: 'absolute', left: '-35px', top: '2px', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#94A3B8' }} />
                               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                                 Previous Owner: {h.ownerId && h.ownerId !== 'N/A' ? (
-                                  <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/customers/${h.ownerId}`)}>
+                                  <span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(String(h.ownerId).startsWith('LEAD-') ? `/module/leads/${h.ownerId}` : (String(h.ownerId).startsWith('QRY-') || String(h.ownerId).startsWith('QUERY-') ? `/module/queries/${h.ownerId}` : `/module/customers/${h.ownerId}`))}>
                                     {h.ownerName} ({h.ownerId})
                                   </span>
                                 ) : (
@@ -2576,6 +2593,11 @@ const EntityDetail = () => {
                               const prop = record;
                               let resolvedSellerName = d.sellerCustomerId;
                               let clickPath = `/module/customers/${d.sellerCustomerId}`;
+                              if (String(d.sellerCustomerId).startsWith('LEAD-')) {
+                                clickPath = `/module/leads/${d.sellerCustomerId}`;
+                              } else if (String(d.sellerCustomerId).startsWith('QRY-') || String(d.sellerCustomerId).startsWith('QUERY-')) {
+                                clickPath = `/module/queries/${d.sellerCustomerId}`;
+                              }
                               let isSellerLink = true;
                               if (prop) {
                                 if (prop.dealer_owner_booked === 'Dealer') {
@@ -2592,7 +2614,9 @@ const EntityDetail = () => {
                                   isSellerLink = false;
                                 }
                               } else {
-                                const cust = (moduleData.customers || []).find(c => String(c.id) === String(d.sellerCustomerId));
+                                const resolvedSellerModule = String(d.sellerCustomerId).startsWith('LEAD-') ? 'leads' : (String(d.sellerCustomerId).startsWith('QRY-') || String(d.sellerCustomerId).startsWith('QUERY-') ? 'queries' : 'customers');
+                                const refList = moduleData[resolvedSellerModule] || [];
+                                const cust = refList.find(c => String(c.id) === String(d.sellerCustomerId));
                                 if (cust) {
                                   resolvedSellerName = cust.name || d.sellerCustomerId;
                                 }
@@ -2614,14 +2638,22 @@ const EntityDetail = () => {
                               );
                             })()}
                             {(() => {
-                              const cust = (moduleData.customers || []).find(c => String(c.id) === String(d.customerId));
+                              const resolvedBuyerModule = String(d.customerId).startsWith('LEAD-') ? 'leads' : (String(d.customerId).startsWith('QRY-') || String(d.customerId).startsWith('QUERY-') ? 'queries' : 'customers');
+                              const refList = moduleData[resolvedBuyerModule] || [];
+                              const cust = refList.find(c => String(c.id) === String(d.customerId));
                               const buyerName = cust ? cust.name : d.customerId;
+                              let buyerClickPath = `/module/customers/${d.customerId}`;
+                              if (String(d.customerId).startsWith('LEAD-')) {
+                                buyerClickPath = `/module/leads/${d.customerId}`;
+                              } else if (String(d.customerId).startsWith('QRY-') || String(d.customerId).startsWith('QUERY-')) {
+                                buyerClickPath = `/module/queries/${d.customerId}`;
+                              }
                               return (
                                 <Typography variant="body2">
                                   Buyer Customer:{' '}
                                   <span 
                                     style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} 
-                                    onClick={() => navigate(`/module/customers/${d.customerId}`)}
+                                    onClick={() => navigate(buyerClickPath)}
                                   >
                                     {buyerName}
                                   </span>
@@ -2854,7 +2886,7 @@ const EntityDetail = () => {
                             </Typography>
                             {p.customerId && (
                               <Typography variant="body2" sx={{ mb: 1 }}>
-                                Client: <a href={`/module/customers/${p.customerId}`} style={{ color: '#2563EB', fontWeight: 600 }} onClick={(e) => { e.preventDefault(); navigate(p.customerId.startsWith('LEAD-') ? `/module/leads/${p.customerId}` : `/module/customers/${p.customerId}`); }}>{p.customerId}</a>
+                                Client: <a href={p.customerId.startsWith('LEAD-') ? `/module/leads/${p.customerId}` : (p.customerId.startsWith('QRY-') || p.customerId.startsWith('QUERY-') ? `/module/queries/${p.customerId}` : `/module/customers/${p.customerId}`)} style={{ color: '#2563EB', fontWeight: 600 }} onClick={(e) => { e.preventDefault(); navigate(p.customerId.startsWith('LEAD-') ? `/module/leads/${p.customerId}` : (p.customerId.startsWith('QRY-') || p.customerId.startsWith('QUERY-') ? `/module/queries/${p.customerId}` : `/module/customers/${p.customerId}`)); }}>{p.customerId}</a>
                               </Typography>
                             )}
                             <Typography variant="body2" sx={{ color: '#475569' }}>
@@ -3016,7 +3048,7 @@ const EntityDetail = () => {
                                   <Typography variant="body2" sx={{ color: '#94A3B8' }}>No customers handled.</Typography>
                                 ) : (
                                   connections.customers.map(c => (
-                                    <Paper key={c.id} sx={{ p: 1.5, mb: 1, border: '1px solid #E2E8F0', boxShadow: 'none', cursor: 'pointer' }} onClick={() => navigate(`/module/customers/${c.id}`)}>
+                                    <Paper key={c.id} sx={{ p: 1.5, mb: 1, border: '1px solid #E2E8F0', boxShadow: 'none', cursor: 'pointer' }} onClick={() => navigate(String(c.id).startsWith('LEAD-') ? `/module/leads/${c.id}` : (String(c.id).startsWith('QRY-') || String(c.id).startsWith('QUERY-') ? `/module/queries/${c.id}` : `/module/customers/${c.id}`))}>
                                       <Typography variant="body2" sx={{ fontWeight: 700 }}>{c.name}</Typography>
                                       <Typography variant="caption" sx={{ color: '#64748B' }}>Stage: {c.stage} • Phone: {c.phone}</Typography>
                                     </Paper>
@@ -3478,7 +3510,7 @@ const EntityDetail = () => {
                               <Chip label={p.pitchInterest} size="small" color={p.pitchInterest === 'Interested' ? 'success' : 'warning'} />
                             </Box>
                             <Typography variant="body2">
-                              Customer: <strong><span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(`/module/${p.customer?.phone ? 'customers' : 'leads'}/${p.customerId}`)}>{p.customer?.name || p.customer?.person_name || p.customerId}</span></strong>
+                              Customer: <strong><span style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2563EB' }} onClick={() => navigate(p.customerId?.startsWith('LEAD-') ? `/module/leads/${p.customerId}` : (p.customerId?.startsWith('QRY-') || p.customerId?.startsWith('QUERY-') ? `/module/queries/${p.customerId}` : (p.customerId?.startsWith('CUST-') ? `/module/customers/${p.customerId}` : `/module/${p.customer?.phone ? 'customers' : 'leads'}/${p.customerId}`)))}>{p.customer?.name || p.customer?.person_name || p.customerId}</span></strong>
                             </Typography>
                             <Typography variant="caption" sx={{ color: '#64748B', display: 'block', mt: 0.5 }}>Pitched on: {p.date} by {p.employeeName}</Typography>
                             <Typography variant="body2" sx={{ mt: 1, color: '#475569', fontStyle: 'italic' }}>"{p.pitchRemarks}"</Typography>

@@ -16,14 +16,21 @@ const EntityTooltip = ({ moduleName, id, children }) => {
   const { moduleData } = useApp();
   if (!id) return children;
   
-  const list = moduleData[moduleName] || [];
+  let resolvedModule = moduleName;
+  if (moduleName === 'customers' || !moduleName) {
+    if (String(id).startsWith('LEAD-')) resolvedModule = 'leads';
+    else if (String(id).startsWith('CUST-')) resolvedModule = 'customers';
+    else if (String(id).startsWith('QRY-') || String(id).startsWith('QUERY-')) resolvedModule = 'queries';
+  }
+
+  const list = moduleData[resolvedModule] || [];
   const record = list.find(r => String(r.id) === String(id));
   const resolvedName = record 
     ? (record.name || record.title || record.firm_name || record.person_name || record.id || 'Unnamed') 
     : `ID: ${id}`;
   
   return (
-    <Tooltip title={`${getSingularLabel(moduleName).toUpperCase()}: ${resolvedName}`} arrow placement="top">
+    <Tooltip title={`${getSingularLabel(resolvedModule).toUpperCase()}: ${resolvedName}`} arrow placement="top">
       <span style={{ cursor: 'help' }}>{children}</span>
     </Tooltip>
   );

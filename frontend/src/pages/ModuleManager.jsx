@@ -148,12 +148,15 @@ const RecordCard = ({ rec, fields, handleInspectClick, handleEditClick, handleDe
                         if (String(val).startsWith('EMP-')) resolvedModule = 'employees';
                         else if (String(val).startsWith('CUST-')) resolvedModule = 'customers';
                         else if (String(val).startsWith('LEAD-')) resolvedModule = 'leads';
+                        else if (String(val).startsWith('QRY-') || String(val).startsWith('QUERY-')) resolvedModule = 'queries';
                         else resolvedModule = 'employees';
                       }
                       if (resolvedModule === 'customers' && String(val).startsWith('LEAD-')) {
                         resolvedModule = 'leads';
                       } else if (resolvedModule === 'customers' && String(val).startsWith('CUST-')) {
                         resolvedModule = 'customers';
+                      } else if (resolvedModule === 'customers' && (String(val).startsWith('QRY-') || String(val).startsWith('QUERY-'))) {
+                        resolvedModule = 'queries';
                       }
                       const list = moduleData[resolvedModule] || [];
                       const record = list.find(r => String(r.id) === String(val));
@@ -1062,6 +1065,7 @@ const ModuleManager = () => {
             if (String(val).startsWith('EMP-')) resolvedModule = 'employees';
             else if (String(val).startsWith('CUST-')) resolvedModule = 'customers';
             else if (String(val).startsWith('LEAD-')) resolvedModule = 'leads';
+            else if (String(val).startsWith('QRY-') || String(val).startsWith('QUERY-')) resolvedModule = 'queries';
             else resolvedModule = 'employees';
           }
           if (!resolvedModule) {
@@ -1071,6 +1075,11 @@ const ModuleManager = () => {
             else if (key === 'pitchedPropertyId') resolvedModule = 'properties';
             else if (key === 'queryId') resolvedModule = 'queries';
             else if (key === 'assignedEmployeeId') resolvedModule = 'employees';
+          }
+          if (resolvedModule === 'customers') {
+            if (String(val).startsWith('LEAD-')) resolvedModule = 'leads';
+            else if (String(val).startsWith('CUST-')) resolvedModule = 'customers';
+            else if (String(val).startsWith('QRY-') || String(val).startsWith('QUERY-')) resolvedModule = 'queries';
           }
 
           if (resolvedModule) {
